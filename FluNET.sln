@@ -1,13 +1,15 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.36518.9 d17.14
+# Visual Studio Version 18
+VisualStudioVersion = 18.0.11018.127 d18.0
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.CLI", "src\FluNET.CLI\FluNET.CLI.csproj", "{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Input", "src\FluNET.Syntax\FluNET.Input.csproj", "{22A9287D-34A6-436F-8530-5190F10047D7}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET", "src\FluNet.Engine\FluNET.csproj", "{8D12F12D-8881-4861-8C32-BC60DC9F720B}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{62553A79-2DF3-4A51-8A5C-6F1331324D97}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Tests", "tests\FluNET.Tests\FluNET.Tests.csproj", "{EFE4823D-21F8-4D60-896C-68CF803A0CD6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -19,17 +21,20 @@ Global
 		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}.Release|Any CPU.Build.0 = Release|Any CPU
-		{22A9287D-34A6-436F-8530-5190F10047D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{22A9287D-34A6-436F-8530-5190F10047D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{22A9287D-34A6-436F-8530-5190F10047D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{22A9287D-34A6-436F-8530-5190F10047D7}.Release|Any CPU.Build.0 = Release|Any CPU
 		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EFE4823D-21F8-4D60-896C-68CF803A0CD6}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EFE4823D-21F8-4D60-896C-68CF803A0CD6}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EFE4823D-21F8-4D60-896C-68CF803A0CD6}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EFE4823D-21F8-4D60-896C-68CF803A0CD6}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{EFE4823D-21F8-4D60-896C-68CF803A0CD6} = {62553A79-2DF3-4A51-8A5C-6F1331324D97}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5D07DA40-1B7F-409F-A92E-3C360EBCE8AD}

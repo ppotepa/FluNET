@@ -1,5 +1,6 @@
 ﻿using FluNET.Prompt;
 using FluNET.TokenTree;
+using TokenTreeClass = FluNET.TokenTree.TokenTree;
 
 namespace FluNET
 {
@@ -12,10 +13,10 @@ namespace FluNET
             this.tokenTreeFactory = tokenTreeFactory;
         }
 
-        public object? Run(ProcessedPrompt prompt)
+        public TokenTreeClass? Run(ProcessedPrompt prompt)
         {
             var tree = tokenTreeFactory.Process(prompt);
-            return default;
+            return tree;
         }
     }
 }

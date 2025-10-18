@@ -1,4 +1,4 @@
-﻿namespace FluNET.Token
+﻿namespace FluNET.Tokens
 {
     public class TokenFactory
     {
@@ -6,9 +6,9 @@
         {
         }
 
-        internal Token Process(RawToken rawToken)
+        internal Token CreateToken(RawToken rawToken)
         {
-            return default;
+            return new Token(rawToken.Value, TokenType.Regular);
         }
     }
 }

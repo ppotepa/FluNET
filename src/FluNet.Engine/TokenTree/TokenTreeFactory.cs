@@ -1,10 +1,10 @@
 ﻿using FluNET.Prompt;
-using FluNET.Token;
+using FluNET.Tokens;
+using TokenClass = FluNET.Tokens.Token;
 
 namespace FluNET.TokenTree
 {
     public class TokenTreeFactory
-
     {
         private readonly TokenFactory factory;
 
@@ -13,14 +13,21 @@ namespace FluNET.TokenTree
             this.factory = factory;
         }
 
-        internal object Process(ProcessedPrompt prompt)
+        public TokenTree Process(ProcessedPrompt prompt)
         {
+            var tokenTree = new TokenTree();
+
             var tokens = prompt.ToString()
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Select(RawToken.Create)
-                .Select(factory.Process);
+                .Select(factory.CreateToken);
 
-            return factory.Process(tokens);
+            foreach (var token in tokens)
+            {
+                tokenTree.AddToken(token);
+            }
+
+            return tokenTree;
         }
     }
 }

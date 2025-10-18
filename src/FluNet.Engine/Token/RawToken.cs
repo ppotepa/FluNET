@@ -1,16 +1,18 @@
 ﻿
-namespace FluNET.Token
+namespace FluNET.Tokens
 {
     internal class RawToken
     {
-        internal static RawToken Create(object source, int arg2)
-        {
-            throw new NotImplementedException();
-        }
-    }
+        public string Value { get; private set; }
 
-    internal class Token
-    {
-       
+        private RawToken(string value)
+        {
+            Value = value;
+        }
+
+        internal static RawToken Create(string source)
+        {
+            return new RawToken(source);
+        }
     }
 }
