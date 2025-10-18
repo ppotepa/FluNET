@@ -1,0 +1,37 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.36518.9 d17.14
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.CLI", "src\FluNET.CLI\FluNET.CLI.csproj", "{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Input", "src\FluNET.Syntax\FluNET.Input.csproj", "{22A9287D-34A6-436F-8530-5190F10047D7}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET", "src\FluNet.Engine\FluNET.csproj", "{8D12F12D-8881-4861-8C32-BC60DC9F720B}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{22A9287D-34A6-436F-8530-5190F10047D7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{22A9287D-34A6-436F-8530-5190F10047D7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{22A9287D-34A6-436F-8530-5190F10047D7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{22A9287D-34A6-436F-8530-5190F10047D7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8D12F12D-8881-4861-8C32-BC60DC9F720B}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {5D07DA40-1B7F-409F-A92E-3C360EBCE8AD}
+	EndGlobalSection
+EndGlobal
