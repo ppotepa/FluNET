@@ -20,23 +20,21 @@ namespace FluNET.Syntax.Verbs
 
         public ValidationResult ValidateNext(string nextTokenValue, DiscoveryService discoveryService)
         {
-            var getImplementations = discoveryService.Verbs
-                .Where(t => t.BaseType != null &&
-                           t.BaseType.IsGenericType &&
-                           t.BaseType.GetGenericTypeDefinition() == typeof(Get<,>))
-                .ToList();
+            var lexicon = new Lexicon.Lexicon(discoveryService);
+            var validUsages = lexicon.GetUsageNames(typeof(Get<,>));
+            
+            if (validUsages.Any(n => n.Equals(nextTokenValue, StringComparison.OrdinalIgnoreCase)))
+            {
+                return ValidationResult.Success();
+            }
 
-            var validNouns = getImplementations
-                .Select(t => t.Name.Substring(3))
-                .ToList();
-
-            if (validNouns.Any(n => n.Equals(nextTokenValue, StringComparison.OrdinalIgnoreCase)))
+            if (nextTokenValue.Equals("FROM", StringComparison.OrdinalIgnoreCase))
             {
                 return ValidationResult.Success();
             }
 
             return ValidationResult.Failure(
-                $"Invalid noun '{nextTokenValue}' after GET verb. Valid options are: {string.Join(", ", validNouns)}");
+                $"Invalid noun '{nextTokenValue}' after GET verb. Valid options are: {string.Join(", ", validUsages)}");
         }
     }
 }
