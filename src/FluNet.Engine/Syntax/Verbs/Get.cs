@@ -18,11 +18,10 @@ namespace FluNET.Syntax.Verbs
 
         public abstract Func<TFrom, TWhat> Act { get; }
 
-        public ValidationResult ValidateNext(string nextTokenValue, DiscoveryService discoveryService)
+        public ValidationResult ValidateNext(string nextTokenValue, Lexicon.Lexicon lexicon)
         {
-            var lexicon = new Lexicon.Lexicon(discoveryService);
             var validUsages = lexicon.GetUsageNames(typeof(Get<,>));
-            
+
             if (validUsages.Any(n => n.Equals(nextTokenValue, StringComparison.OrdinalIgnoreCase)))
             {
                 return ValidationResult.Success();

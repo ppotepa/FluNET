@@ -6,10 +6,12 @@ namespace FluNET.Syntax
     public class SentenceValidator
     {
         private readonly DiscoveryService discoveryService;
+        private readonly Lexicon.Lexicon lexicon;
 
-        public SentenceValidator(DiscoveryService discoveryService)
+        public SentenceValidator(DiscoveryService discoveryService, Lexicon.Lexicon lexicon)
         {
             this.discoveryService = discoveryService;
+            this.lexicon = lexicon;
         }
 
         public ValidationResult ValidateSentence(TokenTree tokenTree)
@@ -56,7 +58,7 @@ namespace FluNET.Syntax
             {
                 var nextToken = current.Next;
 
-                var result = currentValidator.ValidateNext(nextToken.Value, discoveryService);
+                var result = currentValidator.ValidateNext(nextToken.Value, lexicon);
 
                 if (!result.IsValid)
                 {

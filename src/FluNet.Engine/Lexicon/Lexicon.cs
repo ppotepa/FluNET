@@ -31,7 +31,7 @@ namespace FluNET.Lexicon
                     FromType = ExtractFromType(t),
                     WhatType = ExtractWhatType(t)
                 }).ToList();
-                
+
                 verbUsages[baseVerbType] = usages;
             }
         }
@@ -43,16 +43,16 @@ namespace FluNET.Lexicon
             {
                 baseName = baseName.Substring(0, baseName.IndexOf('`'));
             }
-            
+
             string typeName = implementationType.Name;
             if (typeName.StartsWith(baseName))
             {
                 return typeName.Substring(baseName.Length);
             }
-            
+
             return typeName;
         }
-        
+
         private Type ExtractFromType(Type implementationType)
         {
             var baseType = implementationType.BaseType;
@@ -66,7 +66,7 @@ namespace FluNET.Lexicon
             }
             return typeof(object);
         }
-        
+
         private Type ExtractWhatType(Type implementationType)
         {
             var baseType = implementationType.BaseType;
@@ -92,18 +92,18 @@ namespace FluNET.Lexicon
                 return Enumerable.Empty<VerbUsage>();
             }
         }
-        
+
         public IEnumerable<string> GetUsageNames(Type baseVerbType)
         {
             return this[baseVerbType].Select(u => u.UsageName);
         }
-        
+
         public VerbUsage FindUsage(Type baseVerbType, string usageName)
         {
-            return this[baseVerbType].FirstOrDefault(u => 
+            return this[baseVerbType].FirstOrDefault(u =>
                 u.UsageName.Equals(usageName, StringComparison.OrdinalIgnoreCase));
         }
-        
+
         public IEnumerable<Type> GetCompatibleFromTypes(Type baseVerbType, string usageName)
         {
             var usage = FindUsage(baseVerbType, usageName);
