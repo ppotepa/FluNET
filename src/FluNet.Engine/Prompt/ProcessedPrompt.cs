@@ -6,11 +6,11 @@
 
         public ProcessedPrompt(string prompt)
         {
-            this.prompt = prompt;            
+            this.prompt = prompt;
         }
         public override string ToString()
         {
             return prompt.Replace("  ", " ").Trim();
-        }   
+        }
     }
 }

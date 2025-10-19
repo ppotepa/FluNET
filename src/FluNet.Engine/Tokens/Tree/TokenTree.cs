@@ -1,11 +1,9 @@
-﻿using FluNET.Tokens;
-
-namespace FluNET.Tokens;
+﻿namespace FluNET.Tokens.Tree;
 
 public class TokenTree
 {
-    public Token Root { get; private set; }
-    public Token Last { get; private set; }
+    public Token? Root { get; private set; }
+    public Token? Last { get; private set; }
     public int Count { get; private set; }
 
 
@@ -23,7 +21,10 @@ public class TokenTree
         else
         {
             token.Previous = Last;
-            Last.Next = token;
+            if (Last != null)
+            {
+                Last.Next = token;
+            }
             Last = token;
         }
 
@@ -32,7 +33,7 @@ public class TokenTree
 
     public IEnumerable<Token> GetTokens()
     {
-        var current = Root;
+        Token? current = Root;
         while (current != null)
         {
             yield return current;

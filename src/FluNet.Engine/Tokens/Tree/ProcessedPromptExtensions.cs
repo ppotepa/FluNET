@@ -1,7 +1,6 @@
 using FluNET.Prompt;
-using FluNET.Tokens;
 
-namespace FluNET.Token.Tree
+namespace FluNET.Tokens.Tree
 {
     public static class ProcessedPromptExtensions
     {
@@ -13,8 +12,8 @@ namespace FluNET.Token.Tree
         /// <returns>A TokenTree containing the tokenized prompt</returns>
         public static TokenTree ToTokenTree(this ProcessedPrompt prompt, TokenFactory? tokenFactory = null)
         {
-            var factory = tokenFactory ?? new TokenFactory();
-            var tokenTreeFactory = new TokenTreeFactory(factory);
+            TokenFactory factory = tokenFactory ?? new TokenFactory();
+            TokenTreeFactory tokenTreeFactory = new(factory);
             return tokenTreeFactory.Process(prompt);
         }
     }

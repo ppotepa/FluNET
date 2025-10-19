@@ -16,4 +16,10 @@
     <ProjectReference Include="..\FluNet.Engine\FluNET.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <None Update="file.txt">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
 </Project>

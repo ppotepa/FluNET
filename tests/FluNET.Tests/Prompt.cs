@@ -1,9 +1,8 @@
+using FluNET.Prompt;
+using FluNET.Tokens.Tree;
+
 namespace FluNET.Tests
 {
-    using FluNET;
-    using FluNET.Prompt;
-    using FluNET.Token.Tree;
-
     public class Prompt
     {
         [SetUp]
@@ -15,40 +14,40 @@ namespace FluNET.Tests
         [Test]
         public void TestTokenCount_EmptyPrompt()
         {
-            var processed = new ProcessedPrompt("");
-            var tree = processed.ToTokenTree();
+            ProcessedPrompt processed = new("");
+            TokenTree tree = processed.ToTokenTree();
             Assert.That(tree.Count, Is.EqualTo(0));
         }
 
         [Test]
         public void TestTokenCount_SingleWord()
         {
-            var processed = new ProcessedPrompt("hello");
-            var tree = processed.ToTokenTree();
+            ProcessedPrompt processed = new("hello");
+            TokenTree tree = processed.ToTokenTree();
             Assert.That(tree.Count, Is.EqualTo(1));
         }
 
         [Test]
         public void TestTokenCount_MultipleWords()
         {
-            var processed = new ProcessedPrompt("hello world this is a test");
-            var tree = processed.ToTokenTree();
+            ProcessedPrompt processed = new("hello world this is a test");
+            TokenTree tree = processed.ToTokenTree();
             Assert.That(tree.Count, Is.EqualTo(6));
         }
 
         [Test]
         public void TestTokenCount_WithPunctuation()
         {
-            var processed = new ProcessedPrompt("Hello, world!");
-            var tree = processed.ToTokenTree();
+            ProcessedPrompt processed = new("Hello, world!");
+            TokenTree tree = processed.ToTokenTree();
             Assert.That(tree.Count, Is.EqualTo(2)); // Assuming punctuation is not counted as separate tokens
         }
 
         [Test]
         public void TestTokenCount_LongerPrompt()
         {
-            var processed = new ProcessedPrompt("This is a longer prompt with more words to test the token count.");
-            var tree = processed.ToTokenTree();
+            ProcessedPrompt processed = new("This is a longer prompt with more words to test the token count.");
+            TokenTree tree = processed.ToTokenTree();
             Assert.That(tree.Count, Is.EqualTo(13));
         }
 
@@ -60,7 +59,7 @@ namespace FluNET.Tests
                 "handles longer strings correctly without any issues or errors in tokenization or " +
                 "string representation.";
 
-            var processed = new ProcessedPrompt(originalPrompt);
+            ProcessedPrompt processed = new(originalPrompt);
             Assert.That(processed.ToString(), Is.EqualTo(originalPrompt));
         }
     }

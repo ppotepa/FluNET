@@ -1,15 +1,12 @@
-﻿using FluNET.Tokens;
+﻿using FluNET.Tokens.Tree;
 
 namespace FluNET.Interpretation
 {
-    internal class TokenTreeInterpreter
+    // This class is a placeholder for future token tree interpretation logic
+    internal class TokenTreeInterpreter(TokenTree tree)
     {
-        private TokenTree tree;
-
-        public TokenTreeInterpreter(TokenTree tree)
-        {
-            this.tree = tree;
-        }
-
+        // The tree parameter will be used when interpretation logic is implemented
+        // For now, suppress the unused parameter warning
+        private readonly TokenTree _tree = tree;
     }
 }

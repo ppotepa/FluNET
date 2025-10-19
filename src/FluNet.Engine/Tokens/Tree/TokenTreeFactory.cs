@@ -1,8 +1,7 @@
 ﻿using FluNET.Prompt;
-using FluNET.Tokens;
 using TokenClass = FluNET.Tokens.Token;
 
-namespace FluNET.Token.Tree
+namespace FluNET.Tokens.Tree
 {
     public class TokenTreeFactory
     {
@@ -15,14 +14,14 @@ namespace FluNET.Token.Tree
 
         public TokenTree Process(ProcessedPrompt prompt)
         {
-            var tokenTree = new TokenTree();
+            TokenTree tokenTree = new();
 
-            var tokens = prompt.ToString()
+            IEnumerable<TokenClass> tokens = prompt.ToString()
                 .Split(' ', StringSplitOptions.RemoveEmptyEntries)
                 .Select(RawToken.Create)
                 .Select(factory.CreateToken);
 
-            foreach (var token in tokens)
+            foreach (TokenClass token in tokens)
             {
                 tokenTree.AddToken(token);
             }

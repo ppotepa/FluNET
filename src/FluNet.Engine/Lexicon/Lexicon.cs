@@ -1,30 +1,28 @@
-using FluNET.Syntax;
-
 namespace FluNET.Lexicon
 {
     public class Lexicon
     {
         private readonly Dictionary<Type, IEnumerable<VerbUsage>> verbUsages;
 
-        public Lexicon(DiscoveryService discoveryService)
+        public Lexicon()
         {
-            verbUsages = new Dictionary<Type, IEnumerable<VerbUsage>>();
-            BuildUsageDictionary(discoveryService);
+            verbUsages = [];
+            BuildUsageDictionary();
         }
 
-        private void BuildUsageDictionary(DiscoveryService discoveryService)
+        private void BuildUsageDictionary()
         {
-            var allVerbTypes = discoveryService.Verbs
+            List<Type> allVerbTypes = DiscoveryService.Verbs
                 .Where(t => t.BaseType != null && t.BaseType.IsGenericType)
                 .ToList();
 
-            var groupedByBaseType = allVerbTypes
-                .GroupBy(t => t.BaseType.GetGenericTypeDefinition());
+            IEnumerable<IGrouping<Type, Type>> groupedByBaseType = allVerbTypes
+                .GroupBy(t => t.BaseType!.GetGenericTypeDefinition());
 
-            foreach (var group in groupedByBaseType)
+            foreach (IGrouping<Type, Type> group in groupedByBaseType)
             {
-                var baseVerbType = group.Key;
-                var usages = group.Select(t => new VerbUsage
+                Type baseVerbType = group.Key;
+                List<VerbUsage> usages = group.Select(t => new VerbUsage
                 {
                     ImplementationType = t,
                     UsageName = ExtractUsageName(t, baseVerbType),
@@ -41,24 +39,19 @@ namespace FluNET.Lexicon
             string baseName = baseVerbType.Name;
             if (baseName.Contains("`"))
             {
-                baseName = baseName.Substring(0, baseName.IndexOf('`'));
+                baseName = baseName[..baseName.IndexOf('`')];
             }
 
             string typeName = implementationType.Name;
-            if (typeName.StartsWith(baseName))
-            {
-                return typeName.Substring(baseName.Length);
-            }
-
-            return typeName;
+            return typeName.StartsWith(baseName) ? typeName[baseName.Length..] : typeName;
         }
 
         private Type ExtractFromType(Type implementationType)
         {
-            var baseType = implementationType.BaseType;
+            Type? baseType = implementationType.BaseType;
             if (baseType != null && baseType.IsGenericType)
             {
-                var genericArgs = baseType.GenericTypeArguments;
+                Type[] genericArgs = baseType.GenericTypeArguments;
                 if (genericArgs.Length >= 2)
                 {
                     return genericArgs[1];
@@ -69,10 +62,10 @@ namespace FluNET.Lexicon
 
         private Type ExtractWhatType(Type implementationType)
         {
-            var baseType = implementationType.BaseType;
+            Type? baseType = implementationType.BaseType;
             if (baseType != null && baseType.IsGenericType)
             {
-                var genericArgs = baseType.GenericTypeArguments;
+                Type[] genericArgs = baseType.GenericTypeArguments;
                 if (genericArgs.Length >= 1)
                 {
                     return genericArgs[0];
@@ -85,11 +78,7 @@ namespace FluNET.Lexicon
         {
             get
             {
-                if (verbUsages.TryGetValue(baseVerbType, out var usages))
-                {
-                    return usages;
-                }
-                return Enumerable.Empty<VerbUsage>();
+                return verbUsages.TryGetValue(baseVerbType, out IEnumerable<VerbUsage>? usages) ? usages : Enumerable.Empty<VerbUsage>();
             }
         }
 
@@ -98,7 +87,7 @@ namespace FluNET.Lexicon
             return this[baseVerbType].Select(u => u.UsageName);
         }
 
-        public VerbUsage FindUsage(Type baseVerbType, string usageName)
+        public VerbUsage? FindUsage(Type baseVerbType, string usageName)
         {
             return this[baseVerbType].FirstOrDefault(u =>
                 u.UsageName.Equals(usageName, StringComparison.OrdinalIgnoreCase));
@@ -106,7 +95,7 @@ namespace FluNET.Lexicon
 
         public IEnumerable<Type> GetCompatibleFromTypes(Type baseVerbType, string usageName)
         {
-            var usage = FindUsage(baseVerbType, usageName);
+            VerbUsage? usage = FindUsage(baseVerbType, usageName);
             if (usage != null)
             {
                 yield return usage.FromType;
