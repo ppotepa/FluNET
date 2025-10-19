@@ -13,7 +13,7 @@ namespace FluNET
         private readonly SentenceFactory sentenceFactory;
         private readonly SentenceValidator sentenceValidator;
 
-        public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory, 
+        public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory,
             DiscoveryService discovery, SentenceValidator sentenceValidator)
         {
             this.tokenTreeFactory = tokenTreeFactory;
@@ -25,17 +25,16 @@ namespace FluNET
         public TokenTree Run(ProcessedPrompt prompt)
         {
             var tree = tokenTreeFactory.Process(prompt);
-            
-            // Validate the sentence structure
+
             var validationResult = sentenceValidator.ValidateSentence(tree);
             if (!validationResult.IsValid)
             {
                 throw new InvalidOperationException(
                     $"Invalid command: {validationResult.FailureReason}");
             }
-            
+
             var sentence = sentenceFactory.CreateFromTree(tree);
-            
+
             return tree;
         }
     }

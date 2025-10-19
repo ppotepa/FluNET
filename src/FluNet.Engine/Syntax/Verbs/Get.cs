@@ -20,19 +20,16 @@ namespace FluNET.Syntax.Verbs
 
         public ValidationResult ValidateNext(string nextTokenValue, DiscoveryService discoveryService)
         {
-            // Find all implementations of Get verb (GetText, GetData, etc.)
             var getImplementations = discoveryService.Verbs
-                .Where(t => t.BaseType != null && 
-                           t.BaseType.IsGenericType && 
+                .Where(t => t.BaseType != null &&
+                           t.BaseType.IsGenericType &&
                            t.BaseType.GetGenericTypeDefinition() == typeof(Get<,>))
                 .ToList();
 
-            // Extract the noun part from each implementation (e.g., "Text" from "GetText")
             var validNouns = getImplementations
-                .Select(t => t.Name.Substring(3)) // Remove "Get" prefix
+                .Select(t => t.Name.Substring(3))
                 .ToList();
 
-            // Check if the next token matches any valid noun
             if (validNouns.Any(n => n.Equals(nextTokenValue, StringComparison.OrdinalIgnoreCase)))
             {
                 return ValidationResult.Success();

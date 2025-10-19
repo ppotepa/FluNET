@@ -1,8 +1,5 @@
 namespace FluNET.Syntax
 {
-    /// <summary>
-    /// Result of a validation operation
-    /// </summary>
     public class ValidationResult
     {
         public bool IsValid { get; }
@@ -15,8 +12,8 @@ namespace FluNET.Syntax
         }
 
         public static ValidationResult Success() => new ValidationResult(true);
-        
-        public static ValidationResult Failure(string reason) => 
+
+        public static ValidationResult Failure(string reason) =>
             new ValidationResult(false, reason);
     }
 }
