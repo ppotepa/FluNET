@@ -1,6 +1,6 @@
 ﻿namespace FluNET.Syntax
 {
-    public interface INoun
+    public interface INoun : IWord
     {
     }
 }
