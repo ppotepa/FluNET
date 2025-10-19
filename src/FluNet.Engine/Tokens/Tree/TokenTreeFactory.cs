@@ -2,7 +2,7 @@
 using FluNET.Tokens;
 using TokenClass = FluNET.Tokens.Token;
 
-namespace FluNET.TokenTree
+namespace FluNET.Token.Tree
 {
     public class TokenTreeFactory
     {

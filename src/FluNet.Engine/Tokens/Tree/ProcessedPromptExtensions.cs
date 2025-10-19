@@ -1,8 +1,9 @@
 using FluNET.Prompt;
 using FluNET.Tokens;
+using FluNET.TokenTree;
 
 
-namespace FluNET.TokenTree
+namespace FluNET.Token.Tree
 {
     public static class ProcessedPromptExtensions
     {

@@ -1,8 +1,8 @@
 namespace FluNET.Tests
-{   
+{
     using FluNET;
     using FluNET.Prompt;
-    using FluNET.TokenTree;
+    using FluNET.Token.Tree;
 
     public class Prompt
     {

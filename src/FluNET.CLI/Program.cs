@@ -1,5 +1,5 @@
-﻿using FluNET.Tokens;
-using FluNET.TokenTree;
+﻿using FluNET.Token.Tree;
+using FluNET.Tokens;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.CLI;
