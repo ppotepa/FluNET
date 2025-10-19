@@ -14,6 +14,7 @@ internal class Program
         IServiceCollection serviceCollection = new ServiceCollection();
         serviceCollection.AddSingleton<Engine>();
         serviceCollection.AddScoped<TokenTreeFactory>();
+        serviceCollection.AddScoped<DiscoveryService>();
         serviceCollection.AddScoped<TokenFactory>();
 
         var provider = serviceCollection.BuildServiceProvider();
