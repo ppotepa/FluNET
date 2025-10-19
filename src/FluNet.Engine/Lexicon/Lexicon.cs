@@ -3,16 +3,18 @@ namespace FluNET.Lexicon
     public class Lexicon
     {
         private readonly Dictionary<Type, IEnumerable<VerbUsage>> verbUsages;
+        private readonly DiscoveryService _discoveryService;
 
-        public Lexicon()
+        public Lexicon(DiscoveryService discoveryService)
         {
+            _discoveryService = discoveryService;
             verbUsages = [];
             BuildUsageDictionary();
         }
 
         private void BuildUsageDictionary()
         {
-            List<Type> allVerbTypes = DiscoveryService.Verbs
+            List<Type> allVerbTypes = _discoveryService.Verbs
                 .Where(t => t.BaseType != null && t.BaseType.IsGenericType)
                 .ToList();
 

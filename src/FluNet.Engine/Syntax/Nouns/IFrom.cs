@@ -1,6 +1,6 @@
 using FluNET.Keywords;
 
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Nouns
 {
     /// <summary>
     /// Represents a source or origin preposition - where something comes from.

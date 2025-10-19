@@ -1,6 +1,6 @@
 using FluNET.Keywords;
 
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Nouns
 {
     /// <summary>
     /// Represents a direct object in a sentence - the thing being acted upon by a verb.

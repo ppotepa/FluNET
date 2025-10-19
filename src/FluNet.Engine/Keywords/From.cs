@@ -1,6 +1,4 @@
-﻿using FluNET.Syntax;
-
-namespace FluNET.Keywords
+﻿namespace FluNET.Keywords
 {
     public class From : IKeyword, IWord, IValidatable
     {
@@ -12,6 +10,12 @@ namespace FluNET.Keywords
         {
             // FROM can be followed by variables or literals
             return ValidationResult.Success();
+        }
+
+        public bool Validate(IWord word)
+        {
+            // FROM keyword validation is delegated to verb implementations
+            return true;
         }
     }
 
@@ -25,6 +29,12 @@ namespace FluNET.Keywords
         {
             // TO can be followed by variables or literals
             return ValidationResult.Success();
+        }
+
+        public bool Validate(IWord word)
+        {
+            // TO keyword validation is delegated to verb implementations
+            return true;
         }
     }
 
@@ -41,6 +51,12 @@ namespace FluNET.Keywords
                 ? ValidationResult.Success()
                 : ValidationResult.Failure("THEN must be followed by a verb");
         }
+
+        public bool Validate(IWord word)
+        {
+            // THEN doesn't validate specific parameters
+            return true;
+        }
     }
 
     public class And : IKeyword, IWord, IValidatable
@@ -53,6 +69,31 @@ namespace FluNET.Keywords
         {
             // AND can connect multiple clauses
             return ValidationResult.Success();
+        }
+
+        public bool Validate(IWord word)
+        {
+            // AND doesn't validate specific parameters
+            return true;
+        }
+    }
+
+    public class Using : IKeyword, IWord, IValidatable
+    {
+        public string Text => "USING";
+        public IWord? Next { get; set; }
+        public IWord? Previous { get; set; }
+
+        public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
+        {
+            // USING can be followed by variables or literals
+            return ValidationResult.Success();
+        }
+
+        public bool Validate(IWord word)
+        {
+            // USING keyword validation is delegated to verb implementations
+            return true;
         }
     }
 }

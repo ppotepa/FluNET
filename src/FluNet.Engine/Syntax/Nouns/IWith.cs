@@ -1,6 +1,6 @@
 using FluNET.Keywords;
 
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Nouns
 {
     /// <summary>
     /// Represents an accompaniment preposition - what accompanies or is used with an action.

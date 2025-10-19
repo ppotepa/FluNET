@@ -1,13 +1,17 @@
-﻿using FluNET.Syntax;
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 
 namespace FluNET
 {
-    public static class DiscoveryService
+    public class DiscoveryService
     {
-        private static List<Type> _allWords = InitializeWords();
-        private static List<Type>? _verbs;
-        private static List<Type>? _nouns;
+        private List<Type> _allWords;
+        private List<Type>? _verbs;
+        private List<Type>? _nouns;
+
+        public DiscoveryService()
+        {
+            _allWords = InitializeWords();
+        }
 
         [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code",
             Justification = "DiscoveryService requires reflection to discover IWord implementations at runtime. Types implementing IWord should be preserved.")]
@@ -23,20 +27,20 @@ namespace FluNET
         /// <summary>
         /// Gets all discovered word types (verbs and nouns)
         /// </summary>
-        public static IReadOnlyList<Type> Words => _allWords;
+        public IReadOnlyList<Type> Words => _allWords;
 
         /// <summary>
         /// Gets all discovered verb types
         /// </summary>
-        public static IReadOnlyList<Type> Verbs
+        public IReadOnlyList<Type> Verbs
         {
             get
             {
-                if (_verbs == null)
-                {
-                    _verbs = [.. Words
-                        .Where(x => typeof(IVerb).IsAssignableFrom(x))];
-                }
+                // Find all types that implement IVerb or IVerb<,>
+                _verbs ??= [.. Words
+                        .Where(x => typeof(IVerb).IsAssignableFrom(x) ||
+                                    x.GetInterfaces().Any(i => i.IsGenericType &&
+                                                             i.GetGenericTypeDefinition() == typeof(IVerb<,>)))];
                 return _verbs;
             }
         }
@@ -44,15 +48,12 @@ namespace FluNET
         /// <summary>
         /// Gets all discovered noun types
         /// </summary>
-        public static IReadOnlyList<Type> Nouns
+        public IReadOnlyList<Type> Nouns
         {
             get
             {
-                if (_nouns == null)
-                {
-                    _nouns = [.. Words
+                _nouns ??= [.. Words
                         .Where(x => typeof(INoun).IsAssignableFrom(x))];
-                }
                 return _nouns;
             }
         }
@@ -62,7 +63,7 @@ namespace FluNET
         /// </summary>
         [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code",
             Justification = "DiscoveryService requires reflection to discover IWord implementations at runtime. Types implementing IWord should be preserved.")]
-        public static void ClearCache()
+        public void ClearCache()
         {
             _allWords = [.. AppDomain
                 .CurrentDomain

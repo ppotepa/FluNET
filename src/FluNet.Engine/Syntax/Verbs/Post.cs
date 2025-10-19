@@ -42,6 +42,44 @@ namespace FluNET.Syntax.Verbs
         public abstract Func<TTo, TWhat> Act { get; }
 
         /// <summary>
+        /// Validates whether this verb implementation can handle the given word.
+        /// Derived classes must implement this to validate parameters like TO destinations.
+        /// </summary>
+        public abstract bool Validate(IWord word);
+
+        /// <summary>
+        /// Resolves a string value to the TTo type contextually.
+        /// Derived classes implement this to define resolution logic.
+        /// </summary>
+        public abstract TTo? Resolve(string value);
+
+        /// <summary>
+        /// Determines if this verb can handle the given sentence structure.
+        /// Checks for the TO preposition and validates its value.
+        /// </summary>
+        /// <param name="root">The root word of the sentence</param>
+        /// <returns>True if this verb can handle the sentence structure</returns>
+        public virtual bool CanHandle(IWord root)
+        {
+            // Find the TO keyword
+            Keywords.To? toPrep = root.Find<Keywords.To>();
+            if (toPrep == null)
+            {
+                return false;
+            }
+
+            // The TO preposition should have a value after it
+            IWord? valueWord = toPrep.Next;
+            if (valueWord == null)
+            {
+                return false;
+            }
+
+            // Validate the value using the derived class's validation logic
+            return Validate(valueWord);
+        }
+
+        /// <summary>
         /// Gets or sets the next word in the sentence chain.
         /// </summary>
         public IWord? Next { get; set; }
@@ -53,7 +91,7 @@ namespace FluNET.Syntax.Verbs
 
         /// <summary>
         /// Validates that the next word in the sentence is grammatically correct.
-        /// For POST verbs, expects either a TO keyword or a WHAT noun.
+        /// For POST verbs, expects either a TO keyword, a WHAT noun, or a variable.
         /// </summary>
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
@@ -62,7 +100,10 @@ namespace FluNET.Syntax.Verbs
                 return ValidationResult.Success();
             }
 
-            return nextWord is IWhat<TWhat>
+            // Check if it's a variable word (will be resolved during execution)
+            return nextWord is Words.VariableWord
+                ? ValidationResult.Success()
+                : nextWord is IWhat<TWhat>
                 ? ValidationResult.Success()
                 : ValidationResult.Failure(
                     "Invalid word after POST verb. Expected TO keyword or a direct object.");
@@ -83,7 +124,7 @@ namespace FluNET.Syntax.Verbs
         /// <returns>A THEN keyword with the posted data</returns>
         public virtual IThen<TWhat> Then()
         {
-            var result = Execute();
+            TWhat? result = Execute();
             return new ThenKeyword<TWhat>(result);
         }
     }

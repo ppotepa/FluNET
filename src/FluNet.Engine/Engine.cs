@@ -1,6 +1,5 @@
 ﻿using FluNET.Prompt;
 using FluNET.Sentences;
-using FluNET.Syntax;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
 
@@ -44,17 +43,17 @@ namespace FluNET
         /// <returns>A tuple containing validation result, the sentence, and execution result</returns>
         public (ValidationResult ValidationResult, ISentence? Sentence, object? Result) Run(ProcessedPrompt prompt)
         {
-            var tree = tokenTreeFactory.Process(prompt);
+            TokenTree tree = tokenTreeFactory.Process(prompt);
 
             // Validate the sentence structure
-            var validationResult = sentenceValidator.ValidateSentence(tree);
+            ValidationResult validationResult = sentenceValidator.ValidateSentence(tree);
             if (!validationResult.IsValid)
             {
                 return (validationResult, null, null);
             }
 
             // Create the sentence from the validated tree
-            var sentence = sentenceFactory.CreateFromTree(tree);
+            ISentence? sentence = sentenceFactory.CreateFromTree(tree);
 
             // Sentence should not be null at this point since validation passed
             if (sentence == null)

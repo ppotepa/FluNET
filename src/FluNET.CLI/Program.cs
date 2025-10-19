@@ -1,6 +1,4 @@
-﻿using FluNET;
-using FluNET.Sentences;
-using FluNET.Syntax;
+﻿using FluNET.Sentences;
 using FluNET.Tokens;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
@@ -34,17 +32,43 @@ internal static class Program
         Console.WriteLine("Example 1: Validating sentences");
         Console.WriteLine("--------------------------------");
 
+        // Create test file
+        string filePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "file.txt");
+        File.WriteAllText(filePath, "this is a test file");
+        Console.WriteLine($"Created test file: {filePath}");
+        Console.WriteLine();
+
         // Note: Terminator must be attached to last token due to tokenizer design
-        string prompt1 = "GET [text] FROM [file.txt].";
-        Console.WriteLine($"Prompt: {prompt1}");
+        string prompt1 = $"GET [text] FROM {filePath}.";
+        Console.WriteLine($"Prompt: GET [text] FROM {filePath}.");
         Prompt.ProcessedPrompt processedPrompt1 = new(prompt1);
-        var (validation1, sentence1, result1) = engine.Run(processedPrompt1);
+        (ValidationResult validation1, ISentence sentence1, object result1) = engine.Run(processedPrompt1);
 
         if (validation1.IsValid)
         {
             Console.WriteLine("✓ Sentence validated successfully!");
             Console.WriteLine($"  Root word type: {sentence1?.Root?.GetType().Name ?? "null"}");
-            Console.WriteLine($"  Execution result: {result1 ?? "null"}");
+
+            // Display the result
+            if (result1 != null)
+            {
+                if (result1 is string[] lines)
+                {
+                    Console.WriteLine($"  Execution result ({lines.Length} lines):");
+                    foreach (string line in lines)
+                    {
+                        Console.WriteLine($"    {line}");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"  Execution result: {result1}");
+                }
+            }
+            else
+            {
+                Console.WriteLine("  Execution result: null");
+            }
         }
         else
         {
@@ -59,7 +83,7 @@ internal static class Program
 
         string prompt2 = "SAVE [data] TO output.txt.";
         Console.WriteLine($"Prompt: {prompt2}");
-        Prompt.ProcessedPrompt processedPrompt2 = new(prompt2); var (validation2, sentence2, result2) = engine.Run(processedPrompt2);
+        Prompt.ProcessedPrompt processedPrompt2 = new(prompt2); (ValidationResult validation2, ISentence sentence2, object result2) = engine.Run(processedPrompt2);
 
         if (validation2.IsValid)
         {
@@ -80,7 +104,7 @@ internal static class Program
 
         string prompt3 = "POST [data] TO endpoint.";
         Console.WriteLine($"Prompt: {prompt3}");
-        Prompt.ProcessedPrompt processedPrompt3 = new(prompt3); var (validation3, sentence3, result3) = engine.Run(processedPrompt3);
+        Prompt.ProcessedPrompt processedPrompt3 = new(prompt3); (ValidationResult validation3, ISentence sentence3, object result3) = engine.Run(processedPrompt3);
 
         if (validation3.IsValid)
         {
@@ -106,7 +130,7 @@ internal static class Program
         string prompt4 = "SAVE [myData] TO output.txt.";
         Console.WriteLine($"Prompt: {prompt4}");
         Console.WriteLine("(Using resolved variable [myData] and literal path)");
-        Prompt.ProcessedPrompt processedPrompt4 = new(prompt4); var (validation4, sentence4, result4) = engine.Run(processedPrompt4);
+        Prompt.ProcessedPrompt processedPrompt4 = new(prompt4); (ValidationResult validation4, ISentence sentence4, object result4) = engine.Run(processedPrompt4);
 
         if (validation4.IsValid)
         {

@@ -9,7 +9,7 @@ namespace FluNET.Variables
     /// </summary>
     public class VariableResolver
     {
-        private readonly Dictionary<string, object> _variables = new();
+        private readonly Dictionary<string, object> _variables = [];
 
         /// <summary>
         /// Registers a variable with the resolver.
@@ -21,7 +21,9 @@ namespace FluNET.Variables
         public void Register<T>(string name, T value)
         {
             if (value == null)
+            {
                 throw new ArgumentNullException(nameof(value));
+            }
 
             _variables[name.ToUpperInvariant()] = value;
         }
@@ -51,11 +53,13 @@ namespace FluNET.Variables
             // Check if it's a simple variable [Name]
             if (IsSimpleVariable(tokenValue, out string? varName))
             {
-                if (_variables.TryGetValue(varName!.ToUpperInvariant(), out var value))
+                if (_variables.TryGetValue(varName!.ToUpperInvariant(), out object? value))
                 {
                     // First try direct cast
                     if (value is T typedValue)
+                    {
                         return typedValue;
+                    }
 
                     // Don't try conversion - just return null for type mismatch
                     return default;
@@ -96,7 +100,7 @@ namespace FluNET.Variables
 
         private bool IsSimpleVariable(string token, out string? varName)
         {
-            var match = Regex.Match(token, @"^\[([A-Za-z0-9_]+)\]$");
+            Match match = Regex.Match(token, @"^\[([A-Za-z0-9_]+)\]$");
             if (match.Success)
             {
                 varName = match.Groups[1].Value;
@@ -109,7 +113,7 @@ namespace FluNET.Variables
 
         private bool IsJsonObject(string token, out string? jsonProps)
         {
-            var match = Regex.Match(token, @"^\[\{(.+)\}\]$");
+            Match match = Regex.Match(token, @"^\[\{(.+)\}\]$");
             if (match.Success)
             {
                 // Format as proper JSON

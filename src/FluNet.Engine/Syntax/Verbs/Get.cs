@@ -41,6 +41,46 @@ namespace FluNET.Syntax.Verbs
         /// </summary>
         public abstract Func<TFrom, TWhat> Act { get; }
 
+        /// <summary>
+        /// Validates whether this verb implementation can handle the given word.
+        /// Derived classes must implement this to validate parameters like FROM sources.
+        /// </summary>
+        public abstract bool Validate(IWord word);
+
+        /// <summary>
+        /// Resolves a string value to the TFrom type contextually.
+        /// This is where plugins define their resolution logic (file path → FileInfo, URL → Uri, etc.)
+        /// </summary>
+        /// <param name="value">The string value to resolve</param>
+        /// <returns>The resolved TFrom instance, or null if resolution fails</returns>
+        public abstract TFrom? Resolve(string value);
+
+        /// <summary>
+        /// Determines if this verb can handle the given sentence structure.
+        /// Checks for the FROM preposition and validates its value.
+        /// </summary>
+        /// <param name="root">The root word of the sentence</param>
+        /// <returns>True if this verb can handle the sentence structure</returns>
+        public virtual bool CanHandle(IWord root)
+        {
+            // Find the FROM keyword (not the interface, the actual keyword class)
+            Keywords.From? fromPrep = root.Find<Keywords.From>();
+            if (fromPrep == null)
+            {
+                return false;
+            }
+
+            // The FROM preposition should have a value after it
+            IWord? valueWord = fromPrep.Next;
+            if (valueWord == null)
+            {
+                return false;
+            }
+
+            // Validate the value using the derived class's validation logic
+            return Validate(valueWord);
+        }
+
         // IWord navigation properties
         /// <summary>
         /// Gets or sets the next word in the sentence chain.
@@ -54,15 +94,21 @@ namespace FluNET.Syntax.Verbs
 
         /// <summary>
         /// Validates that the next word in the sentence is grammatically correct.
-        /// For GET verbs, expects either a FROM keyword or a WHAT noun.
+        /// For GET verbs, expects either a FROM keyword, a WHAT noun, or a variable.
         /// </summary>
         /// <param name="nextWord">The word following this verb</param>
         /// <param name="lexicon">The lexicon for advanced validation</param>
         /// <returns>ValidationResult indicating if the next word is valid</returns>
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
-            // Check if it's a FROM keyword using interface check
-            if (nextWord is IFrom<TFrom>)
+            // Check if it's a FROM keyword using the concrete class
+            if (nextWord is Keywords.From)
+            {
+                return ValidationResult.Success();
+            }
+
+            // Check if it's a variable word (will be resolved during execution)
+            if (nextWord is Words.VariableWord)
             {
                 return ValidationResult.Success();
             }
@@ -89,7 +135,7 @@ namespace FluNET.Syntax.Verbs
         /// <returns>A THEN keyword with the retrieved data</returns>
         public virtual IThen<TWhat> Then()
         {
-            var result = Execute();
+            TWhat? result = Execute();
             return new ThenKeyword<TWhat>(result);
         }
     }
@@ -111,6 +157,12 @@ namespace FluNET.Syntax.Verbs
             return nextWord is IVerb
                 ? ValidationResult.Success()
                 : ValidationResult.Failure("THEN must be followed by a verb");
+        }
+
+        public bool Validate(IWord word)
+        {
+            // THEN doesn't need to validate specific parameters
+            return true;
         }
     }
 }

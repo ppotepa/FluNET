@@ -1,6 +1,6 @@
 using FluNET.Keywords;
 
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Nouns
 {
     /// <summary>
     /// Represents a continuation of a sentence that operates on the same data.

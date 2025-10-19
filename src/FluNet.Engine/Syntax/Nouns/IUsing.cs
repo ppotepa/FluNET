@@ -1,6 +1,6 @@
 using FluNET.Keywords;
 
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Nouns
 {
     /// <summary>
     /// Represents an instrument preposition - the tool, method, or means by which an action is performed.

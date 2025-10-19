@@ -1,6 +1,6 @@
 ﻿namespace FluNET.Keywords
 {
-    public interface IKeyword
+    public interface IKeyword : IValidatable
     {
         string Text { get; }
     }

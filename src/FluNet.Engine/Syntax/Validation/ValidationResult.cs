@@ -1,4 +1,4 @@
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Validation
 {
     /// <summary>
     /// Immutable result object representing the outcome of a validation operation.

@@ -1,3 +1,5 @@
+using FluNET.Words;
+
 namespace FluNET.Syntax.Verbs
 {
     /// <summary>
@@ -24,14 +26,39 @@ namespace FluNET.Syntax.Verbs
             {
                 return (uri) =>
                 {
-                    using (var client = new HttpClient())
+                    using (HttpClient client = new())
                     {
-                        var content = new StringContent(What, System.Text.Encoding.UTF8, "application/json");
-                        var response = client.PostAsync(uri, content).Result;
+                        StringContent content = new(What, System.Text.Encoding.UTF8, "application/json");
+                        HttpResponseMessage response = client.PostAsync(uri, content).Result;
                         return response.Content.ReadAsStringAsync().Result;
                     }
                 };
             }
+        }
+
+        /// <summary>
+        /// Validates that the word represents a valid URI endpoint.
+        /// </summary>
+        public override bool Validate(IWord word)
+        {
+            // For HTTP POST, accept any URI or string that looks like a URL
+            return word is LiteralWord or VariableWord or ReferenceWord;
+        }
+
+        /// <summary>
+        /// Resolves a string value to Uri for HTTP endpoints.
+        /// </summary>
+        public override Uri? Resolve(string value)
+        {
+            return Uri.TryCreate(value, UriKind.Absolute, out Uri? uri) ? uri : null;
+        }
+
+        /// <summary>
+        /// Resolves a ReferenceWord to Uri.
+        /// </summary>
+        public Uri? Resolve(ReferenceWord reference)
+        {
+            return reference.ResolveAs<Uri>();
         }
     }
 }

@@ -1,4 +1,4 @@
-﻿namespace FluNET.Syntax
+﻿namespace FluNET.Syntax.Core
 {
     /// <summary>
     /// Base interface for all nouns in the FluNET language.

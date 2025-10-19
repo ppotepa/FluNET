@@ -2,7 +2,7 @@ using FluNET.Tokens;
 using FluNET.Tokens.Tree;
 using FluNET.Words;
 
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Validation
 {
     /// <summary>
     /// Service class responsible for validating complete sentences.
@@ -22,7 +22,7 @@ namespace FluNET.Syntax
         /// <returns>A ValidationResult indicating success or failure with detailed error messages</returns>
         public ValidationResult ValidateSentence(TokenTree tokenTree)
         {
-            Token? current = tokenTree.Root?.Next;
+            Token? current = tokenTree.Root;
 
             if (current == null || current.Type == TokenType.Terminal)
             {
@@ -48,6 +48,12 @@ namespace FluNET.Syntax
             if (verbWord == null)
             {
                 return ValidationResult.Failure($"Unknown verb: '{current.Value}'");
+            }
+
+            // First word must be a verb
+            if (verbWord is not IVerb)
+            {
+                return ValidationResult.Failure($"Sentence must start with a verb, got: '{current.Value}'");
             }
 
             if (verbWord is not IValidatable currentValidator)

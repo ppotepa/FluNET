@@ -16,8 +16,9 @@ namespace FluNET.Tokens.Tree
         {
             TokenTree tokenTree = new();
 
-            IEnumerable<TokenClass> tokens = prompt.ToString()
-                .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+            // Use the pre-tokenized Tokens array from ProcessedPrompt
+            // which respects brace boundaries {reference} and [variable]
+            IEnumerable<TokenClass> tokens = prompt.Tokens
                 .Select(RawToken.Create)
                 .Select(factory.CreateToken);
 

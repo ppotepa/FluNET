@@ -125,7 +125,7 @@ namespace FluNET.Tests
             ProcessedPrompt processed = new("SAVE file TO disk.");
             TokenTree tree = processed.ToTokenTree();
 
-            var tokens = tree.GetTokens().ToList();
+            List<Tokens.Token> tokens = tree.GetTokens().ToList();
 
             Assert.Multiple(() =>
             {
@@ -136,7 +136,7 @@ namespace FluNET.Tests
                 Assert.That(tokens, Is.Not.Empty);
 
                 // Verify the content tokens are present
-                var tokenValues = tokens.Select(t => t.Value).ToList();
+                List<string> tokenValues = tokens.Select(t => t.Value).ToList();
                 Assert.That(tokenValues, Does.Contain("SAVE"));
                 Assert.That(tokenValues, Does.Contain("file"));
                 Assert.That(tokenValues, Does.Contain("TO"));
@@ -188,14 +188,14 @@ namespace FluNET.Tests
         [Test]
         public void TokenTree_DifferentTerminators_AllHandled()
         {
-            var sentences = new[]
+            string[] sentences = new[]
             {
                 "GET data FROM source.",
                 "POST data TO endpoint?",
                 "DELETE file FROM disk!"
             };
 
-            foreach (var sentence in sentences)
+            foreach (string? sentence in sentences)
             {
                 ProcessedPrompt processed = new(sentence);
                 TokenTree tree = processed.ToTokenTree();

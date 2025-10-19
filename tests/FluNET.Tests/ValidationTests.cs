@@ -1,5 +1,4 @@
 using FluNET.Prompt;
-using FluNET.Syntax;
 using FluNET.Tokens.Tree;
 using FluNET.Words;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,9 +13,10 @@ namespace FluNET.Tests
         public void Setup()
         {
             ServiceCollection services = new();
-            services.AddSingleton<Lexicon.Lexicon>();
-            services.AddSingleton<WordFactory>();
-            services.AddSingleton<SentenceValidator>();
+            services.AddScoped<DiscoveryService>();
+            services.AddScoped<Lexicon.Lexicon>();
+            services.AddScoped<WordFactory>();
+            services.AddScoped<SentenceValidator>();
 
             ServiceProvider provider = services.BuildServiceProvider();
             validator = provider.GetRequiredService<SentenceValidator>();

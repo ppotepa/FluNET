@@ -1,13 +1,10 @@
-using FluNET;
 using FluNET.Prompt;
 using FluNET.Sentences;
-using FluNET.Syntax;
 using FluNET.Tokens;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
 using FluNET.Words;
 using Microsoft.Extensions.DependencyInjection;
-using NUnit.Framework;
 
 namespace FluNET.Tests
 {
@@ -22,6 +19,7 @@ namespace FluNET.Tests
         public void Setup()
         {
             IServiceCollection services = new ServiceCollection();
+            services.AddScoped<DiscoveryService>();
             services.AddSingleton<Engine>();
             services.AddScoped<TokenTreeFactory>();
             services.AddScoped<TokenFactory>();
@@ -118,7 +116,7 @@ namespace FluNET.Tests
             _variableResolver.Register("person", person);
 
             // Act - Resolve the actual registered object
-            var result = _variableResolver.Resolve<object>("[person]");
+            object? result = _variableResolver.Resolve<object>("[person]");
 
             // Assert
             Assert.That(result, Is.Not.Null);
@@ -180,7 +178,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("GET text FROM file.txt.");
 
             // Act
-            var (validation, sentence, result) = _engine.Run(prompt);
+            (ValidationResult validation, ISentence sentence, object result) = _engine.Run(prompt);
 
             // Assert - Should return three values
             Assert.That(validation, Is.Not.Null);
@@ -192,7 +190,7 @@ namespace FluNET.Tests
         public void SentenceExecutor_Execute_WithNullSentence_ReturnsNull()
         {
             // Arrange
-            var executor = _serviceProvider.GetRequiredService<SentenceExecutor>();
+            SentenceExecutor executor = _serviceProvider.GetRequiredService<SentenceExecutor>();
 
             // Act
             object? result = executor.Execute(null!);

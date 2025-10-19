@@ -1,5 +1,4 @@
-﻿using FluNET.Syntax;
-using FluNET.Tokens;
+﻿using FluNET.Tokens;
 using FluNET.Tokens.Tree;
 using FluNET.Words;
 
@@ -9,8 +8,23 @@ namespace FluNET.Sentences
     {
         public ISentence? CreateFromTree(TokenTree tree)
         {
-            // Start from the first token after ROOT
-            Token? current = tree.Root?.Next;
+            // Debug: Print all tokens in the tree (only if console output is available)
+            try
+            {
+                Console.WriteLine("  Tokens in tree:");
+                int tokenIndex = 0;
+                foreach (Token token in tree.GetTokens())
+                {
+                    Console.WriteLine($"    Token[{tokenIndex++}]: '{token.Value}' (Type: {token.Type})");
+                }
+            }
+            catch (ObjectDisposedException)
+            {
+                // Console may be disposed in test scenarios - ignore
+            }
+
+            // Start from the ROOT token itself
+            Token? current = tree.Root;
             if (current == null || current.Type == TokenType.Terminal)
             {
                 return null;

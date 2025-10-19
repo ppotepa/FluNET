@@ -42,6 +42,44 @@ namespace FluNET.Syntax.Verbs
         public abstract Func<TFrom, TWhat> Act { get; }
 
         /// <summary>
+        /// Validates whether this verb implementation can handle the given word.
+        /// Derived classes must implement this to validate parameters like FROM sources.
+        /// </summary>
+        public abstract bool Validate(IWord word);
+
+        /// <summary>
+        /// Resolves a string value to the TFrom type contextually.
+        /// Derived classes implement this to define resolution logic.
+        /// </summary>
+        public abstract TFrom? Resolve(string value);
+
+        /// <summary>
+        /// Determines if this verb can handle the given sentence structure.
+        /// Checks for the FROM preposition and validates its value.
+        /// </summary>
+        /// <param name="root">The root word of the sentence</param>
+        /// <returns>True if this verb can handle the sentence structure</returns>
+        public virtual bool CanHandle(IWord root)
+        {
+            // Find the FROM keyword
+            Keywords.From? fromPrep = root.Find<Keywords.From>();
+            if (fromPrep == null)
+            {
+                return false;
+            }
+
+            // The FROM preposition should have a value after it
+            IWord? valueWord = fromPrep.Next;
+            if (valueWord == null)
+            {
+                return false;
+            }
+
+            // Validate the value using the derived class's validation logic
+            return Validate(valueWord);
+        }
+
+        /// <summary>
         /// Gets or sets the next word in the sentence chain.
         /// </summary>
         public IWord? Next { get; set; }
@@ -53,16 +91,19 @@ namespace FluNET.Syntax.Verbs
 
         /// <summary>
         /// Validates that the next word in the sentence is grammatically correct.
-        /// For DELETE verbs, expects either a FROM keyword or a WHAT noun.
+        /// For DELETE verbs, expects either a FROM keyword, a WHAT noun, or a variable.
         /// </summary>
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
-            if (nextWord is IFrom<TFrom>)
+            if (nextWord is Keywords.From)
             {
                 return ValidationResult.Success();
             }
 
-            return nextWord is IWhat<TWhat>
+            // Check if it's a variable word (will be resolved during execution)
+            return nextWord is Words.VariableWord
+                ? ValidationResult.Success()
+                : nextWord is IWhat<TWhat>
                 ? ValidationResult.Success()
                 : ValidationResult.Failure(
                     "Invalid word after DELETE verb. Expected FROM keyword or a direct object.");
@@ -83,7 +124,7 @@ namespace FluNET.Syntax.Verbs
         /// <returns>A THEN keyword with the deleted resource identifier</returns>
         public virtual IThen<TWhat> Then()
         {
-            var result = Execute();
+            TWhat? result = Execute();
             return new ThenKeyword<TWhat>(result);
         }
     }

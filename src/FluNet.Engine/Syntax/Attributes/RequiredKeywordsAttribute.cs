@@ -1,7 +1,6 @@
-﻿
-using FluNET.Keywords;
+﻿using FluNET.Keywords;
 
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Attributes
 {
     /// <summary>
     /// Attribute to mark which keywords are required for a particular verb or language construct.
@@ -16,7 +15,7 @@ namespace FluNET.Syntax
         /// <param name="keywords">Array of keywords that are required</param>
         public RequiredKeywordsAttribute(IKeyword[] keywords)
         {
-            this.Keywords = keywords;
+            Keywords = keywords;
         }
 
         /// <summary>

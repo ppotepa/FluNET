@@ -42,6 +42,44 @@ namespace FluNET.Syntax.Verbs
         public abstract Func<TUsing, TWhat> Act { get; }
 
         /// <summary>
+        /// Validates whether this verb implementation can handle the given word.
+        /// Derived classes must implement this to validate parameters like USING instruments.
+        /// </summary>
+        public abstract bool Validate(IWord word);
+
+        /// <summary>
+        /// Resolves a string value to the TUsing type contextually.
+        /// Derived classes implement this to define resolution logic.
+        /// </summary>
+        public abstract TUsing? Resolve(string value);
+
+        /// <summary>
+        /// Determines if this verb can handle the given sentence structure.
+        /// Checks for the USING preposition and validates its value.
+        /// </summary>
+        /// <param name="root">The root word of the sentence</param>
+        /// <returns>True if this verb can handle the sentence structure</returns>
+        public virtual bool CanHandle(IWord root)
+        {
+            // Find the USING keyword
+            Keywords.Using? usingPrep = root.Find<Keywords.Using>();
+            if (usingPrep == null)
+            {
+                return false;
+            }
+
+            // The USING preposition should have a value after it
+            IWord? valueWord = usingPrep.Next;
+            if (valueWord == null)
+            {
+                return false;
+            }
+
+            // Validate the value using the derived class's validation logic
+            return Validate(valueWord);
+        }
+
+        /// <summary>
         /// Gets or sets the next word in the sentence chain.
         /// </summary>
         public IWord? Next { get; set; }
@@ -53,16 +91,19 @@ namespace FluNET.Syntax.Verbs
 
         /// <summary>
         /// Validates that the next word in the sentence is grammatically correct.
-        /// For TRANSFORM verbs, expects either a USING keyword or a WHAT noun.
+        /// For TRANSFORM verbs, expects either a USING keyword, a WHAT noun, or a variable.
         /// </summary>
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
-            if (nextWord is IUsing<TUsing>)
+            if (nextWord is Keywords.Using)
             {
                 return ValidationResult.Success();
             }
 
-            return nextWord is IWhat<TWhat>
+            // Check if it's a variable word (will be resolved during execution)
+            return nextWord is Words.VariableWord
+                ? ValidationResult.Success()
+                : nextWord is IWhat<TWhat>
                 ? ValidationResult.Success()
                 : ValidationResult.Failure(
                     "Invalid word after TRANSFORM verb. Expected USING keyword or a direct object.");
@@ -83,7 +124,7 @@ namespace FluNET.Syntax.Verbs
         /// <returns>A THEN keyword with the transformed data</returns>
         public virtual IThen<TWhat> Then()
         {
-            var result = Execute();
+            TWhat? result = Execute();
             return new ThenKeyword<TWhat>(result);
         }
     }

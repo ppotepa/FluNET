@@ -1,3 +1,5 @@
+using FluNET.Words;
+
 namespace FluNET.Syntax.Verbs
 {
     /// <summary>
@@ -26,13 +28,52 @@ namespace FluNET.Syntax.Verbs
                 {
                     string json = File.ReadAllText(file.FullName);
                     // Simple JSON parsing - in production use System.Text.Json
-                    var config = new Dictionary<string, object>();
-                    // Simplified example - would need proper JSON parsing
-                    config["loaded"] = true;
-                    config["source"] = file.Name;
+                    Dictionary<string, object> config = new()
+                    {
+                        // Simplified example - would need proper JSON parsing
+                        ["loaded"] = true,
+                        ["source"] = file.Name
+                    };
                     return config;
                 };
             }
+        }
+
+        /// <summary>
+        /// Validates that the word represents a valid config file path.
+        /// </summary>
+        public override bool Validate(IWord word)
+        {
+            if (word is LiteralWord litWord)
+            {
+                // Accept any non-empty literal as a potential file path
+                // File existence will be checked during execution
+                return !string.IsNullOrWhiteSpace(litWord.Value.TrimEnd('.'));
+            }
+            return word is VariableWord or ReferenceWord;
+        }
+
+        /// <summary>
+        /// Resolves a string value to FileInfo for config files.
+        /// </summary>
+        public override FileInfo? Resolve(string value)
+        {
+            try
+            {
+                return new FileInfo(value);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Resolves a ReferenceWord to FileInfo.
+        /// </summary>
+        public FileInfo? Resolve(ReferenceWord reference)
+        {
+            return reference.ResolveAs<FileInfo>();
         }
     }
 }

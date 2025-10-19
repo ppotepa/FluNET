@@ -1,3 +1,5 @@
+using FluNET.Words;
+
 namespace FluNET.Syntax.Verbs
 {
     /// <summary>
@@ -28,6 +30,38 @@ namespace FluNET.Syntax.Verbs
                     return What;
                 };
             }
+        }
+
+        /// <summary>
+        /// Validates that the word represents a valid file path for saving.
+        /// </summary>
+        public override bool Validate(IWord word)
+        {
+            // For saving, we just need a valid path (file doesn't need to exist)
+            return word is LiteralWord or VariableWord or ReferenceWord;
+        }
+
+        /// <summary>
+        /// Resolves a string value to FileInfo for file saving.
+        /// </summary>
+        public override FileInfo? Resolve(string value)
+        {
+            try
+            {
+                return new FileInfo(value);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Resolves a ReferenceWord to FileInfo.
+        /// </summary>
+        public FileInfo? Resolve(ReferenceWord reference)
+        {
+            return reference.ResolveAs<FileInfo>();
         }
     }
 }

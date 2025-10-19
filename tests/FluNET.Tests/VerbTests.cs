@@ -1,6 +1,4 @@
 using FluNET.Prompt;
-using FluNET.Syntax;
-using FluNET.Syntax.Verbs;
 using FluNET.Tokens.Tree;
 using FluNET.Words;
 using Microsoft.Extensions.DependencyInjection;
@@ -19,9 +17,10 @@ namespace FluNET.Tests
         public void Setup()
         {
             ServiceCollection services = new();
-            services.AddSingleton<Lexicon.Lexicon>();
-            services.AddSingleton<WordFactory>();
-            services.AddSingleton<SentenceValidator>();
+            services.AddScoped<DiscoveryService>();
+            services.AddScoped<Lexicon.Lexicon>();
+            services.AddScoped<WordFactory>();
+            services.AddScoped<SentenceValidator>();
 
             ServiceProvider provider = services.BuildServiceProvider();
             validator = provider.GetRequiredService<SentenceValidator>();
@@ -274,14 +273,14 @@ namespace FluNET.Tests
         [Test]
         public void DifferentVerbs_WithSamePreposition_ShouldAllValidate()
         {
-            var sentences = new[]
+            string[] sentences = new[]
             {
                 "GET data FROM source.",
                 "LOAD config FROM file.",
                 "DELETE item FROM list."
             };
 
-            foreach (var sentence in sentences)
+            foreach (string? sentence in sentences)
             {
                 ProcessedPrompt processed = new(sentence);
                 TokenTree tree = processed.ToTokenTree();

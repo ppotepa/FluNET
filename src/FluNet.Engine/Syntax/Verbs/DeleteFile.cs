@@ -1,3 +1,5 @@
+using FluNET.Words;
+
 namespace FluNET.Syntax.Verbs
 {
     /// <summary>
@@ -32,6 +34,44 @@ namespace FluNET.Syntax.Verbs
                     }
                     return $"File not found: {What}";
                 };
+            }
+        }
+
+        /// <summary>
+        /// Validates that the word represents a valid directory path.
+        /// </summary>
+        public override bool Validate(IWord word)
+        {
+            return word is LiteralWord or VariableWord or ReferenceWord;
+        }
+
+        /// <summary>
+        /// Resolves a string value to DirectoryInfo.
+        /// </summary>
+        public override DirectoryInfo? Resolve(string value)
+        {
+            try
+            {
+                return new DirectoryInfo(value);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Resolves a ReferenceWord to DirectoryInfo.
+        /// </summary>
+        public DirectoryInfo? Resolve(ReferenceWord reference)
+        {
+            try
+            {
+                return new DirectoryInfo(reference.Reference);
+            }
+            catch
+            {
+                return null;
             }
         }
     }
