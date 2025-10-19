@@ -1,4 +1,6 @@
-﻿namespace FluNET.Sentences
+﻿using FluNET.Syntax.Core;
+
+namespace FluNET.Sentences
 {
     /// <summary>
     /// Represents a validated sentence composed of a chain of words

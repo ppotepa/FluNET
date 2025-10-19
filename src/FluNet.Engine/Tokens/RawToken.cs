@@ -1,5 +1,4 @@
-﻿
-namespace FluNET.Tokens
+﻿namespace FluNET.Tokens
 {
     internal class RawToken
     {

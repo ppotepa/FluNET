@@ -1,4 +1,5 @@
 using FluNET.Keywords;
+using FluNET.Syntax.Core;
 
 namespace FluNET.Syntax.Nouns
 {

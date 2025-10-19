@@ -1,3 +1,4 @@
+using FluNET.Syntax.Core;
 using FluNET.Words;
 
 namespace FluNET.Syntax.Verbs
@@ -27,8 +28,8 @@ namespace FluNET.Syntax.Verbs
                 return (recipient) =>
                 {
                     // Simulated email sending - in production would use SMTP
-                    Console.WriteLine($"Sending email to {recipient}");
-                    Console.WriteLine($"Message: {What}");
+                    System.Diagnostics.Debug.WriteLine($"Sending email to {recipient}");
+                    System.Diagnostics.Debug.WriteLine($"Message: {What}");
                     return $"Email sent to {recipient}";
                 };
             }

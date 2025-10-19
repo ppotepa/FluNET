@@ -1,4 +1,5 @@
 using FluNET.Keywords;
+using FluNET.Syntax.Core;
 
 namespace FluNET.Syntax.Nouns
 {
@@ -8,7 +9,7 @@ namespace FluNET.Syntax.Nouns
     /// Example: GET [data] FROM source THEN SAVE TO file.
     /// </summary>
     /// <typeparam name="TData">The type of data being processed through the chain</typeparam>
-    public interface IThen<TData> : INoun, IKeyword
+    public interface IThen<out TData> : INoun, IKeyword
     {
         /// <summary>
         /// Gets the data that is being passed to the next operation in the chain.

@@ -1,5 +1,6 @@
 using FluNET.Prompt;
 using FluNET.Sentences;
+using FluNET.Syntax.Validation;
 using FluNET.Tokens;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
@@ -9,6 +10,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace FluNET.Tests
 {
     [TestFixture]
+
     public class ExecutionTests
     {
         private ServiceProvider _serviceProvider = null!;
@@ -19,7 +21,7 @@ namespace FluNET.Tests
         public void Setup()
         {
             IServiceCollection services = new ServiceCollection();
-            services.AddScoped<DiscoveryService>();
+            services.AddTransient<DiscoveryService>();
             services.AddSingleton<Engine>();
             services.AddScoped<TokenTreeFactory>();
             services.AddScoped<TokenFactory>();
@@ -38,7 +40,15 @@ namespace FluNET.Tests
         [TearDown]
         public void TearDown()
         {
-            _serviceProvider?.Dispose();
+            try
+            {
+                _serviceProvider?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail
+                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
+            }
         }
 
         [Test]
@@ -178,7 +188,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("GET text FROM file.txt.");
 
             // Act
-            (ValidationResult validation, ISentence sentence, object result) = _engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = _engine.Run(prompt);
 
             // Assert - Should return three values
             Assert.That(validation, Is.Not.Null);

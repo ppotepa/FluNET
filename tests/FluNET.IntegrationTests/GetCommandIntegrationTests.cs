@@ -1,3 +1,12 @@
+using FluNET.Prompt;
+using FluNET.Sentences;
+using FluNET.Syntax.Validation;
+using FluNET.Tokens;
+using FluNET.Tokens.Tree;
+using FluNET.Variables;
+using FluNET.Words;
+using Microsoft.Extensions.DependencyInjection;
+
 namespace FluNET.IntegrationTests
 {
     /// <summary>
@@ -18,7 +27,7 @@ namespace FluNET.IntegrationTests
         {
             // Setup DI container with proper scope management
             ServiceCollection services = new();
-            services.AddScoped<DiscoveryService>();
+            services.AddTransient<DiscoveryService>();
             services.AddScoped<Engine>();
             services.AddScoped<TokenTreeFactory>();
             services.AddScoped<TokenFactory>();
@@ -43,21 +52,22 @@ namespace FluNET.IntegrationTests
         [TearDown]
         public void TearDown()
         {
-            // Dispose scope and service provider to clean up resources
-            scope?.Dispose();
-            serviceProvider?.Dispose();
-
-            // Cleanup test files
-            if (Directory.Exists(testDirectory))
+            try
             {
-                try
+                // Dispose scope and service provider to clean up resources
+                scope?.Dispose();
+                serviceProvider?.Dispose();
+
+                // Cleanup test files
+                if (Directory.Exists(testDirectory))
                 {
                     Directory.Delete(testDirectory, true);
                 }
-                catch
-                {
-                    // Ignore cleanup errors
-                }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail - OS will clean up temp files eventually
+                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
             }
         }
 
@@ -80,7 +90,7 @@ namespace FluNET.IntegrationTests
                 Assert.That(result, Is.Not.Null, "Result should not be null");
                 Assert.That(result, Is.InstanceOf<string[]>(), "Result should be string array");
 
-                global::System.String[] lines = result as string[];
+                string[]? lines = result as string[];
                 Assert.That(lines, Is.Not.Null);
                 Assert.That(lines!.Length, Is.GreaterThan(0), "File should have content");
                 Assert.That(string.Join("", lines), Does.Contain("This is a test file"));
@@ -157,7 +167,7 @@ namespace FluNET.IntegrationTests
             }
         }
 
-        #endregion
+        #endregion Basic GET Tests
 
         #region Integration Tests
 
@@ -204,7 +214,7 @@ namespace FluNET.IntegrationTests
                 Assert.That(validation.IsValid, Is.True);
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result, Is.InstanceOf<string[]>());
-                global::System.String[] lines = result as string[];
+                string[]? lines = result as string[];
                 Assert.That(lines!.Length, Is.EqualTo(1)); // Empty file has one empty line
             });
         }
@@ -231,7 +241,7 @@ namespace FluNET.IntegrationTests
                 Assert.That(validation.IsValid, Is.True);
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result, Is.InstanceOf<string[]>());
-                global::System.String[] resultLines = result as string[];
+                string[]? resultLines = result as string[];
                 Assert.That(resultLines!.Length, Is.GreaterThanOrEqualTo(1000));
             });
         }
@@ -272,7 +282,7 @@ namespace FluNET.IntegrationTests
                 Assert.That(validation.IsValid, Is.True, "Should handle paths with spaces");
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result, Is.InstanceOf<string[]>());
-                global::System.String[] lines = result as string[];
+                string[]? lines = result as string[];
                 Assert.That(string.Join("", lines!), Does.Contain("Spaces in path test"));
             });
         }
@@ -291,7 +301,7 @@ namespace FluNET.IntegrationTests
             Assert.That(validation.IsValid, Is.True, "Should handle nested braces");
         }
 
-        #endregion
+        #endregion Integration Tests
 
         #region Edge Cases
 
@@ -310,6 +320,6 @@ namespace FluNET.IntegrationTests
             Assert.That(validation.IsValid, Is.True, "Should handle terminator correctly");
         }
 
-        #endregion
+        #endregion Edge Cases
     }
 }

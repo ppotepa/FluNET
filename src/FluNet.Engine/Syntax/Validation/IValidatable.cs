@@ -1,3 +1,5 @@
+using FluNET.Syntax.Core;
+
 namespace FluNET.Syntax.Validation
 {
     /// <summary>

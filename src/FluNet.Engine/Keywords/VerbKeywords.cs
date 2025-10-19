@@ -1,9 +1,12 @@
+using FluNET.Syntax.Core;
+using FluNET.Syntax.Validation;
+
 namespace FluNET.Keywords
 {
     /// <summary>
     /// GET verb keyword
     /// </summary>
-    public class Get : IKeyword, IWord, IValidatable
+    public class Get : IKeyword, IWord
     {
         public string Text => "GET";
         public IWord? Next { get; set; }
@@ -23,7 +26,7 @@ namespace FluNET.Keywords
     /// <summary>
     /// SAVE verb keyword
     /// </summary>
-    public class Save : IKeyword, IWord, IValidatable
+    public class Save : IKeyword, IWord
     {
         public string Text => "SAVE";
         public IWord? Next { get; set; }
@@ -43,7 +46,7 @@ namespace FluNET.Keywords
     /// <summary>
     /// POST verb keyword
     /// </summary>
-    public class Post : IKeyword, IWord, IValidatable
+    public class Post : IKeyword, IWord
     {
         public string Text => "POST";
         public IWord? Next { get; set; }
@@ -63,7 +66,7 @@ namespace FluNET.Keywords
     /// <summary>
     /// DELETE verb keyword
     /// </summary>
-    public class Delete : IKeyword, IWord, IValidatable
+    public class Delete : IKeyword, IWord
     {
         public string Text => "DELETE";
         public IWord? Next { get; set; }
@@ -83,7 +86,7 @@ namespace FluNET.Keywords
     /// <summary>
     /// LOAD verb keyword
     /// </summary>
-    public class Load : IKeyword, IWord, IValidatable
+    public class Load : IKeyword, IWord
     {
         public string Text => "LOAD";
         public IWord? Next { get; set; }
@@ -103,7 +106,7 @@ namespace FluNET.Keywords
     /// <summary>
     /// SEND verb keyword
     /// </summary>
-    public class Send : IKeyword, IWord, IValidatable
+    public class Send : IKeyword, IWord
     {
         public string Text => "SEND";
         public IWord? Next { get; set; }
@@ -123,7 +126,7 @@ namespace FluNET.Keywords
     /// <summary>
     /// TRANSFORM verb keyword
     /// </summary>
-    public class Transform : IKeyword, IWord, IValidatable
+    public class Transform : IKeyword, IWord
     {
         public string Text => "TRANSFORM";
         public IWord? Next { get; set; }

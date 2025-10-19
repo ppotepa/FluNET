@@ -6,7 +6,6 @@ public class TokenTree
     public Token? Last { get; private set; }
     public int Count { get; private set; }
 
-
     public TokenTree()
     {
     }

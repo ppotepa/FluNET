@@ -11,13 +11,13 @@
             string value = rawToken.Value;
 
             // Check for variable pattern [variable]
-            if (value.StartsWith("[") && value.EndsWith("]"))
+            if (value.StartsWith('[') && value.EndsWith(']'))
             {
                 return new Token(value, TokenType.Variable);
             }
 
             // Check for reference pattern {reference}
-            if (value.StartsWith("{") && value.EndsWith("}"))
+            if (value.StartsWith('{') && value.EndsWith('}'))
             {
                 return new Token(value, TokenType.Reference);
             }

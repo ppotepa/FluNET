@@ -1,6 +1,9 @@
-﻿namespace FluNET.Keywords
+﻿using FluNET.Syntax.Core;
+using FluNET.Syntax.Validation;
+
+namespace FluNET.Keywords
 {
-    public class From : IKeyword, IWord, IValidatable
+    public class From : IKeyword, IWord
     {
         public string Text => "FROM";
         public IWord? Next { get; set; }
@@ -8,7 +11,16 @@
 
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
-            // FROM can be followed by variables or literals
+            // FROM must be followed by a source (variable, reference, or literal)
+            // "GET [text] FROM ." is INVALID - FROM requires a source
+            if (nextWord is Words.LiteralWord literal &&
+                (literal.Value == "." || literal.Value == "?" || literal.Value == "!"))
+            {
+                return ValidationResult.Failure(
+                    "FROM keyword requires a source. Expected [variable] or {reference} after FROM.");
+            }
+
+            // FROM can be followed by variables, references, or literals (file paths, URLs, etc.)
             return ValidationResult.Success();
         }
 
@@ -19,7 +31,7 @@
         }
     }
 
-    public class To : IKeyword, IWord, IValidatable
+    public class To : IKeyword, IWord
     {
         public string Text => "TO";
         public IWord? Next { get; set; }
@@ -38,7 +50,7 @@
         }
     }
 
-    public class Then : IKeyword, IWord, IValidatable
+    public class Then : IKeyword, IWord
     {
         public string Text => "THEN";
         public IWord? Next { get; set; }
@@ -59,7 +71,7 @@
         }
     }
 
-    public class And : IKeyword, IWord, IValidatable
+    public class And : IKeyword, IWord
     {
         public string Text => "AND";
         public IWord? Next { get; set; }
@@ -78,7 +90,7 @@
         }
     }
 
-    public class Using : IKeyword, IWord, IValidatable
+    public class Using : IKeyword, IWord
     {
         public string Text => "USING";
         public IWord? Next { get; set; }

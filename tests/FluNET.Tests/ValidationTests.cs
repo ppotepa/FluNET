@@ -1,25 +1,43 @@
 using FluNET.Prompt;
+using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Words;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests
 {
+    [TestFixture]
+
     public class ValidationTests
     {
-        private SentenceValidator validator;
+        private SentenceValidator validator = null!;
+        private ServiceProvider? serviceProvider;
 
         [SetUp]
         public void Setup()
         {
             ServiceCollection services = new();
-            services.AddScoped<DiscoveryService>();
+            services.AddTransient<DiscoveryService>();
             services.AddScoped<Lexicon.Lexicon>();
             services.AddScoped<WordFactory>();
             services.AddScoped<SentenceValidator>();
 
-            ServiceProvider provider = services.BuildServiceProvider();
-            validator = provider.GetRequiredService<SentenceValidator>();
+            serviceProvider = services.BuildServiceProvider();
+            validator = serviceProvider.GetRequiredService<SentenceValidator>();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            try
+            {
+                serviceProvider?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail
+                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
+            }
         }
 
         [Test]

@@ -1,4 +1,5 @@
 ﻿using FluNET.Keywords;
+using FluNET.Syntax.Validation;
 
 namespace FluNET.Syntax.Core
 {
@@ -6,7 +7,7 @@ namespace FluNET.Syntax.Core
     /// Non-generic verb interface for actions that don't require type parameters.
     /// Verbs are action words that can validate subsequent words in a sentence.
     /// </summary>
-    public interface IVerb : IWord, IKeyword, IValidatable
+    public interface IVerb : IWord, IKeyword
     {
     }
 

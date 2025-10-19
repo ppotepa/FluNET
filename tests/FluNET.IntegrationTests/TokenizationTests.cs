@@ -1,3 +1,5 @@
+using FluNET.Prompt;
+
 namespace FluNET.IntegrationTests
 {
     /// <summary>

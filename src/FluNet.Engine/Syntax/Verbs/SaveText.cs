@@ -1,3 +1,4 @@
+using FluNET.Syntax.Core;
 using FluNET.Words;
 
 namespace FluNET.Syntax.Verbs

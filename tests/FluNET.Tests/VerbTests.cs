@@ -1,4 +1,5 @@
 using FluNET.Prompt;
+using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Words;
 using Microsoft.Extensions.DependencyInjection;
@@ -9,21 +10,38 @@ namespace FluNET.Tests
     /// Tests for various verb implementations to ensure they validate correctly
     /// and work with different preposition patterns.
     /// </summary>
+    [TestFixture]
+
     public class VerbTests
     {
         private SentenceValidator validator = null!;
+        private ServiceProvider? serviceProvider;
 
         [SetUp]
         public void Setup()
         {
             ServiceCollection services = new();
-            services.AddScoped<DiscoveryService>();
+            services.AddTransient<DiscoveryService>();
             services.AddScoped<Lexicon.Lexicon>();
             services.AddScoped<WordFactory>();
             services.AddScoped<SentenceValidator>();
 
-            ServiceProvider provider = services.BuildServiceProvider();
-            validator = provider.GetRequiredService<SentenceValidator>();
+            serviceProvider = services.BuildServiceProvider();
+            validator = serviceProvider.GetRequiredService<SentenceValidator>();
+        }
+
+        [TearDown]
+        public void TearDown()
+        {
+            try
+            {
+                serviceProvider?.Dispose();
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail
+                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
+            }
         }
 
         #region GET Verb Tests
@@ -58,7 +76,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion GET Verb Tests
 
         #region POST Verb Tests
 
@@ -105,7 +123,7 @@ namespace FluNET.Tests
             }
         }
 
-        #endregion
+        #endregion POST Verb Tests
 
         #region SAVE Verb Tests
 
@@ -137,7 +155,7 @@ namespace FluNET.Tests
             }
         }
 
-        #endregion
+        #endregion SAVE Verb Tests
 
         #region DELETE Verb Tests
 
@@ -170,7 +188,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion DELETE Verb Tests
 
         #region LOAD Verb Tests
 
@@ -202,7 +220,7 @@ namespace FluNET.Tests
             }
         }
 
-        #endregion
+        #endregion LOAD Verb Tests
 
         #region SEND Verb Tests
 
@@ -234,7 +252,7 @@ namespace FluNET.Tests
             }
         }
 
-        #endregion
+        #endregion SEND Verb Tests
 
         #region TRANSFORM Verb Tests
 
@@ -266,7 +284,7 @@ namespace FluNET.Tests
             }
         }
 
-        #endregion
+        #endregion TRANSFORM Verb Tests
 
         #region Mixed Pattern Tests
 
@@ -334,6 +352,6 @@ namespace FluNET.Tests
             Assert.That(result.IsValid, Is.False);
         }
 
-        #endregion
+        #endregion Mixed Pattern Tests
     }
 }

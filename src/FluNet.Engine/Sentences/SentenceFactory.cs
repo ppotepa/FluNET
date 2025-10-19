@@ -1,4 +1,5 @@
-﻿using FluNET.Tokens;
+using FluNET.Syntax.Core;
+using FluNET.Tokens;
 using FluNET.Tokens.Tree;
 using FluNET.Words;
 
@@ -11,11 +12,11 @@ namespace FluNET.Sentences
             // Debug: Print all tokens in the tree (only if console output is available)
             try
             {
-                Console.WriteLine("  Tokens in tree:");
+                System.Diagnostics.Debug.WriteLine("  Tokens in tree:");
                 int tokenIndex = 0;
                 foreach (Token token in tree.GetTokens())
                 {
-                    Console.WriteLine($"    Token[{tokenIndex++}]: '{token.Value}' (Type: {token.Type})");
+                    System.Diagnostics.Debug.WriteLine($"    Token[{tokenIndex++}]: '{token.Value}' (Type: {token.Type})");
                 }
             }
             catch (ObjectDisposedException)

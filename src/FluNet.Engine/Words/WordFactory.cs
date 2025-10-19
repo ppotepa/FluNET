@@ -1,4 +1,6 @@
 using FluNET.Keywords;
+using FluNET.Syntax.Core;
+using FluNET.Syntax.Validation;
 using FluNET.Tokens;
 using FluNET.Variables;
 
@@ -28,9 +30,16 @@ namespace FluNET.Words
             }
 
             // Check if this token is a reference {resource}
-            if (token.Type == TokenType.Reference || (token.Value.StartsWith("{") && token.Value.EndsWith("}")))
+            if (token.Type == TokenType.Reference || (token.Value.StartsWith('{') && token.Value.EndsWith('}')))
             {
                 return new ReferenceWord(token.Value);
+            }
+
+            // Check if this token is a common qualifier (TEXT, JSON, XML, BINARY, etc.)
+            string[] commonQualifiers = { "TEXT", "JSON", "XML", "BINARY", "CSV", "HTML", "YAML", "IMAGE", "VIDEO", "AUDIO" };
+            if (commonQualifiers.Contains(token.Value.ToUpperInvariant()))
+            {
+                return new QualifierWord(token.Value);
             }
 
             IReadOnlyList<Type> allWords = _discoveryService.Words;
@@ -81,7 +90,7 @@ namespace FluNET.Words
     /// Represents a variable reference in a sentence.
     /// This is a placeholder that will be resolved during execution.
     /// </summary>
-    public class VariableWord : IWord, IKeyword, IValidatable
+    public class VariableWord : IWord, IKeyword
     {
         public VariableWord(string variableReference)
         {
@@ -98,6 +107,21 @@ namespace FluNET.Words
 
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
+            // If the previous word is a verb that implements IFrom (like GET, LOAD, DELETE),
+            // then this variable MUST be followed by FROM keyword
+            if (Previous != null)
+            {
+                // Check if previous is a verb that requires FROM (has IFrom in its interfaces)
+                bool requiresFrom = Previous.GetType().GetInterfaces()
+                    .Any(i => i.IsGenericType && i.GetGenericTypeDefinition().Name.Contains("IFrom"));
+
+                if (requiresFrom && nextWord is not Keywords.From)
+                {
+                    return ValidationResult.Failure(
+                        $"{Previous.GetType().Name.ToUpper()} [variable] must be followed by FROM keyword.");
+                }
+            }
+
             // Variables can be followed by any word (keywords or other variables)
             return ValidationResult.Success();
         }
@@ -113,7 +137,7 @@ namespace FluNET.Words
     /// Represents a reference to an external resource (file path, URL, endpoint, etc.).
     /// References use {reference} syntax in prompts.
     /// </summary>
-    public class ReferenceWord : IWord, IKeyword, IValidatable
+    public class ReferenceWord : IWord, IKeyword
     {
         public ReferenceWord(string reference)
         {
@@ -151,6 +175,21 @@ namespace FluNET.Words
 
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
+            // If the previous word is a verb that implements IFrom (like GET, LOAD, DELETE),
+            // then this reference MUST be followed by FROM keyword
+            if (Previous != null)
+            {
+                // Check if previous is a verb that requires FROM (has IFrom in its interfaces)
+                bool requiresFrom = Previous.GetType().GetInterfaces()
+                    .Any(i => i.IsGenericType && i.GetGenericTypeDefinition().Name.Contains("IFrom"));
+
+                if (requiresFrom && nextWord is not Keywords.From)
+                {
+                    return ValidationResult.Failure(
+                        $"{Previous.GetType().Name.ToUpper()} {{reference}} must be followed by FROM keyword.");
+                }
+            }
+
             // References can be followed by any word (keywords or other references)
             return ValidationResult.Success();
         }
@@ -168,7 +207,7 @@ namespace FluNET.Words
     /// Represents a qualifier word (TEXT, JSON, XML, BINARY, etc.).
     /// Qualifiers specify the type or format of data being operated on.
     /// </summary>
-    public class QualifierWord : IWord, IKeyword, IValidatable
+    public class QualifierWord : IWord, IKeyword
     {
         public QualifierWord(string qualifier)
         {
@@ -185,6 +224,26 @@ namespace FluNET.Words
 
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
+            // If the previous word is a verb that implements IFrom (like GET, LOAD, DELETE),
+            // then this qualifier MUST be followed by [what] (variable or reference)
+            if (Previous != null)
+            {
+                // Check if previous is a verb that requires FROM (has IFrom in its interfaces)
+                bool requiresFrom = Previous.GetType().GetInterfaces()
+                    .Any(i => i.IsGenericType && i.GetGenericTypeDefinition().Name.Contains("IFrom"));
+
+                if (requiresFrom)
+                {
+                    // Qualifier must be followed by [what]
+                    bool isValidWhat = nextWord is VariableWord || nextWord is ReferenceWord;
+                    if (!isValidWhat)
+                    {
+                        return ValidationResult.Failure(
+                            $"{Previous.GetType().Name.ToUpper()} {Qualifier} must be followed by [variable] or {{reference}}.");
+                    }
+                }
+            }
+
             // Qualifiers are typically followed by variables or other keywords
             return ValidationResult.Success();
         }

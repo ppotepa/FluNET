@@ -1,5 +1,6 @@
 using FluNET.Keywords;
 using FluNET.Lexicon;
+using FluNET.Syntax.Core;
 using FluNET.Syntax.Verbs;
 using FluNET.Variables;
 using FluNET.Words;
@@ -24,12 +25,12 @@ namespace FluNET.Sentences
             }
 
             // Debug: Print the sentence structure
-            Console.WriteLine("  Sentence structure:");
+            System.Diagnostics.Debug.WriteLine("  Sentence structure:");
             IWord? current = sentence.Root;
             int count = 0;
             while (current != null && count++ < 10)
             {
-                Console.WriteLine($"    [{count}] {current.GetType().Name}");
+                System.Diagnostics.Debug.WriteLine($"    [{count}] {current.GetType().Name}");
                 current = current.Next;
             }
 
@@ -37,36 +38,36 @@ namespace FluNET.Sentences
             Type? verbBaseType = DetermineVerbBaseType(sentence.Root);
             if (verbBaseType == null)
             {
-                Console.WriteLine("Could not determine verb base type - no preposition found");
+                System.Diagnostics.Debug.WriteLine("Could not determine verb base type - no preposition found");
                 return null;
             }
 
-            Console.WriteLine($"  Determined verb base type: {verbBaseType.Name}");
+            System.Diagnostics.Debug.WriteLine($"  Determined verb base type: {verbBaseType.Name}");
 
             // Get all implementations of this verb type from Lexicon
             IEnumerable<VerbUsage> implementations = lexicon[verbBaseType];
             if (!implementations.Any())
             {
-                Console.WriteLine($"No implementations found for verb type: {verbBaseType.Name}");
+                System.Diagnostics.Debug.WriteLine($"No implementations found for verb type: {verbBaseType.Name}");
                 return null;
             }
 
-            Console.WriteLine($"  Found {implementations.Count()} implementation(s)");
+            System.Diagnostics.Debug.WriteLine($"  Found {implementations.Count()} implementation(s)");
 
             // Try each implementation using CanHandle pattern
             foreach (VerbUsage impl in implementations)
             {
-                Console.WriteLine($"  Trying implementation: {impl.ImplementationType.Name}");
+                System.Diagnostics.Debug.WriteLine($"  Trying implementation: {impl.ImplementationType.Name}");
 
                 object? verbInstance = TryCreateVerbInstance(impl.ImplementationType, sentence.Root);
                 if (verbInstance != null)
                 {
-                    Console.WriteLine($"  Successfully created verb instance, executing...");
+                    System.Diagnostics.Debug.WriteLine($"  Successfully created verb instance, executing...");
                     return ExecuteVerbInstance(verbInstance);
                 }
             }
 
-            Console.WriteLine("No matching verb implementation found");
+            System.Diagnostics.Debug.WriteLine("No matching verb implementation found");
             return null;
         }
 
@@ -74,23 +75,41 @@ namespace FluNET.Sentences
         /// Determine verb base type by finding prepositions using IWord.Find<T>().
         /// Uses is operator to check preposition types - NO STRINGS.
         /// </summary>
-        private Type? DetermineVerbBaseType(IWord root)
+        private static Type? DetermineVerbBaseType(IWord root)
         {
             // Use IWord.Find<T>() to locate prepositions
             // Check From preposition
             if (root.Find<From>() != null)
             {
                 // Could be Get, Delete, or Load - check verb keyword
-                return root.Find<Keywords.Delete>() != null
-                    ? typeof(Delete<,>)
-                    : root.Find<Keywords.Load>() != null ? typeof(Load<,>) : typeof(Get<,>);
+                if (root.Find<Keywords.Delete>() != null)
+                {
+                    return typeof(Delete<,>);
+                }
+
+                if (root.Find<Keywords.Load>() != null)
+                {
+                    return typeof(Load<,>);
+                }
+
+                return typeof(Get<,>);
             }
 
             // Check To preposition
             if (root.Find<To>() != null)
             {
                 // Could be Save, Post, or Send - check verb keyword
-                return root.Find<Keywords.Post>() != null ? typeof(Post<,>) : root.Find<Keywords.Send>() != null ? typeof(Send<,>) : typeof(Save<,>);
+                if (root.Find<Keywords.Post>() != null)
+                {
+                    return typeof(Post<,>);
+                }
+
+                if (root.Find<Keywords.Send>() != null)
+                {
+                    return typeof(Send<,>);
+                }
+
+                return typeof(Save<,>);
             }
 
             // Check Using preposition
@@ -114,7 +133,7 @@ namespace FluNET.Sentences
                 IWord? valueWord = fromPrep?.Next ?? toPrep?.Next ?? usingPrep?.Next;
                 if (valueWord == null)
                 {
-                    Console.WriteLine("    No value word found after preposition");
+                    System.Diagnostics.Debug.WriteLine("    No value word found after preposition");
                     return null;
                 }
 
@@ -122,7 +141,7 @@ namespace FluNET.Sentences
                 object literalValue = ResolveWordValue(valueWord);
                 string valueString = literalValue?.ToString() ?? "";
 
-                Console.WriteLine($"    Resolved value: '{valueString}'");
+                System.Diagnostics.Debug.WriteLine($"    Resolved value: '{valueString}'");
 
                 // Try to create specific verb types using is/as operators
                 // For Get<string[], FileInfo> (GetText with file)
@@ -137,11 +156,11 @@ namespace FluNET.Sentences
                         FileInfo? resolvedFrom = getVerb.Resolve(valueString);
                         if (resolvedFrom == null)
                         {
-                            Console.WriteLine("    Verb.Resolve returned null");
+                            System.Diagnostics.Debug.WriteLine("    Verb.Resolve returned null");
                             return null;
                         }
 
-                        Console.WriteLine($"    Resolved to type: {resolvedFrom.GetType().Name}");
+                        System.Diagnostics.Debug.WriteLine($"    Resolved to type: {resolvedFrom.GetType().Name}");
 
                         // Create the actual instance with resolved value
                         object? instance = Activator.CreateInstance(implementationType, Array.Empty<string>(), resolvedFrom);
@@ -151,30 +170,19 @@ namespace FluNET.Sentences
                             // Use CanHandle to validate
                             if (actualVerb.CanHandle(root))
                             {
-                                Console.WriteLine("    CanHandle returned true");
+                                System.Diagnostics.Debug.WriteLine("    CanHandle returned true");
                                 return actualVerb;
                             }
-                            Console.WriteLine("    CanHandle returned false");
+                            System.Diagnostics.Debug.WriteLine("    CanHandle returned false");
                         }
                     }
                 }
-
-                // Future: Add more verb type patterns using is/as
-                // if (implementationType.Name == "GetJson")
-                // {
-                //     var tempInstance = Activator.CreateInstance(implementationType, ...);
-                //     if (tempInstance is Get<JsonNode[], Uri> getVerb)
-                //     {
-                //         var resolvedUri = getVerb.Resolve(valueString);
-                //         ...
-                //     }
-                // }
 
                 return null;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"    Error creating verb instance: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"    Error creating verb instance: {ex.Message}");
                 return null;
             }
         }
@@ -182,7 +190,7 @@ namespace FluNET.Sentences
         /// <summary>
         /// Execute a verb instance using is/as operators - NO REFLECTION.
         /// </summary>
-        private object? ExecuteVerbInstance(object verbInstance)
+        private static object? ExecuteVerbInstance(object verbInstance)
         {
             try
             {
@@ -192,17 +200,12 @@ namespace FluNET.Sentences
                     return getVerb.Execute();
                 }
 
-                // Add more verb type patterns as needed using is/as
-                // Example:
-                // if (verbInstance is Save<string, FileInfo> saveVerb)
-                //     return saveVerb.Execute();
-
-                Console.WriteLine($"Unknown verb type: {verbInstance.GetType().Name}");
+                System.Diagnostics.Debug.WriteLine($"Unknown verb type: {verbInstance.GetType().Name}");
                 return null;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error executing verb: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine($"Error executing verb: {ex.Message}");
                 return null;
             }
         }
@@ -226,10 +229,17 @@ namespace FluNET.Sentences
                 }
             }
 
-            return word is ReferenceWord refWord
-                ? (object)refWord.Reference
-                : word is LiteralWord litWord ? litWord.Value.TrimEnd('.') : word.ToString() ?? "";
+            if (word is ReferenceWord refWord)
+            {
+                return refWord.Reference;
+            }
+
+            if (word is LiteralWord litWord)
+            {
+                return litWord.Value.TrimEnd('.');
+            }
+
+            return word.ToString() ?? "";
         }
     }
 }
-

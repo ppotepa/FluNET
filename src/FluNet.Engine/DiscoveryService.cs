@@ -1,4 +1,6 @@
 ﻿using System.Diagnostics.CodeAnalysis;
+using FluNET.Syntax.Core;
+using FluNET.Syntax.Nouns;
 
 namespace FluNET
 {
@@ -59,7 +61,8 @@ namespace FluNET
         }
 
         /// <summary>
-        /// Clears the discovery cache and re-discovers all word types
+        /// Clears the discovery cache and re-discovers all word types.
+        /// This forces a fresh assembly scan, useful for test isolation.
         /// </summary>
         [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code",
             Justification = "DiscoveryService requires reflection to discover IWord implementations at runtime. Types implementing IWord should be preserved.")]
@@ -73,6 +76,17 @@ namespace FluNET
 
             _verbs = null;
             _nouns = null;
+        }
+
+        /// <summary>
+        /// Refreshes the assembly cache by rescanning all loaded assemblies.
+        /// This ensures fresh discovery results, particularly useful between test runs.
+        /// </summary>
+        [UnconditionalSuppressMessage("Trimming", "IL2026:Members annotated with 'RequiresUnreferencedCodeAttribute' require dynamic access otherwise can break functionality when trimming application code",
+            Justification = "DiscoveryService requires reflection to discover IWord implementations at runtime. Types implementing IWord should be preserved.")]
+        public void RefreshAssemblies()
+        {
+            ClearCache();
         }
     }
 }

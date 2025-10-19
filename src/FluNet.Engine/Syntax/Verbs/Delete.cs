@@ -1,3 +1,7 @@
+using FluNET.Syntax.Core;
+using FluNET.Syntax.Nouns;
+using FluNET.Syntax.Validation;
+
 namespace FluNET.Syntax.Verbs
 {
     /// <summary>

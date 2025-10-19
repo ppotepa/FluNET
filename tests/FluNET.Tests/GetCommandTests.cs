@@ -1,5 +1,7 @@
 using FluNET.Prompt;
 using FluNET.Sentences;
+using FluNET.Syntax.Nouns;
+using FluNET.Syntax.Validation;
 using FluNET.Syntax.Verbs;
 using FluNET.Tokens;
 using FluNET.Tokens.Tree;
@@ -14,6 +16,7 @@ namespace FluNET.Tests
     /// to achieve 100% code coverage.
     /// </summary>
     [TestFixture]
+
     public class GetCommandTests
     {
         private Engine engine = null!;
@@ -25,9 +28,9 @@ namespace FluNET.Tests
         [SetUp]
         public void Setup()
         {
-            // Setup DI container - use Scoped for proper lifecycle management
+            // Setup DI container - use Transient for DiscoveryService to ensure fresh assembly discovery per test
             ServiceCollection services = new();
-            services.AddScoped<DiscoveryService>();
+            services.AddTransient<DiscoveryService>();
             services.AddScoped<Engine>();
             services.AddScoped<TokenTreeFactory>();
             services.AddScoped<TokenFactory>();
@@ -52,18 +55,69 @@ namespace FluNET.Tests
         [TearDown]
         public void TearDown()
         {
-            // Dispose scope and service provider to clean up resources
-            scope?.Dispose();
-            serviceProvider?.Dispose();
-
-            // Cleanup test files
-            if (Directory.Exists(testDirectory))
+            try
             {
-                Directory.Delete(testDirectory, true);
+                // Dispose scope and service provider to clean up resources
+                scope?.Dispose();
+                serviceProvider?.Dispose();
+
+                // Cleanup test files
+                if (Directory.Exists(testDirectory))
+                {
+                    Directory.Delete(testDirectory, true);
+                }
+            }
+            catch (Exception ex)
+            {
+                // Log but don't fail - OS will clean up temp files eventually
+                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
             }
         }
 
         #region GET Command Basic Tests
+
+        [Test]
+        [Order(1)]
+        public void Debug_ShowValidationState()
+        {
+            // This test helps diagnose why validation fails when tests run together
+            TestContext.WriteLine("=== Diagnostic Test ===");
+
+            // Check DiscoveryService state
+            var discovery = scope!.ServiceProvider.GetRequiredService<DiscoveryService>();
+            TestContext.WriteLine($"Total words discovered: {discovery.Words.Count}");
+            TestContext.WriteLine($"Total verbs discovered: {discovery.Verbs.Count}");
+            TestContext.WriteLine($"Total nouns discovered: {discovery.Nouns.Count}");
+
+            // List all discovered verbs
+            TestContext.WriteLine("\nDiscovered Verbs:");
+            foreach (var verb in discovery.Verbs)
+            {
+                TestContext.WriteLine($"  - {verb.Name}");
+            }
+
+            // Check Lexicon state
+            var lexicon = scope.ServiceProvider.GetRequiredService<Lexicon.Lexicon>();
+            var getBaseType = typeof(Get<,>);
+            var getUsages = lexicon[getBaseType];
+            TestContext.WriteLine($"\nGET verb implementations found: {getUsages.Count()}");
+            foreach (var usage in getUsages)
+            {
+                TestContext.WriteLine($"  - {usage.UsageName}: {usage.ImplementationType.Name}");
+            }
+
+            // Try creating a simple sentence
+            ProcessedPrompt prompt = new($"GET [text] FROM {{{testFilePath}}} .");
+            var (validation, sentence, result) = engine.Run(prompt);
+
+            TestContext.WriteLine($"\nValidation result: {validation.IsValid}");
+            if (!validation.IsValid)
+            {
+                TestContext.WriteLine($"Failure reason: {validation.FailureReason}");
+            }
+
+            Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
+        }
 
         [Test]
         public void Get_FromExistingFile_ShouldReturnFileContents()
@@ -72,12 +126,18 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"GET [text] FROM {{{testFilePath}}} .");
 
             // Act
-            (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
-            // Assert
+            // Assert - Add diagnostic output
+            if (!validation.IsValid)
+            {
+                TestContext.WriteLine($"Validation failed: {validation.FailureReason}");
+                TestContext.WriteLine($"Prompt: GET [text] FROM {{{testFilePath}}} .");
+            }
+
             Assert.Multiple(() =>
             {
-                Assert.That(validation.IsValid, Is.True);
+                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
                 Assert.That(sentence, Is.Not.Null);
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result, Is.InstanceOf<string[]>());
@@ -97,7 +157,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"GET [text] FROM {{{nonExistentPath}}} .");
 
             // Act
-            (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -116,7 +176,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"GET [text] FROM [filePath] .");
 
             // Act
-            (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -130,10 +190,9 @@ namespace FluNET.Tests
         [Test]
         public void Get_WithRelativePath_ShouldWork()
         {
-            // Arrange
-            string currentDir = Directory.GetCurrentDirectory();
+            // Arrange - Use isolated test directory instead of current directory
             string relativePath = "test_relative.txt";
-            string fullPath = Path.Combine(currentDir, relativePath);
+            string fullPath = Path.Combine(testDirectory, relativePath);
             File.WriteAllText(fullPath, "Relative path test");
 
             try
@@ -141,7 +200,7 @@ namespace FluNET.Tests
                 ProcessedPrompt prompt = new($"GET [text] FROM {{{relativePath}}} .");
 
                 // Act
-                (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+                (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
                 // Assert
                 Assert.Multiple(() =>
@@ -154,12 +213,19 @@ namespace FluNET.Tests
             {
                 if (File.Exists(fullPath))
                 {
-                    File.Delete(fullPath);
+                    try
+                    {
+                        File.Delete(fullPath);
+                    }
+                    catch
+                    {
+                        // Ignore cleanup errors - TearDown will clean up testDirectory
+                    }
                 }
             }
         }
 
-        #endregion
+        #endregion GET Command Basic Tests
 
         #region GetText Specific Tests
 
@@ -377,7 +443,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion GetText Specific Tests
 
         #region Get Base Class Tests
 
@@ -423,9 +489,9 @@ namespace FluNET.Tests
         }
 
         [Test]
-        public void Get_ValidateNext_WithFromKeyword_ShouldSucceed()
+        public void Get_ValidateNext_WithFromKeyword_ShouldFail()
         {
-            // Arrange
+            // Arrange - GET directly followed by FROM is now INVALID
             GetText getTextInstance = new(Array.Empty<string>(), new FileInfo(testFilePath));
             Keywords.From fromKeyword = new();
             Lexicon.Lexicon lexicon = new(new DiscoveryService());
@@ -433,8 +499,9 @@ namespace FluNET.Tests
             // Act
             ValidationResult result = getTextInstance.ValidateNext(fromKeyword, lexicon);
 
-            // Assert
-            Assert.That(result.IsValid, Is.True);
+            // Assert - GET requires [what] before FROM
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.FailureReason, Does.Contain("GET verb requires a subject"));
         }
 
         [Test]
@@ -452,7 +519,7 @@ namespace FluNET.Tests
             Assert.That(result.IsValid, Is.False);
         }
 
-        #endregion
+        #endregion Get Base Class Tests
 
         #region Integration Tests
 
@@ -491,7 +558,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"GET [text] FROM {{{emptyFile}}} .");
 
             // Act
-            (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -518,7 +585,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"GET [data] FROM {{{largeFile}}} .");
 
             // Act
-            (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -540,7 +607,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"GET [text] FROM {{{specialFile}}} .");
 
             // Act
-            (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -550,7 +617,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Integration Tests
 
         #region Edge Cases
 
@@ -564,7 +631,7 @@ namespace FluNET.Tests
 
             ProcessedPrompt prompt = new($"GET [text] FROM {{{testFile}}} .");
 
-            (ValidationResult validation, ISentence sentence, object result) = engine.Run(prompt);
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
 
             Assert.That(validation.IsValid, Is.True);
         }
@@ -580,6 +647,6 @@ namespace FluNET.Tests
             Assert.That(resolved, Is.Null); // Empty strings should be rejected
         }
 
-        #endregion
+        #endregion Edge Cases
     }
 }

@@ -7,6 +7,8 @@ namespace FluNET.Tests
     /// Tests for sentence structure, token counting, and word patterns
     /// with various verb and preposition combinations.
     /// </summary>
+    [TestFixture]
+
     public class SentenceStructureTests
     {
         [Test]

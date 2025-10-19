@@ -1,5 +1,6 @@
 ﻿using FluNET.Prompt;
 using FluNET.Sentences;
+using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
 

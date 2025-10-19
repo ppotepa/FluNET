@@ -1,3 +1,7 @@
+using FluNET.Syntax.Core;
+using FluNET.Syntax.Nouns;
+using FluNET.Syntax.Validation;
+
 namespace FluNET.Syntax.Verbs
 {
     /// <summary>
@@ -94,36 +98,50 @@ namespace FluNET.Syntax.Verbs
 
         /// <summary>
         /// Validates that the next word in the sentence is grammatically correct.
-        /// For GET verbs, expects either a FROM keyword, a WHAT noun, or a variable.
+        /// For GET verbs, the first word after GET can be:
+        /// - A qualifier (TEXT, JSON, XML, etc.) followed by [what]
+        /// - Directly [what] (variable or reference)
+        /// NOT the FROM keyword directly.
         /// </summary>
         /// <param name="nextWord">The word following this verb</param>
         /// <param name="lexicon">The lexicon for advanced validation</param>
         /// <returns>ValidationResult indicating if the next word is valid</returns>
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
-            // Check if it's a FROM keyword using the concrete class
+            // GET must be followed by [what] - either a variable or reference
+            // "GET FROM {file}" is INVALID - missing the WHAT
             if (nextWord is Keywords.From)
             {
-                return ValidationResult.Success();
+                return ValidationResult.Failure(
+                    "GET verb requires a subject (what to get). Expected [variable] or {reference} before FROM.");
             }
 
-            // Check if it's a variable word (will be resolved during execution)
-            if (nextWord is Words.VariableWord)
+            // Accept qualifier (like TEXT, JSON, XML) which will be followed by [what]
+            if (nextWord is Words.QualifierWord)
             {
+                // Qualifier is valid - the qualifier will validate its next word
                 return ValidationResult.Success();
             }
 
-            // Check if it's any IWhat noun - we can use the Lexicon to verify compatibility later if needed
-            return nextWord is IWhat<TWhat>
-                ? ValidationResult.Success()
-                : ValidationResult.Failure(
-                $"Invalid word after GET verb. Expected FROM keyword or a valid noun.");
-        }
+            // Accept variable, reference, or IWhat noun as the [what] parameter
+            bool isValidWhat = nextWord is Words.VariableWord
+                            || nextWord is Words.ReferenceWord
+                            || nextWord is IWhat<TWhat>;
 
-        /// <summary>
-        /// Executes the GET operation and returns the retrieved data.
-        /// </summary>
-        /// <returns>The data retrieved from the source</returns>
+            if (!isValidWhat)
+            {
+                return ValidationResult.Failure(
+                    $"Invalid word after GET verb. Expected qualifier, [variable], or {{reference}} specifying what to get.");
+            }
+
+            // Now validate that FROM keyword follows the [what] word
+            // Since Get implements IFrom<TFrom>, FROM is required
+            // We'll check this when the [what] word validates its next word
+            return ValidationResult.Success();
+        }        /// <summary>
+                 /// Executes the GET operation and returns the retrieved data.
+                 /// </summary>
+                 /// <returns>The data retrieved from the source</returns>
         public virtual TWhat Execute()
         {
             return Act(From);
