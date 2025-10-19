@@ -3,18 +3,22 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 18
 VisualStudioVersion = 18.0.11018.127
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.CLI", "src\FluNET.CLI\FluNET.CLI.csproj", "{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{A1B2C3D4-E5F6-7890-ABCD-EF1234567890}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET", "src\FluNet.Engine\FluNET.csproj", "{8D12F12D-8881-4861-8C32-BC60DC9F720B}"
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "apps", "apps", "{B2C3D4E5-F6A7-8901-BCDE-F12345678901}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{62553A79-2DF3-4A51-8A5C-6F1331324D97}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Tests", "tests\FluNET.Tests\FluNET.Tests.csproj", "{EFE4823D-21F8-4D60-896C-68CF803A0CD6}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{1DDEF4CB-67C7-4BC2-BFAF-4CA835C4F409}"
 	ProjectSection(SolutionItems) = preProject
 		.editorconfig = .editorconfig
 	EndProjectSection
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET", "src\FluNet.Engine\FluNET.csproj", "{8D12F12D-8881-4861-8C32-BC60DC9F720B}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.CLI", "src\FluNET.CLI\FluNET.CLI.csproj", "{2B7C9EAA-A500-437F-9E9F-93F924CD97EA}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Tests", "tests\FluNET.Tests\FluNET.Tests.csproj", "{EFE4823D-21F8-4D60-896C-68CF803A0CD6}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -39,6 +43,8 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{8D12F12D-8881-4861-8C32-BC60DC9F720B} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
+		{2B7C9EAA-A500-437F-9E9F-93F924CD97EA} = {B2C3D4E5-F6A7-8901-BCDE-F12345678901}
 		{EFE4823D-21F8-4D60-896C-68CF803A0CD6} = {62553A79-2DF3-4A51-8A5C-6F1331324D97}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
