@@ -1,4 +1,4 @@
-namespace FluNET.Syntax
+namespace FluNET.Syntax.Verbs
 {
     public class GetText : Get<string[], FileInfo>
     {

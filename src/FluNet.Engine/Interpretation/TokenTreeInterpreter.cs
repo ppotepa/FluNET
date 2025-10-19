@@ -10,5 +10,6 @@ namespace FluNET.Interpretation
         {
             this.tree = tree;
         }
+
     }
 }

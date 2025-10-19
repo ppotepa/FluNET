@@ -2,12 +2,12 @@
 
 namespace FluNET.Syntax
 {
-    public interface IVerb : IWord, IKeyword
+    public interface IVerb : IWord, IKeyword, IValidatable
     {
         public Func<object> Act { get; }
     }
 
-    public interface IVerb<TWhat, TFrom> : IWord, IKeyword
+    public interface IVerb<TWhat, TFrom> : IWord, IKeyword, IValidatable
     {
         public Func<TFrom, TWhat> Act { get; }
     }

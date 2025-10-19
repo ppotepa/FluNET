@@ -1,4 +1,6 @@
 ﻿using FluNET.Prompt;
+using FluNET.Sentences;
+using FluNET.Syntax;
 using FluNET.Token.Tree;
 using FluNET.Tokens;
 
@@ -8,23 +10,32 @@ namespace FluNET
     {
         private readonly TokenTreeFactory tokenTreeFactory;
         private readonly DiscoveryService discovery;
+        private readonly SentenceFactory sentenceFactory;
+        private readonly SentenceValidator sentenceValidator;
 
-        public Engine(TokenTreeFactory tokenTreeFactory, DiscoveryService discovery)
+        public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory, 
+            DiscoveryService discovery, SentenceValidator sentenceValidator)
         {
             this.tokenTreeFactory = tokenTreeFactory;
+            this.sentenceFactory = sentenceFactory;
             this.discovery = discovery;
+            this.sentenceValidator = sentenceValidator;
         }
 
         public TokenTree Run(ProcessedPrompt prompt)
         {
             var tree = tokenTreeFactory.Process(prompt);
-
-            // Discovery service now contains all available words (verbs, nouns)
-            // Cached properties provide access to specific word types
-            var availableVerbs = discovery.Verbs;
-            var availableNouns = discovery.Nouns;
-            var allWords = discovery.Words;
-
+            
+            // Validate the sentence structure
+            var validationResult = sentenceValidator.ValidateSentence(tree);
+            if (!validationResult.IsValid)
+            {
+                throw new InvalidOperationException(
+                    $"Invalid command: {validationResult.FailureReason}");
+            }
+            
+            var sentence = sentenceFactory.CreateFromTree(tree);
+            
             return tree;
         }
     }
