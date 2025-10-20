@@ -78,6 +78,23 @@ namespace FluNET.Sentences
         private static Type? DetermineVerbBaseType(IWord root)
         {
             // Use IWord.Find<T>() to locate prepositions
+            // Check if the root verb is DOWNLOAD (can have FROM with optional TO)
+            IWord? verbWord = root;
+            while (verbWord != null)
+            {
+                if (verbWord is IVerb v)
+                {
+                    // Check if it's DOWNLOAD or one of its synonyms
+                    if (v.Text == "DOWNLOAD" || v.Synonyms.Any(s => s.Equals("DOWNLOAD", StringComparison.OrdinalIgnoreCase)) ||
+                        v.Synonyms.Contains("PULL") || v.Synonyms.Contains("GRAB") || v.Synonyms.Contains("OBTAIN"))
+                    {
+                        return typeof(Download<,,>);
+                    }
+                    break; // Only check the first verb we find
+                }
+                verbWord = verbWord.Next;
+            }
+
             // Check From preposition
             if (root.Find<From>() != null)
             {
@@ -144,8 +161,52 @@ namespace FluNET.Sentences
                 System.Diagnostics.Debug.WriteLine($"    Resolved value: '{valueString}'");
 
                 // Try to create specific verb types using is/as operators
+                // For Download<FileInfo, Uri, FileInfo> (DownloadFile)
+                if (implementationType.Name == "DownloadFile")
+                {
+                    // Create a temporary instance to call Resolve
+                    object? tempInstance = Activator.CreateInstance(implementationType, new FileInfo("temp"), new Uri("http://temp"), null);
+
+                    if (tempInstance is Download<FileInfo, Uri, FileInfo> downloadVerb)
+                    {
+                        // Use the verb's Resolve method to contextually resolve the URI
+                        Uri? resolvedFrom = downloadVerb.Resolve(valueString);
+                        if (resolvedFrom == null)
+                        {
+                            System.Diagnostics.Debug.WriteLine("    Verb.Resolve returned null");
+                            return null;
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"    Resolved URI: {resolvedFrom}");
+
+                        // Check if there's a TO parameter
+                        To? toPreposition = root.Find<To>();
+                        FileInfo? resolvedTo = null;
+                        if (toPreposition?.Next != null)
+                        {
+                            object toValue = ResolveWordValue(toPreposition.Next);
+                            string toString = toValue?.ToString() ?? "";
+                            resolvedTo = downloadVerb.ResolveTo(toString);
+                            System.Diagnostics.Debug.WriteLine($"    Resolved TO: {resolvedTo?.FullName}");
+                        }
+
+                        // Create the actual instance with resolved values
+                        object? instance = Activator.CreateInstance(implementationType, new FileInfo("temp"), resolvedFrom, resolvedTo);
+
+                        if (instance is Download<FileInfo, Uri, FileInfo> actualVerb)
+                        {
+                            // Use CanHandle to validate
+                            if (actualVerb.CanHandle(root))
+                            {
+                                System.Diagnostics.Debug.WriteLine("    CanHandle returned true");
+                                return actualVerb;
+                            }
+                            System.Diagnostics.Debug.WriteLine("    CanHandle returned false");
+                        }
+                    }
+                }
                 // For Get<string[], FileInfo> (GetText with file)
-                if (implementationType.Name == "GetText")
+                else if (implementationType.Name == "GetText")
                 {
                     // Create a temporary instance to call Resolve
                     object? tempInstance = Activator.CreateInstance(implementationType, Array.Empty<string>(), new FileInfo("temp"));
@@ -195,6 +256,11 @@ namespace FluNET.Sentences
             try
             {
                 // Use is/as operators to cast and execute
+                if (verbInstance is Download<FileInfo, Uri, FileInfo> downloadVerb)
+                {
+                    return downloadVerb.Execute();
+                }
+
                 if (verbInstance is Get<string[], FileInfo> getVerb)
                 {
                     return getVerb.Execute();

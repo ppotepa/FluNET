@@ -175,8 +175,8 @@ namespace FluNET.Tests
         [Test]
         public void EdgeCase_UnknownVerb_ShouldFail()
         {
-            // Arrange - DOWNLOAD is not a defined verb (FETCH is now a synonym for GET)
-            ProcessedPrompt prompt = new("DOWNLOAD [data] FROM {source.txt} .");
+            // Arrange - UPLOAD is not a defined verb
+            ProcessedPrompt prompt = new("UPLOAD [data] TO {destination.txt} .");
 
             // Act
             (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);

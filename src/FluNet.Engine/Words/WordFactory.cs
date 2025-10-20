@@ -68,7 +68,7 @@ namespace FluNET.Words
                 }
                 catch
                 {
-                    // Try with null parameters for backward compatibility
+                    // Try with two null parameters for backward compatibility
                     try
                     {
                         object? instance = Activator.CreateInstance(wordType, new object?[] { null, null });
@@ -90,7 +90,30 @@ namespace FluNET.Words
                     }
                     catch
                     {
-                        // Silently continue if instantiation fails
+                        // Try with three null parameters for verbs with optional parameters (like DOWNLOAD)
+                        try
+                        {
+                            object? instance = Activator.CreateInstance(wordType, new object?[] { null, null, null });
+                            if (instance is IWord word && instance is IKeyword keyword)
+                            {
+                                // Check if the token matches the main keyword text
+                                if (keyword.Text.Equals(token.Value, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    return word;
+                                }
+
+                                // Check if the token matches any of the verb's synonyms
+                                if (instance is IVerb verb && verb.Synonyms.Any(s =>
+                                    s.Equals(token.Value, StringComparison.OrdinalIgnoreCase)))
+                                {
+                                    return word;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            // Silently continue if instantiation fails
+                        }
                     }
                 }
             }
