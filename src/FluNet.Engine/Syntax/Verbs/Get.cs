@@ -41,6 +41,12 @@ namespace FluNET.Syntax.Verbs
         public string Text => "GET";
 
         /// <summary>
+        /// Gets the synonyms for this verb.
+        /// These alternative keywords have exactly the same implementation as the main verb.
+        /// </summary>
+        public virtual string[] Synonyms => new[] { "FETCH", "RETRIEVE", "LOAD" };
+
+        /// <summary>
         /// Gets the action function that performs the retrieval operation.
         /// </summary>
         public abstract Func<TFrom, TWhat> Act { get; }

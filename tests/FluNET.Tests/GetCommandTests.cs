@@ -648,5 +648,137 @@ namespace FluNET.Tests
         }
 
         #endregion Edge Cases
+
+        #region Synonym Tests
+
+        [Test]
+        public void Get_Synonyms_Property_ShouldReturnExpectedValues()
+        {
+            // Arrange
+            GetText getTextInstance = new(Array.Empty<string>(), new FileInfo(testFilePath));
+
+            // Act
+            string[] synonyms = getTextInstance.Synonyms;
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(synonyms, Is.Not.Null);
+                Assert.That(synonyms, Does.Contain("FETCH"));
+                Assert.That(synonyms, Does.Contain("RETRIEVE"));
+                Assert.That(synonyms, Does.Contain("LOAD"));
+            });
+        }
+
+        [Test]
+        public void Fetch_Synonym_ShouldWorkLikeGet()
+        {
+            // Arrange - Using FETCH instead of GET
+            ProcessedPrompt prompt = new($"FETCH [text] FROM {{{testFilePath}}} .");
+
+            // Act
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
+                Assert.That(sentence, Is.Not.Null);
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result, Is.InstanceOf<string[]>());
+
+                string[]? lines = result as string[];
+                Assert.That(lines, Is.Not.Null);
+                Assert.That(lines!.Length, Is.GreaterThan(0));
+                Assert.That(string.Join("", lines), Does.Contain("This is a test file"));
+            });
+        }
+
+        [Test]
+        public void Retrieve_Synonym_ShouldWorkLikeGet()
+        {
+            // Arrange - Using RETRIEVE instead of GET
+            ProcessedPrompt prompt = new($"RETRIEVE [text] FROM {{{testFilePath}}} .");
+
+            // Act
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
+                Assert.That(sentence, Is.Not.Null);
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result, Is.InstanceOf<string[]>());
+
+                string[]? lines = result as string[];
+                Assert.That(lines, Is.Not.Null);
+                Assert.That(lines!.Length, Is.GreaterThan(0));
+                Assert.That(string.Join("", lines), Does.Contain("This is a test file"));
+            });
+        }
+
+        [Test]
+        public void Load_Synonym_ShouldWorkLikeGet()
+        {
+            // Arrange - Using LOAD instead of GET
+            ProcessedPrompt prompt = new($"LOAD [text] FROM {{{testFilePath}}} .");
+
+            // Act
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
+                Assert.That(sentence, Is.Not.Null);
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result, Is.InstanceOf<string[]>());
+
+                string[]? lines = result as string[];
+                Assert.That(lines, Is.Not.Null);
+                Assert.That(lines!.Length, Is.GreaterThan(0));
+                Assert.That(string.Join("", lines), Does.Contain("This is a test file"));
+            });
+        }
+
+        [Test]
+        public void Fetch_CaseInsensitive_ShouldWork()
+        {
+            // Arrange - Testing lowercase synonym
+            ProcessedPrompt prompt = new($"fetch [text] FROM {{{testFilePath}}} .");
+
+            // Act
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result, Is.InstanceOf<string[]>());
+            });
+        }
+
+        [Test]
+        public void Retrieve_WithVariable_ShouldWork()
+        {
+            // Arrange - Testing RETRIEVE synonym with variable
+            engine.RegisterVariable("filePath", testFilePath);
+            ProcessedPrompt prompt = new($"RETRIEVE [text] FROM [filePath] .");
+
+            // Act
+            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+
+            // Assert
+            Assert.Multiple(() =>
+            {
+                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
+                Assert.That(result, Is.Not.Null);
+                Assert.That(result, Is.InstanceOf<string[]>());
+            });
+        }
+
+        #endregion Synonym Tests
     }
 }

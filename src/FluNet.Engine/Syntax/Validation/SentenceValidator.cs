@@ -63,15 +63,40 @@ namespace FluNET.Syntax.Validation
             }
 
             // Validate subsequent words
-            while (current.Next != null && current.Next.Type != TokenType.Terminal)
+            IWord? previousWord = verbWord; // Track the previous word for linking
+            while (current.Next != null)
             {
                 Token nextToken = current.Next;
+
+                // If next token is a terminal, validate that current word can end the sentence
+                if (nextToken.Type == TokenType.Terminal)
+                {
+                    // Create a special "terminator" word to validate against
+                    IWord terminatorWord = new LiteralWord(nextToken.Value.TrimEnd('.', '?', '!'));
+                    terminatorWord.Previous = previousWord; // Link it to the chain
+
+                    ValidationResult terminatorResult = currentValidator.ValidateNext(terminatorWord, lexicon);
+
+                    if (!terminatorResult.IsValid)
+                    {
+                        return terminatorResult;
+                    }
+
+                    break; // Sentence ends here
+                }
 
                 // Convert next token to word
                 IWord? nextWord = wordFactory.CreateWord(nextToken);
                 if (nextWord == null)
                 {
                     return ValidationResult.Failure($"Unknown word: '{nextToken.Value}'");
+                }
+
+                // Link the words together
+                nextWord.Previous = previousWord;
+                if (previousWord != null)
+                {
+                    previousWord.Next = nextWord;
                 }
 
                 // Validate using interface-based checking
@@ -88,6 +113,7 @@ namespace FluNET.Syntax.Validation
                     currentValidator = validatable;
                 }
 
+                previousWord = nextWord; // Update previous word for next iteration
                 current = nextToken;
             }
 

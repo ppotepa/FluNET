@@ -50,10 +50,20 @@ namespace FluNET.Words
                 {
                     // Try parameterless constructor first
                     object? instance = Activator.CreateInstance(wordType);
-                    if (instance is IWord word && instance is IKeyword keyword &&
-                        keyword.Text.Equals(token.Value, StringComparison.OrdinalIgnoreCase))
+                    if (instance is IWord word && instance is IKeyword keyword)
                     {
-                        return word;
+                        // Check if the token matches the main keyword text
+                        if (keyword.Text.Equals(token.Value, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return word;
+                        }
+
+                        // Check if the token matches any of the verb's synonyms
+                        if (instance is IVerb verb && verb.Synonyms.Any(s =>
+                            s.Equals(token.Value, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            return word;
+                        }
                     }
                 }
                 catch
@@ -62,10 +72,20 @@ namespace FluNET.Words
                     try
                     {
                         object? instance = Activator.CreateInstance(wordType, new object?[] { null, null });
-                        if (instance is IWord word && instance is IKeyword keyword &&
-                            keyword.Text.Equals(token.Value, StringComparison.OrdinalIgnoreCase))
+                        if (instance is IWord word && instance is IKeyword keyword)
                         {
-                            return word;
+                            // Check if the token matches the main keyword text
+                            if (keyword.Text.Equals(token.Value, StringComparison.OrdinalIgnoreCase))
+                            {
+                                return word;
+                            }
+
+                            // Check if the token matches any of the verb's synonyms
+                            if (instance is IVerb verb && verb.Synonyms.Any(s =>
+                                s.Equals(token.Value, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                return word;
+                            }
                         }
                     }
                     catch
@@ -117,8 +137,19 @@ namespace FluNET.Words
 
                 if (requiresFrom && nextWord is not Keywords.From)
                 {
+                    // Check if next word is a terminator (empty literal or sentence-ending punctuation)
+                    bool isTerminator = nextWord is LiteralWord literal &&
+                                       (string.IsNullOrWhiteSpace(literal.Value) ||
+                                        literal.Value == "." ||
+                                        literal.Value == "?" ||
+                                        literal.Value == "!");
+
+                    string errorSuffix = isTerminator
+                        ? " Sentence cannot end here."
+                        : "";
+
                     return ValidationResult.Failure(
-                        $"{Previous.GetType().Name.ToUpper()} [variable] must be followed by FROM keyword.");
+                        $"{Previous.GetType().Name.ToUpper()} [variable] must be followed by FROM keyword.{errorSuffix}");
                 }
             }
 
@@ -185,8 +216,19 @@ namespace FluNET.Words
 
                 if (requiresFrom && nextWord is not Keywords.From)
                 {
+                    // Check if next word is a terminator (empty literal or sentence-ending punctuation)
+                    bool isTerminator = nextWord is LiteralWord literal &&
+                                       (string.IsNullOrWhiteSpace(literal.Value) ||
+                                        literal.Value == "." ||
+                                        literal.Value == "?" ||
+                                        literal.Value == "!");
+
+                    string errorSuffix = isTerminator
+                        ? " Sentence cannot end here."
+                        : "";
+
                     return ValidationResult.Failure(
-                        $"{Previous.GetType().Name.ToUpper()} {{reference}} must be followed by FROM keyword.");
+                        $"{Previous.GetType().Name.ToUpper()} {{reference}} must be followed by FROM keyword.{errorSuffix}");
                 }
             }
 
@@ -234,12 +276,24 @@ namespace FluNET.Words
 
                 if (requiresFrom)
                 {
+                    // Check if next word is a terminator
+                    bool isTerminator = nextWord is LiteralWord literal &&
+                                       (string.IsNullOrWhiteSpace(literal.Value) ||
+                                        literal.Value == "." ||
+                                        literal.Value == "?" ||
+                                        literal.Value == "!");
+
                     // Qualifier must be followed by [what]
                     bool isValidWhat = nextWord is VariableWord || nextWord is ReferenceWord;
-                    if (!isValidWhat)
+
+                    if (!isValidWhat || isTerminator)
                     {
+                        string errorSuffix = isTerminator
+                            ? " Sentence cannot end here."
+                            : "";
+
                         return ValidationResult.Failure(
-                            $"{Previous.GetType().Name.ToUpper()} {Qualifier} must be followed by [variable] or {{reference}}.");
+                            $"{Previous.GetType().Name.ToUpper()} {Qualifier} must be followed by [variable] or {{reference}}.{errorSuffix}");
                     }
                 }
             }

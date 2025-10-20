@@ -9,6 +9,11 @@ namespace FluNET.Syntax.Core
     /// </summary>
     public interface IVerb : IWord, IKeyword
     {
+        /// <summary>
+        /// Gets the synonyms for this verb.
+        /// These alternative keywords have exactly the same implementation as the main verb.
+        /// </summary>
+        string[] Synonyms => Array.Empty<string>();
     }
 
     /// <summary>
