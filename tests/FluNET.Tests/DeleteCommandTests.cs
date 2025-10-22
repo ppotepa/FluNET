@@ -147,7 +147,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Pattern 1: Direct File Path (FROM not required)
 
         #region Pattern 2: Filename + Directory (FROM optional)
 
@@ -174,7 +174,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Pattern 2: Filename + Directory (FROM optional)
 
         #region Variable Support
 
@@ -225,7 +225,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Variable Support
 
         #region Reference Support
 
@@ -251,7 +251,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Reference Support
 
         #region Multiple Files
 
@@ -280,7 +280,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Multiple Files
 
         #region Edge Cases
 
@@ -326,6 +326,6 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Edge Cases
     }
 }

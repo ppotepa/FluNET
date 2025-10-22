@@ -5,7 +5,7 @@ namespace FluNET.Syntax.Verbs
 {
     /// <summary>
     /// Concrete implementation of DELETE verb for removing a file.
-    /// Usage: 
+    /// Usage:
     ///   DELETE [filepath] - Full path to file
     ///   DELETE [filename] FROM [directory] - Filename and directory separately
     /// Examples:

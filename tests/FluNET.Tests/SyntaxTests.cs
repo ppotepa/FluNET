@@ -14,7 +14,6 @@ namespace FluNET.Tests
     /// without execution. These tests ensure the syntax is correctly parsed before execution.
     /// </summary>
     [TestFixture]
-
     public class SyntaxTests
     {
         private Engine engine = null!;

@@ -145,7 +145,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion JSON Download Tests
 
         #region CSV and XML Download Tests
 
@@ -195,7 +195,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion CSV and XML Download Tests
 
         #region Binary File Tests
 
@@ -224,7 +224,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Binary File Tests
 
         #region Filename Extraction Tests
 
@@ -292,7 +292,7 @@ namespace FluNET.Tests
             }
         }
 
-        #endregion
+        #endregion Filename Extraction Tests
 
         #region Variable Resolution Tests
 
@@ -340,7 +340,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Variable Resolution Tests
 
         #region Performance and Edge Cases
 
@@ -391,6 +391,6 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Performance and Edge Cases
     }
 }

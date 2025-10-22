@@ -113,7 +113,7 @@ namespace FluNET.Tests
             Assert.That(validation.IsValid, Is.True, "Exclamation mark is a valid terminator");
         }
 
-        #endregion
+        #endregion Missing Terminators
 
         #region Empty and Whitespace Cases
 
@@ -168,7 +168,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Empty and Whitespace Cases
 
         #region Unknown Verbs and Keywords
 
@@ -223,7 +223,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Unknown Verbs and Keywords
 
         #region Malformed Variables and References
 
@@ -308,7 +308,7 @@ namespace FluNET.Tests
             Assert.Pass($"Validation result: {validation.IsValid}, Reason: {validation.FailureReason}");
         }
 
-        #endregion
+        #endregion Malformed Variables and References
 
         #region Missing Required Components
 
@@ -391,7 +391,7 @@ namespace FluNET.Tests
             Assert.That(validation.IsValid, Is.False);
         }
 
-        #endregion
+        #endregion Missing Required Components
 
         #region Multiple Keywords
 
@@ -423,7 +423,7 @@ namespace FluNET.Tests
             Assert.Pass($"Validation result: {validation.IsValid}, Reason: {validation.FailureReason}");
         }
 
-        #endregion
+        #endregion Multiple Keywords
 
         #region Special Characters in Paths
 
@@ -492,7 +492,7 @@ namespace FluNET.Tests
             Assert.That(validation.IsValid, Is.True);
         }
 
-        #endregion
+        #endregion Special Characters in Paths
 
         #region Case Sensitivity
 
@@ -548,7 +548,7 @@ namespace FluNET.Tests
             Assert.That(validation.IsValid, Is.True);
         }
 
-        #endregion
+        #endregion Case Sensitivity
 
         #region Multiple Qualifiers
 
@@ -597,7 +597,7 @@ namespace FluNET.Tests
             Assert.Pass($"Validation result: {validation.IsValid}, Reason: {validation.FailureReason}");
         }
 
-        #endregion
+        #endregion Multiple Qualifiers
 
         #region Very Long Inputs
 
@@ -629,7 +629,7 @@ namespace FluNET.Tests
             Assert.That(validation.IsValid, Is.True);
         }
 
-        #endregion
+        #endregion Very Long Inputs
 
         #region Whitespace Variations
 
@@ -672,7 +672,7 @@ namespace FluNET.Tests
             Assert.That(validation.IsValid, Is.True);
         }
 
-        #endregion
+        #endregion Whitespace Variations
 
         #region Numeric and Symbolic Content
 
@@ -715,6 +715,6 @@ namespace FluNET.Tests
             Assert.That(validation.IsValid, Is.True);
         }
 
-        #endregion
+        #endregion Numeric and Symbolic Content
     }
 }

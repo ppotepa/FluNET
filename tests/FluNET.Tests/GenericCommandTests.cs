@@ -17,7 +17,6 @@ namespace FluNET.Tests
     /// to achieve 100% code coverage of generic command patterns.
     /// </summary>
     [TestFixture]
-
     public class GenericCommandTests
     {
         private Engine engine = null!;

@@ -257,7 +257,7 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion DOWNLOAD Command Basic Tests
 
         #region Validation Tests
 
@@ -308,7 +308,7 @@ namespace FluNET.Tests
                 "Download from invalid URL should either fail validation or not create the file");
         }
 
-        #endregion
+        #endregion Validation Tests
 
         #region DownloadFile Specific Tests
 
@@ -427,7 +427,7 @@ namespace FluNET.Tests
             Assert.That(isValid, Is.True);
         }
 
-        #endregion
+        #endregion DownloadFile Specific Tests
 
         #region Edge Cases
 
@@ -465,6 +465,6 @@ namespace FluNET.Tests
             });
         }
 
-        #endregion
+        #endregion Edge Cases
     }
 }

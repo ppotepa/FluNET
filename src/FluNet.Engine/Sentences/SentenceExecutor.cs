@@ -244,7 +244,7 @@ namespace FluNET.Sentences
                 }
 
                 // Create the actual instance with resolved parameters
-                // We need to find the right constructor because Activator.CreateInstance 
+                // We need to find the right constructor because Activator.CreateInstance
                 // can't infer types from null parameters
                 object? instance = null;
 

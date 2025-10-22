@@ -11,7 +11,6 @@ namespace FluNET.Tests
     /// and work with different preposition patterns.
     /// </summary>
     [TestFixture]
-
     public class VerbTests
     {
         private SentenceValidator validator = null!;

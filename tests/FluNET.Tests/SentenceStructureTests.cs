@@ -8,7 +8,6 @@ namespace FluNET.Tests
     /// with various verb and preposition combinations.
     /// </summary>
     [TestFixture]
-
     public class SentenceStructureTests
     {
         [Test]

@@ -147,6 +147,7 @@ namespace FluNET.Syntax.Verbs
             // We'll check this when the [what] word validates its next word
             return ValidationResult.Success();
         }        /// <summary>
+
                  /// Executes the GET operation and returns the retrieved data.
                  /// </summary>
                  /// <returns>The data retrieved from the source</returns>

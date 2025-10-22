@@ -16,7 +16,6 @@ namespace FluNET.Tests
     /// to achieve 100% code coverage.
     /// </summary>
     [TestFixture]
-
     public class GetCommandTests
     {
         private Engine engine = null!;

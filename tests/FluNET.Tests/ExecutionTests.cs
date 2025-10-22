@@ -10,7 +10,6 @@ using Microsoft.Extensions.DependencyInjection;
 namespace FluNET.Tests
 {
     [TestFixture]
-
     public class ExecutionTests
     {
         private ServiceProvider _serviceProvider = null!;
