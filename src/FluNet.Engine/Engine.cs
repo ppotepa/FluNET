@@ -48,12 +48,6 @@ namespace FluNET
         /// <returns>A tuple containing validation result, the sentence, and execution result</returns>
         public (ValidationResult ValidationResult, ISentence? Sentence, object? Result) Run(ProcessedPrompt prompt)
         {
-            // Check if the prompt contains THEN for sentence chaining
-            if (ContainsThenClause(prompt))
-            {
-                return ExecuteChainedSentences(prompt);
-            }
-
             TokenTree tree = tokenTreeFactory.Process(prompt);
 
             // Validate the sentence structure
@@ -63,7 +57,7 @@ namespace FluNET
                 return (validationResult, null, null);
             }
 
-            // Create the sentence from the validated tree
+            // Create the sentence from the validated tree (may contain sub-sentences)
             ISentence? sentence = sentenceFactory.CreateFromTree(tree);
 
             // Sentence should not be null at this point since validation passed
@@ -72,18 +66,11 @@ namespace FluNET
                 return (ValidationResult.Failure("Failed to create sentence from validated tree"), null, null);
             }
 
-            // Execute the sentence
+            // Execute the sentence and any sub-sentences
             object? result = null;
             try
             {
-                result = sentenceExecutor.Execute(sentence);
-
-                // Auto-store result in variable if the verb's direct object is a VariableWord
-                // Example: GET [text] FROM file.txt -> stores result in [text]
-                if (result != null && sentence.Root != null)
-                {
-                    StoreResultInVariableIfNeeded(sentence.Root, result);
-                }
+                result = ExecuteSentenceWithSubSentences(sentence);
             }
             catch (Exception ex)
             {
@@ -94,84 +81,35 @@ namespace FluNET
         }
 
         /// <summary>
-        /// Check if the prompt contains a THEN keyword for sentence chaining.
+        /// Execute a sentence and its sub-sentences sequentially.
+        /// All sub-sentences share the same variable context.
         /// </summary>
-        private static bool ContainsThenClause(ProcessedPrompt prompt)
+        private object? ExecuteSentenceWithSubSentences(ISentence sentence)
         {
-            return prompt.Tokens.Any(t => t.Equals("THEN", StringComparison.OrdinalIgnoreCase));
-        }
+            // Execute main sentence
+            object? result = sentenceExecutor.Execute(sentence);
 
-        /// <summary>
-        /// Execute chained sentences separated by THEN keyword.
-        /// Each sentence shares the same variable context.
-        /// Example: DOWNLOAD [file] FROM url TO {file.txt} THEN SAY [file].
-        /// </summary>
-        private (ValidationResult ValidationResult, ISentence? Sentence, object? Result) ExecuteChainedSentences(ProcessedPrompt prompt)
-        {
-            // Split the tokens at THEN boundaries
-            List<List<string>> sentenceParts = [];
-            List<string> currentPart = [];
-
-            foreach (string token in prompt.Tokens)
+            // Auto-store result in variable if needed
+            if (result != null && sentence.Root != null)
             {
-                if (token.Equals("THEN", StringComparison.OrdinalIgnoreCase))
+                StoreResultInVariableIfNeeded(sentence.Root, result);
+            }
+
+            // Execute sub-sentences (THEN clauses)
+            foreach (ISentence subSentence in sentence.SubSentences)
+            {
+                result = sentenceExecutor.Execute(subSentence);
+
+                // Auto-store result in variable if needed
+                if (result != null && subSentence.Root != null)
                 {
-                    if (currentPart.Count > 0)
-                    {
-                        sentenceParts.Add(new List<string>(currentPart));
-                        currentPart.Clear();
-                    }
-                }
-                else
-                {
-                    currentPart.Add(token);
+                    StoreResultInVariableIfNeeded(subSentence.Root, result);
                 }
             }
 
-            // Add the last part if it exists
-            if (currentPart.Count > 0)
-            {
-                sentenceParts.Add(currentPart);
-            }
-
-            // Execute each sentence part sequentially
-            object? lastResult = null;
-            ISentence? lastSentence = null;
-
-            for (int i = 0; i < sentenceParts.Count; i++)
-            {
-                // Reconstruct the sentence with terminator
-                List<string> part = sentenceParts[i];
-                
-                // Remove terminator from intermediate sentences, keep only on last
-                string lastToken = part[^1];
-                bool hasTerminator = lastToken.EndsWith('.') || lastToken.EndsWith('?') || lastToken.EndsWith('!');
-                
-                if (!hasTerminator && i < sentenceParts.Count - 1)
-                {
-                    // Add terminator for validation
-                    part.Add(".");
-                }
-                
-                string sentenceText = string.Join(" ", part);
-                ProcessedPrompt subPrompt = new(sentenceText);
-
-                // Execute this part
-                (ValidationResult validation, ISentence? sentence, object? result) = Run(subPrompt);
-
-                if (!validation.IsValid)
-                {
-                    return (ValidationResult.Failure($"THEN clause {i + 1} failed: {validation.FailureReason}"), sentence, null);
-                }
-
-                lastResult = result;
-                lastSentence = sentence;
-            }
-
-            return (ValidationResult.Success(), lastSentence, lastResult);
-        }
-
-        /// <summary>
+            // Return the result of the last executed sentence
+            return result;
+        }        /// <summary>
         /// If the verb's direct object (first word after verb) is a VariableWord,
         /// store the execution result in that variable.
         /// Example: GET [text] FROM file.txt -> [text] = file contents

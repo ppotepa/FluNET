@@ -78,7 +78,7 @@ namespace FluNET.Tests
             File.WriteAllText(testFile, "Hello World");
 
             // Act - Chain GET and SAY with THEN
-            (ValidationResult validation, _, object? result) = 
+            (ValidationResult validation, _, object? result) =
                 engine!.Run(new ProcessedPrompt($"GET [content] FROM {testFile} THEN SAY [content]."));
 
             // Assert
@@ -97,7 +97,7 @@ namespace FluNET.Tests
             string testFile = Path.Combine(testDirectory!, "output.txt");
 
             // Act - Chain SAVE and LOAD with THEN
-            (ValidationResult validation, _, object? result) = 
+            (ValidationResult validation, _, object? result) =
                 engine!.Run(new ProcessedPrompt($"SAVE \"Test Content\" TO {testFile} THEN GET [result] FROM {testFile}."));
 
             // Assert
@@ -123,7 +123,7 @@ namespace FluNET.Tests
             File.WriteAllText(file1, "First");
 
             // Act - Chain three commands: GET THEN SAVE THEN SAY
-            (ValidationResult validation, _, object? result) = 
+            (ValidationResult validation, _, object? result) =
                 engine!.Run(new ProcessedPrompt($"GET [data] FROM {file1} THEN SAVE [data] TO {file2} THEN SAY [data]."));
 
             // Assert
@@ -143,7 +143,7 @@ namespace FluNET.Tests
             File.WriteAllText(testFile, "Shared Data");
 
             // Act - First command stores in variable, second uses it
-            (ValidationResult validation, _, object? result) = 
+            (ValidationResult validation, _, object? result) =
                 engine!.Run(new ProcessedPrompt($"GET [shared] FROM {testFile} THEN SAY [shared]."));
 
             // Assert
@@ -173,7 +173,7 @@ namespace FluNET.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.False);
-                Assert.That(validation.FailureReason, Does.Contain("THEN clause"));
+                Assert.That(validation.FailureReason, Does.Contain("Variable [data] not found"));
             });
         }
 
@@ -192,7 +192,7 @@ namespace FluNET.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.False);
-                Assert.That(validation.FailureReason, Does.Contain("THEN clause"));
+                Assert.That(validation.FailureReason, Does.Contain("Variable [nonexistent] not found"));
             });
         }
 
@@ -208,7 +208,7 @@ namespace FluNET.Tests
             File.WriteAllText(testFile, "Data");
 
             // Act - THEN without following command
-            (ValidationResult validation, _, _) = 
+            (ValidationResult validation, _, _) =
                 engine!.Run(new ProcessedPrompt($"GET [data] FROM {testFile} THEN ."));
 
             // Assert
@@ -219,7 +219,7 @@ namespace FluNET.Tests
         public void ThenClause_OnlyThen_ShouldFail()
         {
             // Act
-            (ValidationResult validation, _, _) = 
+            (ValidationResult validation, _, _) =
                 engine!.Run(new ProcessedPrompt("THEN."));
 
             // Assert

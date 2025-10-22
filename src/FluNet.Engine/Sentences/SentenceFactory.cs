@@ -24,9 +24,79 @@ namespace FluNET.Sentences
                 // Console may be disposed in test scenarios - ignore
             }
 
-            // Start from the ROOT token itself
+            // Split the token tree at THEN keywords to create sub-sentences
+            List<List<Token>> tokenGroups = SplitAtThenKeywords(tree);
+
+            if (tokenGroups.Count == 0)
+            {
+                return null;
+            }
+
+            // Create the main sentence from the first group
+            ISentence? mainSentence = CreateSentenceFromTokens(tokenGroups[0]);
+            if (mainSentence == null)
+            {
+                return null;
+            }
+
+            // Create sub-sentences from remaining groups
+            for (int i = 1; i < tokenGroups.Count; i++)
+            {
+                ISentence? subSentence = CreateSentenceFromTokens(tokenGroups[i]);
+                if (subSentence != null)
+                {
+                    mainSentence.SubSentences.Add(subSentence);
+                }
+            }
+
+            return mainSentence;
+        }
+
+        /// <summary>
+        /// Split token tree at THEN keywords to create separate sentence groups.
+        /// </summary>
+        private static List<List<Token>> SplitAtThenKeywords(TokenTree tree)
+        {
+            List<List<Token>> groups = [];
+            List<Token> currentGroup = [];
+
             Token? current = tree.Root;
-            if (current == null || current.Type == TokenType.Terminal)
+            while (current != null && current.Type != TokenType.Terminal)
+            {
+                // Check if this is a THEN keyword
+                if (current.Type == TokenType.Regular && 
+                    current.Value.Equals("THEN", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Save current group and start a new one
+                    if (currentGroup.Count > 0)
+                    {
+                        groups.Add(new List<Token>(currentGroup));
+                        currentGroup.Clear();
+                    }
+                }
+                else
+                {
+                    currentGroup.Add(current);
+                }
+
+                current = current.Next;
+            }
+
+            // Add the last group
+            if (currentGroup.Count > 0)
+            {
+                groups.Add(currentGroup);
+            }
+
+            return groups;
+        }
+
+        /// <summary>
+        /// Create a sentence from a list of tokens.
+        /// </summary>
+        private ISentence? CreateSentenceFromTokens(List<Token> tokens)
+        {
+            if (tokens.Count == 0)
             {
                 return null;
             }
@@ -35,13 +105,11 @@ namespace FluNET.Sentences
             IWord? firstWord = null;
             IWord? previousWord = null;
 
-            while (current != null && current.Type != TokenType.Terminal)
+            foreach (Token token in tokens)
             {
-                IWord? word = wordFactory.CreateWord(current);
+                IWord? word = wordFactory.CreateWord(token);
                 if (word == null)
                 {
-                    // Skip unknown tokens or handle error
-                    current = current.Next;
                     continue;
                 }
 
@@ -55,11 +123,8 @@ namespace FluNET.Sentences
                 }
 
                 previousWord = word;
-                current = current.Next;
             }
 
-            // Return a sentence wrapping the word chain
-            // For now, we'll create a simple sentence implementation
             return new Sentence(firstWord);
         }
     }
@@ -68,10 +133,13 @@ namespace FluNET.Sentences
     internal class Sentence : ISentence
     {
         public IWord? Root { get; }
+        public IList<ISentence> SubSentences { get; }
+        public bool HasSubSentences => SubSentences.Count > 0;
 
         public Sentence(IWord? root)
         {
             Root = root;
+            SubSentences = new List<ISentence>();
         }
     }
 }
