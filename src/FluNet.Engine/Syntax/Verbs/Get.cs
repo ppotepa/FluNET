@@ -146,50 +146,15 @@ namespace FluNET.Syntax.Verbs
             // Since Get implements IFrom<TFrom>, FROM is required
             // We'll check this when the [what] word validates its next word
             return ValidationResult.Success();
-        }        /// <summary>
-
-                 /// Executes the GET operation and returns the retrieved data.
-                 /// </summary>
-                 /// <returns>The data retrieved from the source</returns>
-        public virtual TWhat Execute()
-        {
-            return Act(From);
         }
 
         /// <summary>
-        /// Creates a THEN chain that passes the retrieved data to the next operation.
+        /// Executes the GET operation and returns the retrieved data.
         /// </summary>
-        /// <returns>A THEN keyword with the retrieved data</returns>
-        public virtual IThen<TWhat> Then()
+        /// <returns>The data retrieved from the source</returns>
+        public virtual TWhat Invoke()
         {
-            TWhat? result = Invoke();
-            return new ThenKeyword<TWhat>(result);
-        }
-    }
-
-    /// <summary>
-    /// Implementation of the THEN keyword that carries data between verb operations.
-    /// </summary>
-    /// <typeparam name="TData">The type of data being passed through the chain</typeparam>
-    internal class ThenKeyword<TData>(TData data) : IThen<TData>
-    {
-        public TData Data { get; } = data;
-        public string Text => "THEN";
-        public IWord? Next { get; set; }
-        public IWord? Previous { get; set; }
-
-        public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
-        {
-            // THEN must be followed by a verb
-            return nextWord is IVerb
-                ? ValidationResult.Success()
-                : ValidationResult.Failure("THEN must be followed by a verb");
-        }
-
-        public bool Validate(IWord word)
-        {
-            // THEN doesn't need to validate specific parameters
-            return true;
+            return Act(From);
         }
     }
 }

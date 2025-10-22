@@ -208,23 +208,6 @@ namespace FluNET.Tests
             });
         }
 
-        [Test]
-        public void Save_Then_ShouldReturnThenKeywordWithData()
-        {
-            // Arrange
-            SaveText saveTextInstance = new("content", new FileInfo("test.txt"));
-
-            // Act
-            IThen<string> thenKeyword = saveTextInstance.Then();
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(thenKeyword, Is.Not.Null);
-                Assert.That(thenKeyword.Text, Is.EqualTo("THEN"));
-            });
-        }
-
         #endregion SAVE Command Tests
 
         #region POST Command Tests

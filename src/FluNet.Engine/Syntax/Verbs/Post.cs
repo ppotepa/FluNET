@@ -122,15 +122,5 @@ namespace FluNET.Syntax.Verbs
         {
             return Act(To);
         }
-
-        /// <summary>
-        /// Creates a THEN chain that passes the posted data to the next operation.
-        /// </summary>
-        /// <returns>A THEN keyword with the posted data</returns>
-        public virtual IThen<TWhat> Then()
-        {
-            TWhat? result = Invoke();
-            return new ThenKeyword<TWhat>(result);
-        }
     }
 }

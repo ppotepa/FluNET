@@ -422,26 +422,6 @@ namespace FluNET.Tests
             });
         }
 
-        [Test]
-        public void GetText_Then_ShouldReturnThenKeywordWithData()
-        {
-            // Arrange
-            FileInfo fileInfo = new(testFilePath);
-            GetText getTextInstance = new(Array.Empty<string>(), fileInfo);
-
-            // Act
-            IThen<string[]> thenKeyword = getTextInstance.Then();
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(thenKeyword, Is.Not.Null);
-                Assert.That(thenKeyword.Text, Is.EqualTo("THEN"));
-                Assert.That(thenKeyword.Data, Is.Not.Null);
-                Assert.That(thenKeyword.Data, Is.InstanceOf<string[]>());
-            });
-        }
-
         #endregion GetText Specific Tests
 
         #region Get Base Class Tests
