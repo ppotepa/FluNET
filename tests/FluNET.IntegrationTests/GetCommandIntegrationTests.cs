@@ -1,3 +1,14 @@
+using Microsoft.Extensions.DependencyInjection;
+using FluNET;
+using FluNET.Lexicon;
+using FluNET.Prompt;
+using FluNET.Sentences;
+using FluNET.Syntax.Validation;
+using FluNET.Tokens;
+using FluNET.Tokens.Tree;
+using FluNET.Variables;
+using FluNET.Words;
+
 namespace FluNET.IntegrationTests
 {
     /// <summary>
