@@ -10,6 +10,13 @@ namespace FluNET.Syntax.Verbs
     public class TransformEncoding : Transform<string, System.Text.Encoding>
     {
         /// <summary>
+        /// Parameterless constructor for WordFactory discovery.
+        /// </summary>
+        public TransformEncoding() : base(string.Empty, System.Text.Encoding.UTF8)
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of TransformEncoding.
         /// </summary>
         /// <param name="what">The text to encode</param>

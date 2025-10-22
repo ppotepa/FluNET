@@ -10,6 +10,13 @@ namespace FluNET.Syntax.Verbs
     public class GetText : Get<string[], FileInfo>
     {
         /// <summary>
+        /// Parameterless constructor for WordFactory discovery.
+        /// </summary>
+        public GetText() : base(Array.Empty<string>(), new FileInfo("temp"))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of GetText.
         /// </summary>
         /// <param name="what">The text data to be retrieved (array of lines)</param>
@@ -89,6 +96,17 @@ namespace FluNET.Syntax.Verbs
         public FileInfo? Resolve(ReferenceWord reference)
         {
             return reference.ResolveAs<FileInfo>();
+        }
+
+        /// <summary>
+        /// Resolves the WHAT parameter for GET.
+        /// For GET, WHAT is the output (data being retrieved), not an input.
+        /// Returns an empty placeholder array that will be populated by Act.
+        /// </summary>
+        public string[] ResolveWhat(string value)
+        {
+            // GET's WHAT is output, not input - return empty array as placeholder
+            return Array.Empty<string>();
         }
     }
 }

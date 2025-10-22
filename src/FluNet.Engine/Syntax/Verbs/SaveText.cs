@@ -10,6 +10,13 @@ namespace FluNET.Syntax.Verbs
     public class SaveText : Save<string, FileInfo>
     {
         /// <summary>
+        /// Parameterless constructor for WordFactory discovery.
+        /// </summary>
+        public SaveText() : base(string.Empty, new FileInfo("temp"))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of SaveText.
         /// </summary>
         /// <param name="what">The text to save</param>
@@ -58,7 +65,7 @@ namespace FluNET.Syntax.Verbs
         }
 
         /// <summary>
-        /// Resolves a ReferenceWord to FileInfo.
+        /// Resolves a ReferenceWord to FileInfo for the TO parameter.
         /// </summary>
         public FileInfo? Resolve(ReferenceWord reference)
         {

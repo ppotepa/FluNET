@@ -96,7 +96,7 @@ namespace FluNET.Syntax.Verbs
 
         /// <summary>
         /// Validates that the next word in the sentence is grammatically correct.
-        /// For LOAD verbs, expects either a FROM keyword, a WHAT noun, or a variable.
+        /// For LOAD verbs, expects either a FROM keyword, a WHAT noun, a variable, or a literal value.
         /// </summary>
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
@@ -105,20 +105,21 @@ namespace FluNET.Syntax.Verbs
                 return ValidationResult.Success();
             }
 
-            // Check if it's a variable word (will be resolved during execution)
+            // Check if it's a variable word, literal word, or reference word (will be resolved during execution)
             return nextWord is Words.VariableWord
-                ? ValidationResult.Success()
-                : nextWord is IWhat<TWhat>
-                ? ValidationResult.Success()
-                : ValidationResult.Failure(
-                    "Invalid word after LOAD verb. Expected FROM keyword or a direct object.");
+                || nextWord is Words.LiteralWord
+                || nextWord is Words.ReferenceWord
+                || nextWord is IWhat<TWhat>
+                    ? ValidationResult.Success()
+                    : ValidationResult.Failure(
+                        "Invalid word after LOAD verb. Expected FROM keyword or a direct object.");
         }
 
         /// <summary>
-        /// Executes the LOAD operation and returns the loaded data.
+        /// Invokes the LOAD operation and returns the loaded data.
         /// </summary>
         /// <returns>The data that was loaded</returns>
-        public virtual TWhat Execute()
+        public virtual TWhat Invoke()
         {
             return Act(From);
         }
@@ -129,7 +130,7 @@ namespace FluNET.Syntax.Verbs
         /// <returns>A THEN keyword with the loaded data</returns>
         public virtual IThen<TWhat> Then()
         {
-            TWhat? result = Execute();
+            TWhat? result = Invoke();
             return new ThenKeyword<TWhat>(result);
         }
     }

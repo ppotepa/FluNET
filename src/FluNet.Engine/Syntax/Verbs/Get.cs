@@ -43,8 +43,10 @@ namespace FluNET.Syntax.Verbs
         /// <summary>
         /// Gets the synonyms for this verb.
         /// These alternative keywords have exactly the same implementation as the main verb.
+        /// All are FROM-based retrieval verbs (data flows FROM source TO variable).
+        /// LOAD is a separate verb (LoadConfig) with its own implementation.
         /// </summary>
-        public virtual string[] Synonyms => new[] { "FETCH", "RETRIEVE", "LOAD" };
+        public virtual string[] Synonyms => new[] { "FETCH", "RETRIEVE" };
 
         /// <summary>
         /// Gets the action function that performs the retrieval operation.
@@ -159,7 +161,7 @@ namespace FluNET.Syntax.Verbs
         /// <returns>A THEN keyword with the retrieved data</returns>
         public virtual IThen<TWhat> Then()
         {
-            TWhat? result = Execute();
+            TWhat? result = Invoke();
             return new ThenKeyword<TWhat>(result);
         }
     }

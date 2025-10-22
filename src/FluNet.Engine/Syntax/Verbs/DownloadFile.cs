@@ -14,6 +14,13 @@ namespace FluNET.Syntax.Verbs
         private readonly string? _destinationPath;
 
         /// <summary>
+        /// Parameterless constructor for WordFactory discovery.
+        /// </summary>
+        public DownloadFile() : base(new FileInfo("temp"), new Uri("http://temp"), null)
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of DownloadFile.
         /// </summary>
         /// <param name="what">The file being downloaded (result)</param>

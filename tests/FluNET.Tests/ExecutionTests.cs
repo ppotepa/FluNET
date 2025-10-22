@@ -15,7 +15,7 @@ namespace FluNET.Tests
     {
         private ServiceProvider _serviceProvider = null!;
         private Engine _engine = null!;
-        private VariableResolver _variableResolver = null!;
+        private IVariableResolver _variableResolver = null!;
 
         [SetUp]
         public void Setup()
@@ -29,12 +29,12 @@ namespace FluNET.Tests
             services.AddScoped<WordFactory>();
             services.AddScoped<SentenceValidator>();
             services.AddScoped<SentenceFactory>();
-            services.AddScoped<VariableResolver>();
+            services.AddScoped<IVariableResolver, VariableResolver>();
             services.AddScoped<SentenceExecutor>();
 
             _serviceProvider = services.BuildServiceProvider();
             _engine = _serviceProvider.GetRequiredService<Engine>();
-            _variableResolver = _serviceProvider.GetRequiredService<VariableResolver>();
+            _variableResolver = _serviceProvider.GetRequiredService<IVariableResolver>();
         }
 
         [TearDown]

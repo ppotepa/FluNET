@@ -185,10 +185,10 @@ namespace FluNET.Syntax.Verbs
         }
 
         /// <summary>
-        /// Executes the DOWNLOAD operation and returns the downloaded data.
+        /// Invokes the DOWNLOAD operation and returns the downloaded data.
         /// </summary>
         /// <returns>The data downloaded from the source</returns>
-        public virtual TWhat Execute()
+        public virtual TWhat Invoke()
         {
             return Act(From);
         }
@@ -199,7 +199,7 @@ namespace FluNET.Syntax.Verbs
         /// <returns>A THEN keyword with the downloaded data</returns>
         public virtual IThen<TWhat> Then()
         {
-            TWhat? result = Execute();
+            TWhat? result = Invoke();
             return new ThenKeyword<TWhat>(result);
         }
     }

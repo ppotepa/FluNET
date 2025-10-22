@@ -38,11 +38,10 @@ namespace FluNET
         {
             get
             {
-                // Find all types that implement IVerb or IVerb<,>
+                // Find all types that implement IVerb (marker interface)
+                // IVerb is the base interface that all verbs inherit from
                 _verbs ??= [.. Words
-                        .Where(x => typeof(IVerb).IsAssignableFrom(x) ||
-                                    x.GetInterfaces().Any(i => i.IsGenericType &&
-                                                             i.GetGenericTypeDefinition() == typeof(IVerb<,>)))];
+                        .Where(x => typeof(IVerb).IsAssignableFrom(x))];
                 return _verbs;
             }
         }

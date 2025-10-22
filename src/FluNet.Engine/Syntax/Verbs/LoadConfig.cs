@@ -10,6 +10,13 @@ namespace FluNET.Syntax.Verbs
     public class LoadConfig : Load<Dictionary<string, object>, FileInfo>
     {
         /// <summary>
+        /// Parameterless constructor for WordFactory discovery.
+        /// </summary>
+        public LoadConfig() : base(new Dictionary<string, object>(), new FileInfo("temp"))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of LoadConfig.
         /// </summary>
         /// <param name="what">The configuration dictionary to load into</param>
@@ -75,6 +82,16 @@ namespace FluNET.Syntax.Verbs
         public FileInfo? Resolve(ReferenceWord reference)
         {
             return reference.ResolveAs<FileInfo>();
+        }
+
+        /// <summary>
+        /// Resolves the WHAT parameter (config name) to an empty Dictionary.
+        /// The actual config data will be loaded by Act from the file.
+        /// </summary>
+        public Dictionary<string, object> ResolveWhat(string value)
+        {
+            // Create empty dictionary - Act will populate it from file
+            return new Dictionary<string, object>();
         }
     }
 }

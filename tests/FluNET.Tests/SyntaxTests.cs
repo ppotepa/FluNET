@@ -33,7 +33,7 @@ namespace FluNET.Tests
             services.AddScoped<WordFactory>();
             services.AddScoped<SentenceValidator>();
             services.AddScoped<SentenceFactory>();
-            services.AddScoped<VariableResolver>();
+            services.AddScoped<IVariableResolver, VariableResolver>();
             services.AddScoped<SentenceExecutor>();
 
             serviceProvider = services.BuildServiceProvider();
@@ -176,8 +176,8 @@ namespace FluNET.Tests
         [Test]
         public void Sentence_SAVE_WithReferenceWord_ShouldValidate()
         {
-            // Arrange
-            ProcessedPrompt prompt = new("SAVE [data] TO {C:\\output.txt} .");
+            // Arrange - Test syntax validation with literal content and reference path
+            ProcessedPrompt prompt = new("SAVE \"test data\" TO {C:\\output.txt} .");
 
             // Act
             (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);

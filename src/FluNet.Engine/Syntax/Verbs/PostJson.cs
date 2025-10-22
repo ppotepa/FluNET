@@ -10,6 +10,13 @@ namespace FluNET.Syntax.Verbs
     public class PostJson : Post<string, Uri>
     {
         /// <summary>
+        /// Parameterless constructor for WordFactory discovery.
+        /// </summary>
+        public PostJson() : base(string.Empty, new Uri("http://temp"))
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of PostJson.
         /// </summary>
         /// <param name="what">The JSON string to post</param>

@@ -38,7 +38,7 @@ namespace FluNET.Tests
             services.AddScoped<WordFactory>();
             services.AddScoped<SentenceValidator>();
             services.AddScoped<SentenceFactory>();
-            services.AddScoped<VariableResolver>();
+            services.AddScoped<IVariableResolver, VariableResolver>();
             services.AddScoped<SentenceExecutor>();
 
             serviceProvider = services.BuildServiceProvider();
@@ -198,7 +198,7 @@ namespace FluNET.Tests
             SaveText saveTextInstance = new("Test content", new FileInfo(outputFile));
 
             // Act
-            string result = saveTextInstance.Execute();
+            string result = saveTextInstance.Invoke();
 
             // Assert
             Assert.Multiple(() =>
@@ -410,7 +410,7 @@ namespace FluNET.Tests
             DeleteFile deleteFileInstance = new(testFile, new DirectoryInfo(testDirectory));
 
             // Act
-            string result = deleteFileInstance.Execute();
+            string result = deleteFileInstance.Invoke();
 
             // Assert
             Assert.Multiple(() =>
@@ -428,7 +428,7 @@ namespace FluNET.Tests
             DeleteFile deleteFileInstance = new(testFile, new DirectoryInfo(testDirectory));
 
             // Act
-            string result = deleteFileInstance.Execute();
+            string result = deleteFileInstance.Invoke();
 
             // Assert
             Assert.That(result, Does.Contain("not found"));
@@ -560,7 +560,7 @@ namespace FluNET.Tests
             LoadConfig loadConfigInstance = new([], new FileInfo(configFile));
 
             // Act
-            Dictionary<string, object> result = loadConfigInstance.Execute();
+            Dictionary<string, object> result = loadConfigInstance.Invoke();
 
             // Assert
             Assert.Multiple(() =>
@@ -654,7 +654,7 @@ namespace FluNET.Tests
             using (StringWriter sw = new())
             {
                 Console.SetOut(sw);
-                string result = sendEmailInstance.Execute();
+                string result = sendEmailInstance.Invoke();
 
                 // Assert
                 Assert.Multiple(() =>
@@ -797,7 +797,7 @@ namespace FluNET.Tests
             TransformEncoding transformInstance = new("Hello World", Encoding.UTF8);
 
             // Act
-            string result = transformInstance.Execute();
+            string result = transformInstance.Invoke();
 
             // Assert
             Assert.Multiple(() =>

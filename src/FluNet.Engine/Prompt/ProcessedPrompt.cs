@@ -46,8 +46,9 @@ namespace FluNET.Prompt
                     bracketDepth--;
                 }
 
-                // If we hit a space and we're not inside braces/brackets
-                if (c == ' ' && braceDepth == 0 && bracketDepth == 0)
+                // If we hit a space or tab and we're not inside braces/brackets
+                // Note: We preserve newlines as they may be meaningful in multi-line content
+                if ((c == ' ' || c == '\t') && braceDepth == 0 && bracketDepth == 0)
                 {
                     // Add the completed token if not empty
                     if (currentToken.Length > 0)

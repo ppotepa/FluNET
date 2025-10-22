@@ -10,6 +10,13 @@ namespace FluNET.Syntax.Verbs
     public class SendEmail : Send<string, string>
     {
         /// <summary>
+        /// Parameterless constructor for WordFactory discovery.
+        /// </summary>
+        public SendEmail() : base(string.Empty, string.Empty)
+        {
+        }
+
+        /// <summary>
         /// Initializes a new instance of SendEmail.
         /// </summary>
         /// <param name="what">The email message content</param>

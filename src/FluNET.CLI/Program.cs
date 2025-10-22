@@ -33,7 +33,8 @@ public static class Program
         serviceCollection.AddScoped<WordFactory>();
         serviceCollection.AddScoped<SentenceValidator>();
         serviceCollection.AddScoped<SentenceFactory>();
-        serviceCollection.AddScoped<VariableResolver>();
+        // CLI uses PersistentVariableResolver so variables persist across commands
+        serviceCollection.AddSingleton<IVariableResolver, PersistentVariableResolver>();
         serviceCollection.AddScoped<SentenceExecutor>();
 
         ServiceProvider provider = serviceCollection.BuildServiceProvider();

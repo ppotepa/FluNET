@@ -25,8 +25,16 @@ namespace FluNET.Syntax.Core
     {
         /// <summary>
         /// The action function that takes a source and produces a result.
+        /// Example: For GET verb, Act takes a FileInfo and returns string content.
         /// </summary>
         public Func<TFrom, TWhat> Act { get; }
+
+        /// <summary>
+        /// Invokes the verb's action and returns the result.
+        /// This is the primary execution method that should be called to run the verb.
+        /// </summary>
+        /// <returns>The result of the verb's action</returns>
+        TWhat Invoke();
 
         /// <summary>
         /// Resolves a string value to the TFrom type contextually.

@@ -36,7 +36,7 @@ namespace FluNET.Tests
             services.AddScoped<WordFactory>();
             services.AddScoped<SentenceValidator>();
             services.AddScoped<SentenceFactory>();
-            services.AddScoped<VariableResolver>();
+            services.AddScoped<IVariableResolver, VariableResolver>();
             services.AddScoped<SentenceExecutor>();
 
             serviceProvider = services.BuildServiceProvider();

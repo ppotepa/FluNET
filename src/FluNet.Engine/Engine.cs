@@ -1,8 +1,10 @@
 ﻿using FluNET.Prompt;
 using FluNET.Sentences;
+using FluNET.Syntax.Core;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
+using FluNET.Words;
 
 namespace FluNET
 {
@@ -11,11 +13,11 @@ namespace FluNET
         private readonly TokenTreeFactory tokenTreeFactory;
         private readonly SentenceFactory sentenceFactory;
         private readonly SentenceValidator sentenceValidator;
-        private readonly VariableResolver variableResolver;
+        private readonly IVariableResolver variableResolver;
         private readonly SentenceExecutor sentenceExecutor;
 
         public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory,
-            SentenceValidator sentenceValidator, VariableResolver variableResolver,
+            SentenceValidator sentenceValidator, IVariableResolver variableResolver,
             SentenceExecutor sentenceExecutor)
         {
             this.tokenTreeFactory = tokenTreeFactory;
@@ -67,6 +69,13 @@ namespace FluNET
             try
             {
                 result = sentenceExecutor.Execute(sentence);
+
+                // Auto-store result in variable if the verb's direct object is a VariableWord
+                // Example: GET [text] FROM file.txt -> stores result in [text]
+                if (result != null && sentence.Root != null)
+                {
+                    StoreResultInVariableIfNeeded(sentence.Root, result);
+                }
             }
             catch (Exception ex)
             {
@@ -74,6 +83,29 @@ namespace FluNET
             }
 
             return (validationResult, sentence, result);
+        }
+
+        /// <summary>
+        /// If the verb's direct object (first word after verb) is a VariableWord,
+        /// store the execution result in that variable.
+        /// Example: GET [text] FROM file.txt -> [text] = file contents
+        /// </summary>
+        private void StoreResultInVariableIfNeeded(IWord root, object result)
+        {
+            // Check if the first word after the verb is a VariableWord
+            IWord? firstWord = root.Next;
+            if (firstWord is VariableWord varWord)
+            {
+                // Extract variable name without brackets: [text] -> text
+                string varName = varWord.VariableReference
+                    .TrimStart('[')
+                    .TrimEnd(']')
+                    .TrimEnd('.');
+
+                // Store the result in the variable
+                variableResolver.Register(varName, result);
+                System.Diagnostics.Debug.WriteLine($"Stored result in variable [{varName}]");
+            }
         }
     }
 }

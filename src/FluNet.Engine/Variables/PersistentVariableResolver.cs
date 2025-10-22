@@ -4,16 +4,17 @@ using System.Text.RegularExpressions;
 namespace FluNET.Variables
 {
     /// <summary>
-    /// Default implementation of variable resolver.
-    /// Maintains variables in memory for a single scope (transient/scoped DI lifetime).
-    /// Handles both simple variables [Name] and JSON object properties [{prop1, prop2}].
+    /// Persistent variable resolver that maintains variables across multiple commands.
+    /// Uses a static dictionary to persist variables throughout the application lifetime.
+    /// This is ideal for CLI mode where variables should persist between commands.
     /// </summary>
-    public class VariableResolver : IVariableResolver
+    public class PersistentVariableResolver : IVariableResolver
     {
-        private readonly Dictionary<string, object> _variables = [];
+        // Static dictionary shared across all instances - persists for application lifetime
+        private static readonly Dictionary<string, object> _persistentVariables = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>
-        /// Registers a variable with the resolver.
+        /// Registers a variable with the persistent store.
         /// Variable names are case-insensitive.
         /// </summary>
         /// <typeparam name="T">The type of the variable value</typeparam>
@@ -26,21 +27,21 @@ namespace FluNET.Variables
                 throw new ArgumentNullException(nameof(value));
             }
 
-            _variables[name.ToUpperInvariant()] = value;
+            _persistentVariables[name.ToUpperInvariant()] = value;
         }
 
         /// <summary>
-        /// Checks if a variable is registered
+        /// Checks if a variable is registered in the persistent store
         /// </summary>
         /// <param name="name">The variable name (without brackets)</param>
         /// <returns>True if the variable exists</returns>
         public bool IsRegistered(string name)
         {
-            return _variables.ContainsKey(name.ToUpperInvariant());
+            return _persistentVariables.ContainsKey(name.ToUpperInvariant());
         }
 
         /// <summary>
-        /// Resolves a variable reference from a token value.
+        /// Resolves a variable reference from the persistent store.
         /// Supports:
         /// - Simple variables: [Data] -> resolves to registered variable "Data"
         /// - JSON objects: [{name, surname}] -> creates object with those properties
@@ -54,7 +55,7 @@ namespace FluNET.Variables
             // Check if it's a simple variable [Name]
             if (IsSimpleVariable(tokenValue, out string? varName))
             {
-                if (_variables.TryGetValue(varName!.ToUpperInvariant(), out object? value))
+                if (_persistentVariables.TryGetValue(varName!.ToUpperInvariant(), out object? value))
                 {
                     // First try direct cast
                     if (value is T typedValue)
@@ -89,14 +90,19 @@ namespace FluNET.Variables
         }
 
         /// <summary>
-        /// Checks if a token value is a variable reference (starts with [ and ends with ])
-        /// Must contain at least one character between the brackets.
+        /// Clears all variables from the persistent store
         /// </summary>
-        public static bool IsVariableReference(string tokenValue)
+        public void Clear()
         {
-            return tokenValue.StartsWith('[') &&
-                   tokenValue.EndsWith(']') &&
-                   tokenValue.Length > 2; // Must have content between brackets
+            _persistentVariables.Clear();
+        }
+
+        /// <summary>
+        /// Gets all registered variable names from the persistent store
+        /// </summary>
+        public IEnumerable<string> GetVariableNames()
+        {
+            return _persistentVariables.Keys;
         }
 
         private bool IsSimpleVariable(string token, out string? varName)
@@ -124,22 +130,6 @@ namespace FluNET.Variables
 
             jsonProps = null;
             return false;
-        }
-
-        /// <summary>
-        /// Clears all registered variables
-        /// </summary>
-        public void Clear()
-        {
-            _variables.Clear();
-        }
-
-        /// <summary>
-        /// Gets all registered variable names
-        /// </summary>
-        public IEnumerable<string> GetVariableNames()
-        {
-            return _variables.Keys;
         }
     }
 }
