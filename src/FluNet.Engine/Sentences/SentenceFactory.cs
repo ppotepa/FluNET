@@ -64,7 +64,7 @@ namespace FluNET.Sentences
             while (current != null && current.Type != TokenType.Terminal)
             {
                 // Check if this is a THEN keyword
-                if (current.Type == TokenType.Regular && 
+                if (current.Type == TokenType.Regular &&
                     current.Value.Equals("THEN", StringComparison.OrdinalIgnoreCase))
                 {
                     // Save current group and start a new one

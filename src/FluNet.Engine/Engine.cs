@@ -110,10 +110,10 @@ namespace FluNET
             // Return the result of the last executed sentence
             return result;
         }        /// <summary>
-        /// If the verb's direct object (first word after verb) is a VariableWord,
-        /// store the execution result in that variable.
-        /// Example: GET [text] FROM file.txt -> [text] = file contents
-        /// </summary>
+                 /// If the verb's direct object (first word after verb) is a VariableWord,
+                 /// store the execution result in that variable.
+                 /// Example: GET [text] FROM file.txt -> [text] = file contents
+                 /// </summary>
         private void StoreResultInVariableIfNeeded(IWord root, object result)
         {
             // Check if the first word after the verb is a VariableWord
