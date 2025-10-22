@@ -2,7 +2,6 @@ using FluNET.Prompt;
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using Microsoft.Extensions.DependencyInjection;
-using NUnit.Framework;
 
 namespace FluNET.Tests
 {

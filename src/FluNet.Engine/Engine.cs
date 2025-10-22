@@ -41,11 +41,19 @@ namespace FluNET
 
         /// <summary>
         /// Parse, validate, and execute a sentence.
+        /// Supports THEN clause for chaining multiple commands with shared variable context.
+        /// Example: DOWNLOAD [file] FROM http://example.com TO {file.txt} THEN SAY [file].
         /// </summary>
         /// <param name="prompt">The prompt to process</param>
         /// <returns>A tuple containing validation result, the sentence, and execution result</returns>
         public (ValidationResult ValidationResult, ISentence? Sentence, object? Result) Run(ProcessedPrompt prompt)
         {
+            // Check if the prompt contains THEN for sentence chaining
+            if (ContainsThenClause(prompt))
+            {
+                return ExecuteChainedSentences(prompt);
+            }
+
             TokenTree tree = tokenTreeFactory.Process(prompt);
 
             // Validate the sentence structure
@@ -83,6 +91,84 @@ namespace FluNET
             }
 
             return (validationResult, sentence, result);
+        }
+
+        /// <summary>
+        /// Check if the prompt contains a THEN keyword for sentence chaining.
+        /// </summary>
+        private static bool ContainsThenClause(ProcessedPrompt prompt)
+        {
+            return prompt.Tokens.Any(t => t.Equals("THEN", StringComparison.OrdinalIgnoreCase));
+        }
+
+        /// <summary>
+        /// Execute chained sentences separated by THEN keyword.
+        /// Each sentence shares the same variable context.
+        /// Example: DOWNLOAD [file] FROM url TO {file.txt} THEN SAY [file].
+        /// </summary>
+        private (ValidationResult ValidationResult, ISentence? Sentence, object? Result) ExecuteChainedSentences(ProcessedPrompt prompt)
+        {
+            // Split the tokens at THEN boundaries
+            List<List<string>> sentenceParts = [];
+            List<string> currentPart = [];
+
+            foreach (string token in prompt.Tokens)
+            {
+                if (token.Equals("THEN", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (currentPart.Count > 0)
+                    {
+                        sentenceParts.Add(new List<string>(currentPart));
+                        currentPart.Clear();
+                    }
+                }
+                else
+                {
+                    currentPart.Add(token);
+                }
+            }
+
+            // Add the last part if it exists
+            if (currentPart.Count > 0)
+            {
+                sentenceParts.Add(currentPart);
+            }
+
+            // Execute each sentence part sequentially
+            object? lastResult = null;
+            ISentence? lastSentence = null;
+
+            for (int i = 0; i < sentenceParts.Count; i++)
+            {
+                // Reconstruct the sentence with terminator
+                List<string> part = sentenceParts[i];
+                
+                // Remove terminator from intermediate sentences, keep only on last
+                string lastToken = part[^1];
+                bool hasTerminator = lastToken.EndsWith('.') || lastToken.EndsWith('?') || lastToken.EndsWith('!');
+                
+                if (!hasTerminator && i < sentenceParts.Count - 1)
+                {
+                    // Add terminator for validation
+                    part.Add(".");
+                }
+                
+                string sentenceText = string.Join(" ", part);
+                ProcessedPrompt subPrompt = new(sentenceText);
+
+                // Execute this part
+                (ValidationResult validation, ISentence? sentence, object? result) = Run(subPrompt);
+
+                if (!validation.IsValid)
+                {
+                    return (ValidationResult.Failure($"THEN clause {i + 1} failed: {validation.FailureReason}"), sentence, null);
+                }
+
+                lastResult = result;
+                lastSentence = sentence;
+            }
+
+            return (ValidationResult.Success(), lastSentence, lastResult);
         }
 
         /// <summary>

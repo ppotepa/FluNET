@@ -1,5 +1,3 @@
-using FluNET.Words;
-
 namespace FluNET.CLI.Verbs
 {
     /// <summary>

@@ -1,6 +1,5 @@
 using FluNET.Prompt;
 using FluNET.Sentences;
-using FluNET.Syntax.Nouns;
 using FluNET.Syntax.Validation;
 using FluNET.Syntax.Verbs;
 using FluNET.Tokens;

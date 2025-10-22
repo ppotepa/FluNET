@@ -3,9 +3,7 @@ using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Syntax.Verbs;
 using FluNET.Tokens.Tree;
-using FluNET.Variables;
 using Microsoft.Extensions.DependencyInjection;
-using NUnit.Framework;
 using System.Text;
 
 namespace FluNET.Tests

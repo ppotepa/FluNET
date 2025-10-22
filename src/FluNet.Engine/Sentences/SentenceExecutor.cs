@@ -1,6 +1,5 @@
 using FluNET.Keywords;
 using FluNET.Lexicon;
-using FluNET.Syntax;
 using FluNET.Syntax.Core;
 using FluNET.Syntax.Nouns;
 using FluNET.Syntax.Verbs;

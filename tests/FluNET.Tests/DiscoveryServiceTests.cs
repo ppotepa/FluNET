@@ -1,7 +1,5 @@
 using FluNET.Keywords;
-using FluNET.Syntax.Core;
 using FluNET.Syntax.Verbs;
-using FluNET.Words;
 
 namespace FluNET.Tests
 {

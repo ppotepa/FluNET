@@ -1,6 +1,5 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using FluNET.Syntax.Core;
-using FluNET.Syntax.Nouns;
+﻿using FluNET.Syntax.Core;
+using System.Diagnostics.CodeAnalysis;
 
 namespace FluNET
 {
