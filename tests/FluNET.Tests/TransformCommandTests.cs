@@ -1,3 +1,4 @@
+using FluNET.Extensions;
 using FluNET.Prompt;
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
@@ -32,6 +33,7 @@ namespace FluNET.Tests
             services.AddTransient<Lexicon.Lexicon>();
             services.AddTransient<SentenceValidator>();
             services.AddTransient<SentenceFactory>();
+            services.AddPatternMatchers(); // Register pattern matchers (regex and string-based)
             services.AddScoped<Variables.IVariableResolver, Variables.VariableResolver>();
             services.AddTransient<SentenceExecutor>();
             services.AddTransient<Engine>();

@@ -1,11 +1,9 @@
 using FluNET.Prompt;
-using FluNET.Sentences;
-using FluNET.Syntax.Validation;
-using FluNET.Tokens;
-using FluNET.Tokens.Tree;
-using FluNET.Variables;
+using FluNET.Context;
+using FluNET.Syntax.Verbs;
 using FluNET.Words;
-using Microsoft.Extensions.DependencyInjection;
+using FluNET.Syntax.Validation;
+using FluNET.Sentences;
 
 namespace FluNET.Tests
 {
@@ -16,43 +14,20 @@ namespace FluNET.Tests
     [TestFixture]
     public class SyntaxTests
     {
+        private FluNetContext _context = null!;
         private Engine engine = null!;
-        private ServiceProvider? serviceProvider;
-        private IServiceScope? scope;
 
         [SetUp]
         public void Setup()
         {
-            ServiceCollection services = new();
-            services.AddTransient<DiscoveryService>();
-            services.AddScoped<Engine>();
-            services.AddScoped<TokenTreeFactory>();
-            services.AddScoped<TokenFactory>();
-            services.AddScoped<Lexicon.Lexicon>();
-            services.AddScoped<WordFactory>();
-            services.AddScoped<SentenceValidator>();
-            services.AddScoped<SentenceFactory>();
-            services.AddScoped<IVariableResolver, VariableResolver>();
-            services.AddScoped<SentenceExecutor>();
-
-            serviceProvider = services.BuildServiceProvider();
-            scope = serviceProvider.CreateScope();
-            engine = scope.ServiceProvider.GetRequiredService<Engine>();
+            _context = FluNetContext.Create();
+            engine = _context.GetEngine();
         }
 
         [TearDown]
         public void TearDown()
         {
-            try
-            {
-                scope?.Dispose();
-                serviceProvider?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                // Log but don't fail
-                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
-            }
+            _context?.Dispose();
         }
 
         #region Tokenization Tests

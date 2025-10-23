@@ -1,10 +1,12 @@
-﻿using FluNET.Prompt;
+﻿using FluNET.Matching;
+using FluNET.Prompt;
 using FluNET.Sentences;
 using FluNET.Syntax.Core;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
 using FluNET.Words;
+using System.Text.Json;
 
 namespace FluNET
 {
@@ -15,16 +17,18 @@ namespace FluNET
         private readonly SentenceValidator sentenceValidator;
         private readonly IVariableResolver variableResolver;
         private readonly SentenceExecutor sentenceExecutor;
+        private readonly MatcherResolver matcherResolver;
 
         public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory,
             SentenceValidator sentenceValidator, IVariableResolver variableResolver,
-            SentenceExecutor sentenceExecutor)
+            SentenceExecutor sentenceExecutor, MatcherResolver matcherResolver)
         {
             this.tokenTreeFactory = tokenTreeFactory;
             this.sentenceFactory = sentenceFactory;
             this.sentenceValidator = sentenceValidator;
             this.variableResolver = variableResolver;
             this.sentenceExecutor = sentenceExecutor;
+            this.matcherResolver = matcherResolver;
         }
 
         /// <summary>
@@ -112,7 +116,9 @@ namespace FluNET
         }        /// <summary>
                  /// If the verb's direct object (first word after verb) is a VariableWord,
                  /// store the execution result in that variable.
+                 /// Supports destructuring syntax: [{prop1, prop2, prop3}]
                  /// Example: GET [text] FROM file.txt -> [text] = file contents
+                 /// Example: GET [{name, age}] FROM {user} -> [name] = "John", [age] = 30
                  /// </summary>
         private void StoreResultInVariableIfNeeded(IWord root, object result)
         {
@@ -120,16 +126,127 @@ namespace FluNET
             IWord? firstWord = root.Next;
             if (firstWord is VariableWord varWord)
             {
-                // Extract variable name without brackets: [text] -> text
-                string varName = varWord.VariableReference
-                    .TrimStart('[')
-                    .TrimEnd(']')
-                    .TrimEnd('.');
+                string varRef = varWord.VariableReference.TrimEnd('.');
 
-                // Store the result in the variable
-                variableResolver.Register(varName, result);
-                System.Diagnostics.Debug.WriteLine($"Stored result in variable [{varName}]");
+                // Remove brackets for destructuring check
+                string innerContent = varRef.TrimStart('[').TrimEnd(']');
+
+                // Get matchers
+                var destructuringMatcher = matcherResolver.GetMatcher<IDestructuringMatcher>();
+
+                // Check for destructuring syntax: [{prop1, prop2, prop3}]
+                if (destructuringMatcher.IsMatch(innerContent))
+                {
+                    // Extract property names using the matcher
+                    string[] propertyNames = destructuringMatcher.GetPropertyNames(innerContent);
+
+                    // Try to parse result as JSON and extract properties
+                    if (TryExtractPropertiesFromResult(result, propertyNames, out Dictionary<string, object>? extractedProps))
+                    {
+                        // Store each property as individual variable
+                        foreach (var kvp in extractedProps!)
+                        {
+                            variableResolver.Register(kvp.Key, kvp.Value);
+                            System.Diagnostics.Debug.WriteLine($"Stored property in variable [{kvp.Key}] = {kvp.Value}");
+                        }
+                    }
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Failed to extract properties {string.Join(", ", propertyNames)} from result");
+                    }
+                }
+                else
+                {
+                    // Simple variable: [text]
+                    string varName = innerContent;
+
+                    // Store the result in the variable
+                    variableResolver.Register(varName, result);
+                    System.Diagnostics.Debug.WriteLine($"Stored result in variable [{varName}]");
+                }
             }
+        }
+
+        /// <summary>
+        /// Try to extract specified properties from a result object.
+        /// Supports JSON strings, string arrays (auto-detects JSON), and dictionaries.
+        /// </summary>
+        private bool TryExtractPropertiesFromResult(object result, string[] propertyNames, out Dictionary<string, object>? properties)
+        {
+            properties = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+            try
+            {
+                JsonDocument? jsonDoc = null;
+
+                // Handle different result types
+                if (result is string jsonString)
+                {
+                    // Direct JSON string
+                    jsonDoc = JsonDocument.Parse(jsonString);
+                }
+                else if (result is string[] lines)
+                {
+                    // Array of strings - join and try to parse as JSON
+                    string combined = string.Join('\n', lines);
+                    if (combined.TrimStart().StartsWith('{') || combined.TrimStart().StartsWith('['))
+                    {
+                        jsonDoc = JsonDocument.Parse(combined);
+                    }
+                }
+                else if (result is Dictionary<string, object> dict)
+                {
+                    // Already a dictionary - extract directly
+                    foreach (string propName in propertyNames)
+                    {
+                        if (dict.TryGetValue(propName, out object? value))
+                        {
+                            properties[propName] = value;
+                        }
+                    }
+                    return properties.Count > 0;
+                }
+
+                // Extract properties from JSON document
+                if (jsonDoc != null)
+                {
+                    JsonElement root = jsonDoc.RootElement;
+                    foreach (string propName in propertyNames)
+                    {
+                        if (root.TryGetProperty(propName, out JsonElement element))
+                        {
+                            properties[propName] = ExtractJsonValue(element);
+                        }
+                    }
+                    jsonDoc.Dispose();
+                    return properties.Count > 0;
+                }
+            }
+            catch (JsonException)
+            {
+                // Not valid JSON
+            }
+
+            properties = null;
+            return false;
+        }
+
+        /// <summary>
+        /// Extract a value from a JsonElement as the appropriate .NET type
+        /// </summary>
+        private object ExtractJsonValue(JsonElement element)
+        {
+            return element.ValueKind switch
+            {
+                JsonValueKind.String => element.GetString() ?? string.Empty,
+                JsonValueKind.Number => element.TryGetInt32(out int intVal) ? intVal : element.GetDouble(),
+                JsonValueKind.True => true,
+                JsonValueKind.False => false,
+                JsonValueKind.Null => string.Empty,
+                JsonValueKind.Array => element.EnumerateArray().Select(ExtractJsonValue).ToArray(),
+                JsonValueKind.Object => element.Deserialize<Dictionary<string, object>>() ?? new Dictionary<string, object>(),
+                _ => element.ToString()
+            };
         }
     }
 }

@@ -1,53 +1,32 @@
 using FluNET.Prompt;
-using FluNET.Sentences;
-using FluNET.Syntax.Validation;
-using FluNET.Tokens;
-using FluNET.Tokens.Tree;
-using FluNET.Variables;
+using FluNET.Context;
+using FluNET.Syntax.Verbs;
 using FluNET.Words;
-using Microsoft.Extensions.DependencyInjection;
+using FluNET.Syntax.Validation;
+using FluNET.Sentences;
+using FluNET.Variables;
 
 namespace FluNET.Tests
 {
     [TestFixture]
     public class ExecutionTests
     {
-        private ServiceProvider _serviceProvider = null!;
+        private FluNetContext _context = null!;
         private Engine _engine = null!;
         private IVariableResolver _variableResolver = null!;
 
         [SetUp]
         public void Setup()
         {
-            IServiceCollection services = new ServiceCollection();
-            services.AddTransient<DiscoveryService>();
-            services.AddSingleton<Engine>();
-            services.AddScoped<TokenTreeFactory>();
-            services.AddScoped<TokenFactory>();
-            services.AddScoped<Lexicon.Lexicon>();
-            services.AddScoped<WordFactory>();
-            services.AddScoped<SentenceValidator>();
-            services.AddScoped<SentenceFactory>();
-            services.AddScoped<IVariableResolver, VariableResolver>();
-            services.AddScoped<SentenceExecutor>();
-
-            _serviceProvider = services.BuildServiceProvider();
-            _engine = _serviceProvider.GetRequiredService<Engine>();
-            _variableResolver = _serviceProvider.GetRequiredService<IVariableResolver>();
+            _context = FluNetContext.Create();
+            _engine = _context.GetEngine();
+            _variableResolver = _context.GetService<IVariableResolver>();
         }
 
         [TearDown]
         public void TearDown()
         {
-            try
-            {
-                _serviceProvider?.Dispose();
-            }
-            catch (Exception ex)
-            {
-                // Log but don't fail
-                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
-            }
+            _context?.Dispose();
         }
 
         [Test]
@@ -199,7 +178,7 @@ namespace FluNET.Tests
         public void SentenceExecutor_Execute_WithNullSentence_ReturnsNull()
         {
             // Arrange
-            SentenceExecutor executor = _serviceProvider.GetRequiredService<SentenceExecutor>();
+            SentenceExecutor executor = _context.GetService<SentenceExecutor>();
 
             // Act
             object? result = executor.Execute(null!);

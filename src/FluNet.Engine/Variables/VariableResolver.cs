@@ -1,5 +1,5 @@
+using FluNET.Matching;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 namespace FluNET.Variables
 {
@@ -11,6 +11,12 @@ namespace FluNET.Variables
     public class VariableResolver : IVariableResolver
     {
         private readonly Dictionary<string, object> _variables = [];
+        private readonly MatcherResolver _matcherResolver;
+
+        public VariableResolver(MatcherResolver matcherResolver)
+        {
+            _matcherResolver = matcherResolver ?? throw new ArgumentNullException(nameof(matcherResolver));
+        }
 
         /// <summary>
         /// Registers a variable with the resolver.
@@ -101,11 +107,16 @@ namespace FluNET.Variables
 
         private bool IsSimpleVariable(string token, out string? varName)
         {
-            Match match = Regex.Match(token, @"^\[([A-Za-z0-9_]+)\]$");
-            if (match.Success)
+            var variableMatcher = _matcherResolver.GetMatcher<IVariableMatcher>();
+            if (variableMatcher.IsMatch(token))
             {
-                varName = match.Groups[1].Value;
-                return true;
+                string extracted = variableMatcher.Extract(token);
+                // Check if it's NOT a destructuring pattern (no { })
+                if (!extracted.Contains('{') && !extracted.Contains('}'))
+                {
+                    varName = extracted;
+                    return true;
+                }
             }
 
             varName = null;
@@ -114,12 +125,19 @@ namespace FluNET.Variables
 
         private bool IsJsonObject(string token, out string? jsonProps)
         {
-            Match match = Regex.Match(token, @"^\[\{(.+)\}\]$");
-            if (match.Success)
+            var variableMatcher = _matcherResolver.GetMatcher<IVariableMatcher>();
+            if (variableMatcher.IsMatch(token))
             {
-                // Format as proper JSON
-                jsonProps = "{" + match.Groups[1].Value + "}";
-                return true;
+                string extracted = variableMatcher.Extract(token);
+                var destructuringMatcher = _matcherResolver.GetMatcher<IDestructuringMatcher>();
+
+                if (destructuringMatcher.IsMatch(extracted))
+                {
+                    // Format as proper JSON
+                    string innerContent = destructuringMatcher.Extract(extracted);
+                    jsonProps = "{" + innerContent + "}";
+                    return true;
+                }
             }
 
             jsonProps = null;

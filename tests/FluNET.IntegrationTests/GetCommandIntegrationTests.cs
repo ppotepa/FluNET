@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using FluNET;
+using FluNET.Extensions;
 using FluNET.Lexicon;
 using FluNET.Prompt;
 using FluNET.Sentences;
@@ -37,6 +38,7 @@ namespace FluNET.IntegrationTests
             services.AddScoped<WordFactory>();
             services.AddScoped<SentenceValidator>();
             services.AddScoped<SentenceFactory>();
+            services.AddPatternMatchers(); // Register pattern matchers (regex and string-based)
             services.AddScoped<IVariableResolver, VariableResolver>();
             services.AddScoped<SentenceExecutor>();
 

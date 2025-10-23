@@ -1,12 +1,9 @@
 using FluNET.Prompt;
-using FluNET.Sentences;
-using FluNET.Syntax.Validation;
+using FluNET.Context;
 using FluNET.Syntax.Verbs;
-using FluNET.Tokens;
-using FluNET.Tokens.Tree;
-using FluNET.Variables;
 using FluNET.Words;
-using Microsoft.Extensions.DependencyInjection;
+using FluNET.Syntax.Validation;
+using FluNET.Sentences;
 using System.Text;
 
 namespace FluNET.Tests
@@ -18,30 +15,15 @@ namespace FluNET.Tests
     [TestFixture]
     public class GenericCommandTests
     {
+        private FluNetContext _context = null!;
         private Engine engine = null!;
         private string testDirectory = null!;
-        private ServiceProvider? serviceProvider;
-        private IServiceScope? scope;
 
         [SetUp]
         public void Setup()
         {
-            // Setup DI container - use Transient for DiscoveryService to ensure fresh assembly discovery per test
-            ServiceCollection services = new();
-            services.AddTransient<DiscoveryService>();
-            services.AddScoped<Engine>();
-            services.AddScoped<TokenTreeFactory>();
-            services.AddScoped<TokenFactory>();
-            services.AddScoped<Lexicon.Lexicon>();
-            services.AddScoped<WordFactory>();
-            services.AddScoped<SentenceValidator>();
-            services.AddScoped<SentenceFactory>();
-            services.AddScoped<IVariableResolver, VariableResolver>();
-            services.AddScoped<SentenceExecutor>();
-
-            serviceProvider = services.BuildServiceProvider();
-            scope = serviceProvider.CreateScope();
-            engine = scope.ServiceProvider.GetRequiredService<Engine>();
+            _context = FluNetContext.Create();
+            engine = _context.GetEngine();
 
             // Create test directory
             testDirectory = Path.Combine(Path.GetTempPath(), "FluNET_Tests_" + Guid.NewGuid().ToString("N"));
@@ -53,9 +35,7 @@ namespace FluNET.Tests
         {
             try
             {
-                // Dispose scope and service provider to clean up resources
-                scope?.Dispose();
-                serviceProvider?.Dispose();
+                _context?.Dispose();
 
                 // Cleanup test files
                 if (Directory.Exists(testDirectory))

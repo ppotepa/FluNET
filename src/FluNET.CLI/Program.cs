@@ -2,16 +2,16 @@
 using FluNET.Sentences;
 using FluNET.Syntax.Core;
 using FluNET.Syntax.Validation;
-using FluNET.Tokens;
-using FluNET.Tokens.Tree;
 using FluNET.Variables;
 using FluNET.Words;
 using Microsoft.Extensions.DependencyInjection;
+using FluNET.Context;
 
 namespace FluNET.CLI;
 
 public static class Program
 {
+    private static FluNetContext? _context;
     private static Engine? _engine;
     private static DiscoveryService? _discoveryService;
     private static readonly List<string> _commandHistory = new();
@@ -23,23 +23,16 @@ public static class Program
         // This ensures CLI verbs are discovered along with application verbs
         EnsureCliTypesLoaded();
 
-        // Setup DI container
-        IServiceCollection serviceCollection = new ServiceCollection();
-        serviceCollection.AddSingleton<Engine>();
-        serviceCollection.AddSingleton<DiscoveryService>(); // Required by WordFactory and Lexicon
-        serviceCollection.AddScoped<TokenTreeFactory>();
-        serviceCollection.AddScoped<TokenFactory>();
-        serviceCollection.AddScoped<Lexicon.Lexicon>();
-        serviceCollection.AddScoped<WordFactory>();
-        serviceCollection.AddScoped<SentenceValidator>();
-        serviceCollection.AddScoped<SentenceFactory>();
-        // CLI uses PersistentVariableResolver so variables persist across commands
-        serviceCollection.AddSingleton<IVariableResolver, PersistentVariableResolver>();
-        serviceCollection.AddScoped<SentenceExecutor>();
+        // Setup using FluNetContext with customization for CLI
+        _context = FluNetContext.Create(services =>
+        {
+            // CLI uses PersistentVariableResolver so variables persist across commands
+            // Replace the default scoped IVariableResolver with singleton
+            services.AddSingleton<IVariableResolver, PersistentVariableResolver>();
+        });
 
-        ServiceProvider provider = serviceCollection.BuildServiceProvider();
-        _engine = provider.GetRequiredService<Engine>();
-        _discoveryService = provider.GetRequiredService<DiscoveryService>();
+        _engine = _context.GetEngine();
+        _discoveryService = _context.GetService<DiscoveryService>();
 
         // Display welcome banner
         DisplayWelcomeBanner();
