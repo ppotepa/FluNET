@@ -48,10 +48,12 @@ foreach ($file in $testFiles) {
             # Write the updated content back
             $content | Set-Content $filePath -NoNewline
             Write-Host "  Added: $($added -join ', ')" -ForegroundColor Green
-        } else {
+        }
+        else {
             Write-Host "  No changes needed" -ForegroundColor Gray
         }
-    } else {
+    }
+    else {
         Write-Host "File not found: $filePath" -ForegroundColor Red
     }
 }

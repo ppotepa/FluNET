@@ -71,6 +71,9 @@ namespace FluNET.Context
             // Lexicon and validation
             services.AddTransient<Lexicon.Lexicon>();
             services.AddTransient<SentenceValidator>();
+            
+            // Verb registry for dynamic verb discovery
+            services.AddSingleton<Syntax.Registry.VerbRegistry>();
 
             // Sentence processing
             services.AddTransient<SentenceFactory>();
@@ -81,6 +84,9 @@ namespace FluNET.Context
 
             // Variable resolution (scoped to maintain state within execution context)
             services.AddScoped<IVariableResolver, VariableResolver>();
+
+            // Execution pipeline (modular execution architecture)
+            services.AddTransient<Execution.ExecutionPipelineFactory>();
 
             // Engine (main entry point)
             services.AddTransient<Engine>();

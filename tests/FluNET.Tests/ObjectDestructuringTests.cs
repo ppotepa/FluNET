@@ -38,6 +38,7 @@ namespace FluNET.Tests
             services.AddPatternMatchers(); // Register pattern matchers (regex and string-based)
             services.AddScoped<IVariableResolver, VariableResolver>();
             services.AddScoped<SentenceExecutor>();
+            services.AddTransient<Execution.ExecutionPipelineFactory>();
 
             serviceProvider = services.BuildServiceProvider();
             scope = serviceProvider.CreateScope();

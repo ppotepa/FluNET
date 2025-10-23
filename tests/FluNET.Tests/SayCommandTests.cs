@@ -29,6 +29,8 @@ namespace FluNET.Tests
             // VariableResolver must be Scoped so Engine and SentenceExecutor share the same instance
             services.AddScoped<Variables.IVariableResolver, Variables.VariableResolver>();
             services.AddTransient<SentenceExecutor>();
+                        services.AddTransient<Execution.ExecutionPipelineFactory>();
+
             services.AddTransient<Engine>();
 
             ServiceProvider provider = services.BuildServiceProvider();
