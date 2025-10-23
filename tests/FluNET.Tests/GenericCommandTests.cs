@@ -632,17 +632,25 @@ namespace FluNET.Tests
             SendEmail sendEmailInstance = new("Test message", "user@example.com");
 
             // Act
+            var originalOut = Console.Out;
             using (StringWriter sw = new())
             {
-                Console.SetOut(sw);
-                string result = sendEmailInstance.Invoke();
-
-                // Assert
-                Assert.Multiple(() =>
+                try
                 {
-                    Assert.That(result, Does.Contain("Email sent"));
-                    Assert.That(result, Does.Contain("user@example.com"));
-                });
+                    Console.SetOut(sw);
+                    string result = sendEmailInstance.Invoke();
+
+                    // Assert
+                    Assert.Multiple(() =>
+                    {
+                        Assert.That(result, Does.Contain("Email sent"));
+                        Assert.That(result, Does.Contain("user@example.com"));
+                    });
+                }
+                finally
+                {
+                    Console.SetOut(originalOut);
+                }
             }
         }
 
