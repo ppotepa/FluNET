@@ -1,3 +1,4 @@
+using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Prompt;
 using FluNET.Sentences;
@@ -24,19 +25,7 @@ namespace FluNET.Tests
         public void Setup()
         {
             var services = new ServiceCollection();
-
-            services.AddTransient<DiscoveryService>();
-            services.AddTransient<Tokens.TokenFactory>();
-            services.AddTransient<TokenTreeFactory>();
-            services.AddTransient<Words.WordFactory>();
-            services.AddTransient<Lexicon.Lexicon>();
-            services.AddTransient<SentenceValidator>();
-            services.AddTransient<SentenceFactory>();
-            services.AddPatternMatchers(); // Register pattern matchers (regex and string-based)
-            services.AddScoped<Variables.IVariableResolver, Variables.VariableResolver>();
-            services.AddTransient<SentenceExecutor>();
-            services.AddTransient<Execution.ExecutionPipelineFactory>();
-            services.AddTransient<Engine>();
+            FluNetContext.ConfigureDefaultServices(services);
 
             provider = services.BuildServiceProvider();
             scope = provider.CreateScope();

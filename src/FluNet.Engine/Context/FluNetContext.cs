@@ -71,7 +71,7 @@ namespace FluNET.Context
             // Lexicon and validation
             services.AddTransient<Lexicon.Lexicon>();
             services.AddTransient<SentenceValidator>();
-            
+
             // Verb registry for dynamic verb discovery
             services.AddSingleton<Syntax.Registry.VerbRegistry>();
 

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using FluNET;
+using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Lexicon;
 using FluNET.Prompt;
@@ -30,18 +31,7 @@ namespace FluNET.IntegrationTests
         {
             // Setup DI container with proper scope management
             ServiceCollection services = new();
-            services.AddTransient<DiscoveryService>();
-            services.AddScoped<Engine>();
-            services.AddScoped<TokenTreeFactory>();
-            services.AddScoped<TokenFactory>();
-            services.AddScoped<Lexicon.Lexicon>();
-            services.AddScoped<WordFactory>();
-            services.AddScoped<SentenceValidator>();
-            services.AddScoped<SentenceFactory>();
-            services.AddPatternMatchers(); // Register pattern matchers (regex and string-based)
-            services.AddScoped<IVariableResolver, VariableResolver>();
-            services.AddScoped<SentenceExecutor>();
-            services.AddTransient<Execution.ExecutionPipelineFactory>();
+            FluNetContext.ConfigureDefaultServices(services);
 
             serviceProvider = services.BuildServiceProvider();
             scope = serviceProvider.CreateScope();

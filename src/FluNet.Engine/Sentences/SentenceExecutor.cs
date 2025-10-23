@@ -2,6 +2,7 @@ using FluNET.Keywords;
 using FluNET.Lexicon;
 using FluNET.Syntax.Core;
 using FluNET.Syntax.Nouns;
+using FluNET.Syntax.Registry;
 using FluNET.Syntax.Verbs;
 using FluNET.Variables;
 using FluNET.Words;
@@ -11,10 +12,21 @@ namespace FluNET.Sentences
 {
     /// <summary>
     /// Executes a sentence by discovering and invoking verb implementations.
-    /// Uses IWord navigation and is/as operators - NO REFLECTION, NO SWITCH CASES.
+    /// Uses minimal reflection - only for type activation.
     /// </summary>
-    public class SentenceExecutor(IVariableResolver variableResolver, Lexicon.Lexicon lexicon)
+    public class SentenceExecutor
     {
+        private readonly IVariableResolver _variableResolver;
+        private readonly Lexicon.Lexicon _lexicon;
+        private readonly VerbRegistry _verbRegistry;
+
+        public SentenceExecutor(IVariableResolver variableResolver, Lexicon.Lexicon lexicon, VerbRegistry verbRegistry)
+        {
+            _variableResolver = variableResolver;
+            _lexicon = lexicon;
+            _verbRegistry = verbRegistry;
+        }
+
         /// <summary>
         /// Execute a sentence and return the final result.
         /// Uses IWord.Find<T>() navigation and is/as operators only.
@@ -47,7 +59,7 @@ namespace FluNET.Sentences
             System.Diagnostics.Debug.WriteLine($"  Determined verb base type: {verbBaseType.Name}");
 
             // Get all implementations of this verb type from Lexicon
-            IEnumerable<VerbUsage> implementations = lexicon[verbBaseType];
+            IEnumerable<VerbUsage> implementations = _lexicon[verbBaseType];
             if (!implementations.Any())
             {
                 System.Diagnostics.Debug.WriteLine($"No implementations found for verb type: {verbBaseType.Name}");
@@ -521,7 +533,7 @@ namespace FluNET.Sentences
                 // Variables MUST be resolved from context
                 // Remove trailing period but keep brackets for resolver: [greeting]. -> [greeting]
                 string varReference = varWord.VariableReference.TrimEnd('.');
-                var resolved = variableResolver.Resolve<object>(varReference);
+                var resolved = _variableResolver.Resolve<object>(varReference);
 
                 if (resolved == null)
                 {

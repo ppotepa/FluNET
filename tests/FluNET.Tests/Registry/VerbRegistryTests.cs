@@ -86,7 +86,7 @@ namespace FluNET.Tests.Registry
             Assert.That(allVerbs, Does.Contain("GET"));
             Assert.That(allVerbs, Does.Contain("SAVE"));
             Assert.That(allVerbs, Does.Contain("SAY"));
-            
+
             // Synonyms should also be registered
             Assert.That(allVerbs, Does.Contain("FETCH"));
         }
@@ -111,7 +111,7 @@ namespace FluNET.Tests.Registry
 
             // Assert
             var foundVerbs = discoveries.Where(d => d.Found).ToList();
-            Assert.That(foundVerbs.Count, Is.GreaterThan(5), 
+            Assert.That(foundVerbs.Count, Is.GreaterThan(5),
                 $"Should discover most common verbs. Found: {string.Join(", ", foundVerbs.Select(v => v.Name))}");
         }
     }
