@@ -16,13 +16,13 @@
 - [x] Standardize naming to **FluNET** everywhere (all caps NET - project standard)
   - [x] Enforce via .editorconfig naming rules
   - [x] Document in NAMING-CONVENTION.md
-  - [ ] Update NuGet package IDs in all .csproj files
-  - [ ] Update solution file references
+  - [x] Update NuGet package IDs in all .csproj files
+  - [x] Update RootNamespace and AssemblyName in all projects
 
-- [ ] Delete `FluNET.Syntax` project
-  - [ ] Move `UserPrompt` type into Engine as `Input/` or drop entirely
-  - [ ] Remove project references
-  - [ ] Update solution file
+- [x] Delete `FluNET.Syntax` project
+  - [x] UserPrompt type was empty and unused - dropped entirely
+  - [x] No project references to remove (unused project)
+  - [x] Project already not in solution file
 
 ### Day 2-3: Add Tests
 - [ ] Create `FluNet.Tests` project (xUnit)
