@@ -17,9 +17,9 @@ namespace FluNET.Tests
         [SetUp]
         public void Setup()
         {
-            // Use FluNetContext for consistent service registration
+            // Use FluNETContext for consistent service registration
             IServiceCollection services = new ServiceCollection();
-            FluNetContext.ConfigureDefaultServices(services);
+            FluNETContext.ConfigureDefaultServices(services);
 
             ServiceProvider provider = services.BuildServiceProvider();
             scope = provider.CreateScope();

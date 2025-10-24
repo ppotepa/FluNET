@@ -15,7 +15,7 @@ namespace FluNET.Tests
     [TestFixture]
     public class DownloadIntegrationTests
     {
-        private FluNetContext _context = null!;
+        private FluNETContext _context = null!;
         private Engine engine = null!;
         private string testDirectory = null!;
         private const string BaseUrl = "http://localhost:8765/api/testfiles/";
@@ -23,7 +23,7 @@ namespace FluNET.Tests
         [SetUp]
         public void Setup()
         {
-            _context = FluNetContext.Create();
+            _context = FluNETContext.Create();
             engine = _context.GetEngine();
 
             // Create test directory

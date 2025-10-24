@@ -15,7 +15,7 @@ namespace FluNET.Tests
     [TestFixture]
     public class ThenClauseTests
     {
-        private FluNetContext? _context;
+        private FluNETContext? _context;
         private Engine? engine;
         private string? testDirectory;
 
@@ -26,7 +26,7 @@ namespace FluNET.Tests
             testDirectory = Path.Combine(Path.GetTempPath(), $"FluNET_ThenClause_{Guid.NewGuid()}");
             Directory.CreateDirectory(testDirectory);
 
-            _context = FluNetContext.Create();
+            _context = FluNETContext.Create();
             engine = _context.GetEngine();
         }
 

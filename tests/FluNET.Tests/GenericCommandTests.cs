@@ -15,14 +15,14 @@ namespace FluNET.Tests
     [TestFixture]
     public class GenericCommandTests
     {
-        private FluNetContext _context = null!;
+        private FluNETContext _context = null!;
         private Engine engine = null!;
         private string testDirectory = null!;
 
         [SetUp]
         public void Setup()
         {
-            _context = FluNetContext.Create();
+            _context = FluNETContext.Create();
             engine = _context.GetEngine();
 
             // Create test directory

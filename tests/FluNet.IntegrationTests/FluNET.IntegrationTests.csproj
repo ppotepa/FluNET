@@ -1,6 +1,8 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
+    <RootNamespace>FluNET.IntegrationTests</RootNamespace>
+    <AssemblyName>FluNET.IntegrationTests</AssemblyName>
     <TargetFramework>net8.0</TargetFramework>
     <LangVersion>latest</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -22,7 +24,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FluNet.Engine\FluNET.csproj" />
+    <ProjectReference Include="..\..\src\FluNET.Engine\FluNET.csproj" />
   </ItemGroup>
 
 </Project>

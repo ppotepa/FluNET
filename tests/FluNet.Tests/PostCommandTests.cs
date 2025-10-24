@@ -25,7 +25,7 @@ namespace FluNET.Tests
         public void Setup()
         {
             var services = new ServiceCollection();
-            FluNetContext.ConfigureDefaultServices(services);
+            FluNETContext.ConfigureDefaultServices(services);
 
             provider = services.BuildServiceProvider();
             scope = provider.CreateScope();

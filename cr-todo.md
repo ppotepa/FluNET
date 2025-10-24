@@ -13,11 +13,11 @@
   - [x] Fix Engine (8.0.0) vs CLI (9.0.10) mismatch
   - [x] Create `Directory.Build.props` to pin versions centrally
 
-- [ ] Standardize naming to **FluNet** everywhere
-  - [ ] Rename folder `FluNet.Engine` → consistent casing
-  - [ ] Update all project files to use `FluNet.*` naming
-  - [ ] Update all namespaces from `FluNET.*` to `FluNet.*`
-  - [ ] Update NuGet package IDs
+- [x] Standardize naming to **FluNET** everywhere (all caps NET - project standard)
+  - [x] Enforce via .editorconfig naming rules
+  - [x] Document in NAMING-CONVENTION.md
+  - [ ] Update NuGet package IDs in all .csproj files
+  - [ ] Update solution file references
 
 - [ ] Delete `FluNET.Syntax` project
   - [ ] Move `UserPrompt` type into Engine as `Input/` or drop entirely

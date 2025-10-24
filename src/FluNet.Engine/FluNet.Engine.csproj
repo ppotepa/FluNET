@@ -1,6 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>`n    <RootNamespace>FluNet</RootNamespace>
+  <PropertyGroup>
+    <RootNamespace>FluNET</RootNamespace>
+    <AssemblyName>FluNET.Engine</AssemblyName>
+    <PackageId>FluNET.Engine</PackageId>
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
