@@ -41,6 +41,11 @@ namespace FluNET.Syntax.Verbs
         public string Text => "TRANSFORM";
 
         /// <summary>
+        /// Gets the synonyms for this verb.
+        /// </summary>
+        public virtual string[] Synonyms => Array.Empty<string>();
+
+        /// <summary>
         /// Gets the action function that performs the transformation.
         /// </summary>
         public abstract Func<TUsing, TWhat> Act { get; }

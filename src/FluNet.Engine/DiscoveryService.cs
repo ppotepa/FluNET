@@ -1,4 +1,5 @@
-﻿using FluNET.Syntax.Core;
+﻿using FluNET.Keywords;
+using FluNET.Syntax.Core;
 using System.Diagnostics.CodeAnalysis;
 
 namespace FluNET
@@ -8,6 +9,12 @@ namespace FluNET
         private List<Type> _allWords;
         private List<Type>? _verbs;
         private List<Type>? _nouns;
+
+        // Dictionary mapping verb names (including synonyms) to their base abstract classes
+        private Dictionary<string, Type>? _verbBaseTypes;
+
+        // Dictionary mapping concrete verb types to their base abstract classes
+        private Dictionary<Type, Type>? _concreteToBaseMapping;
 
         public DiscoveryService()
         {
@@ -59,6 +66,94 @@ namespace FluNET
         }
 
         /// <summary>
+        /// Gets the base abstract class type for a verb word
+        /// </summary>
+        public Type? GetVerbBaseTypeByWord(IWord word)
+        {
+            if (word == null) return null;
+            if (word is not IKeyword keyword) return null;
+
+            InitializeVerbMappings();
+
+            return _verbBaseTypes!.TryGetValue(keyword.Text.ToUpperInvariant(), out var baseType)
+                ? baseType
+                : null;
+        }
+
+        /// <summary>
+        /// Gets the base abstract class type for a concrete verb type
+        /// </summary>
+        public Type? GetBaseTypeForConcrete(Type concreteType)
+        {
+            InitializeVerbMappings();
+
+            return _concreteToBaseMapping!.TryGetValue(concreteType, out var baseType)
+                ? baseType
+                : null;
+        }
+
+        /// <summary>
+        /// Initializes the verb mappings dictionaries if not already initialized
+        /// </summary>
+        private void InitializeVerbMappings()
+        {
+            if (_verbBaseTypes != null && _concreteToBaseMapping != null)
+                return;
+
+            _verbBaseTypes = new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+            _concreteToBaseMapping = new Dictionary<Type, Type>();
+
+            // Process each concrete verb
+            foreach (var verbType in Verbs)
+            {
+                // Skip abstract classes
+                if (verbType.IsAbstract)
+                    continue;
+
+                // Find the base abstract class in the hierarchy
+                Type? baseType = verbType.BaseType;
+                while (baseType != null && !baseType.IsAbstract && baseType != typeof(object))
+                {
+                    baseType = baseType.BaseType;
+                }
+
+                // Skip if no proper base class found
+                if (baseType == null || baseType == typeof(object))
+                    continue;
+
+                // Convert to generic type definition for Lexicon compatibility
+                Type baseTypeKey = baseType.IsGenericType ? baseType.GetGenericTypeDefinition() : baseType;
+
+                // Map the concrete type to its base abstract class
+                _concreteToBaseMapping[verbType] = baseTypeKey;
+
+                // Create an instance to get the verb name and synonyms
+                try
+                {
+                    if (Activator.CreateInstance(verbType) is IVerb verb)
+                    {
+                        // Register the main verb name
+                        string mainVerbName = verb.Text.ToUpperInvariant();
+                        _verbBaseTypes[mainVerbName] = baseTypeKey;
+
+                        // Register all synonyms
+                        if (verb.Synonyms != null)
+                        {
+                            foreach (string synonym in verb.Synonyms)
+                            {
+                                _verbBaseTypes[synonym.ToUpperInvariant()] = baseTypeKey;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                    // Skip verbs that can't be instantiated with parameterless constructor
+                }
+            }
+        }
+
+        /// <summary>
         /// Clears the discovery cache and re-discovers all word types.
         /// This forces a fresh assembly scan, useful for test isolation.
         /// </summary>
@@ -74,6 +169,8 @@ namespace FluNET
 
             _verbs = null;
             _nouns = null;
+            _verbBaseTypes = null;
+            _concreteToBaseMapping = null;
         }
 
         /// <summary>

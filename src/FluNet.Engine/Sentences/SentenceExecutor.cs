@@ -19,12 +19,14 @@ namespace FluNET.Sentences
         private readonly IVariableResolver _variableResolver;
         private readonly Lexicon.Lexicon _lexicon;
         private readonly VerbRegistry _verbRegistry;
+        private readonly DiscoveryService _discoveryService;
 
-        public SentenceExecutor(IVariableResolver variableResolver, Lexicon.Lexicon lexicon, VerbRegistry verbRegistry)
+        public SentenceExecutor(IVariableResolver variableResolver, Lexicon.Lexicon lexicon, VerbRegistry verbRegistry, DiscoveryService discoveryService)
         {
             _variableResolver = variableResolver;
             _lexicon = lexicon;
             _verbRegistry = verbRegistry;
+            _discoveryService = discoveryService;
         }
 
         /// <summary>
@@ -86,96 +88,24 @@ namespace FluNET.Sentences
         }
 
         /// <summary>
-        /// Determine verb base type by checking what interfaces the verb implements.
-        /// This is determined from the verb instance's interface implementation, not text matching.
+        /// Determine verb base type using DiscoveryService dictionary lookup.
+        /// This supports all verb names and synonyms automatically.
         /// </summary>
-        private static Type? DetermineVerbBaseType(IWord root)
+        private Type? DetermineVerbBaseType(IWord root)
         {
-            if (root is not IVerb verb)
-            {
-                return null;
-            }
-
-            Type verbType = verb.GetType();
-            Type[] interfaces = verbType.GetInterfaces();
-
-            // Check if verb implements IFrom and ITo (both) - indicates Download pattern
-            bool hasFrom = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IFrom<>));
-            bool hasTo = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ITo<>));
-            bool hasWhat = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IWhat<>));
-            bool hasUsing = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IUsing<>));
-
-            if (hasFrom && hasTo)
-            {
-                // Has both FROM and TO - Download pattern
-                return typeof(Download<,,>);
-            }
-
-            if (hasFrom && !hasTo && !hasUsing)
-            {
-                // Has FROM only - could be Get, Delete, or Load
-                // Use the verb's Text property to determine which one
-                if (verb is IKeyword keyword)
-                {
-                    string verbText = keyword.Text.ToUpperInvariant();
-                    return verbText switch
-                    {
-                        "GET" => typeof(Get<,>),
-                        "DELETE" => typeof(Delete<,>),
-                        "LOAD" => typeof(Load<,>),
-                        _ => typeof(Get<,>) // Default to Get for unknown verbs with FROM
-                    };
-                }
-                return typeof(Get<,>);
-            }
-
-            if (hasTo && !hasFrom && !hasUsing)
-            {
-                // Has TO only - could be Save, Post, or Send
-                // Use the verb's Text property to determine which one
-                if (verb is IKeyword keyword)
-                {
-                    string verbText = keyword.Text.ToUpperInvariant();
-                    return verbText switch
-                    {
-                        "SAVE" => typeof(Save<,>),
-                        "POST" => typeof(Post<,>),
-                        "SEND" => typeof(Send<,>),
-                        _ => typeof(Save<,>) // Default to Save for unknown verbs with TO
-                    };
-                }
-                return typeof(Save<,>);
-            }
-
-            if (hasUsing)
-            {
-                // Has USING - Transform pattern
-                return typeof(Transform<,>);
-            }
-
-            if (hasWhat && !hasFrom && !hasTo && !hasUsing)
-            {
-                // Has only WHAT - Say pattern (no prepositions)
-                return typeof(Say<>);
-            }
-
-            return null;
+            return _discoveryService.GetVerbBaseTypeByWord(root);
         }
 
         /// <summary>
         /// Try to create a verb instance using interface detection and CanHandle pattern.
-        /// Uses the verb's interfaces to determine what parameters it needs.
+        /// Uses VerbRegistry to avoid reflection.
         /// </summary>
         private object? TryCreateVerbInstance(Type implementationType, IWord root)
         {
             try
             {
-                // Check what interfaces the verb implements to determine parameter resolution
-                Type[] interfaces = implementationType.GetInterfaces();
-                bool hasFrom = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IFrom<>));
-                bool hasTo = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(ITo<>));
-                bool hasWhat = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IWhat<>));
-                bool hasUsing = interfaces.Any(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IUsing<>));
+                // Get parameter info from VerbRegistry (cached, no reflection needed)
+                var (hasWhat, hasFrom, hasTo, hasUsing) = _verbRegistry.GetVerbParameterInfo(implementationType);
 
                 System.Diagnostics.Debug.WriteLine($"Creating {implementationType.Name}: hasWhat={hasWhat}, hasFrom={hasFrom}, hasTo={hasTo}, hasUsing={hasUsing}");
 
@@ -187,7 +117,7 @@ namespace FluNET.Sentences
                     return null;
                 }
 
-                // Find the actual constructor parameters based on verb interfaces
+                // Resolve parameters based on verb requirements
                 List<object?> constructorParams = new();
 
                 // Resolve WHAT parameter if needed
@@ -209,8 +139,8 @@ namespace FluNET.Sentences
                     From? fromKeyword = root.Find<From>();
                     object? fromParam = ResolvePrepositionParameter(root, implementationType, tempInstance, fromKeyword, "Resolve");
 
-                    // FROM is optional if the keyword isn't in the sentence (fromKeyword == null)
-                    // FROM is required if the keyword is present but has no value (fromParam == null && fromKeyword != null)
+                    // FROM is optional if the keyword isn't in the sentence
+                    // FROM is required if the keyword is present but has no value
                     if (fromParam == null && fromKeyword != null && fromKeyword.Next != null)
                     {
                         System.Diagnostics.Debug.WriteLine("    FROM keyword present but parameter resolved to null");
@@ -254,72 +184,8 @@ namespace FluNET.Sentences
                     constructorParams.Add(usingParam);
                 }
 
-                // Create the actual instance with resolved parameters
-                // We need to find the right constructor because Activator.CreateInstance
-                // can't infer types from null parameters
-                object? instance = null;
-
-                // Get constructor parameter types
-                Type[] paramTypes = new Type[constructorParams.Count];
-                for (int i = 0; i < constructorParams.Count; i++)
-                {
-                    if (constructorParams[i] != null)
-                    {
-                        paramTypes[i] = constructorParams[i]!.GetType();
-                    }
-                    else
-                    {
-                        // For null parameters, we need to infer the type from the verb's interfaces
-                        // This is complex, so let's try all constructors
-                        paramTypes[i] = typeof(object); // Placeholder
-                    }
-                }
-
-                // Try to find a matching constructor (exclude parameterless constructor - that's only for discovery)
-                ConstructorInfo[] constructors = implementationType.GetConstructors();
-
-                foreach (ConstructorInfo ctor in constructors)
-                {
-                    ParameterInfo[] ctorParams = ctor.GetParameters();
-
-                    // Skip parameterless constructor - it's only for WordFactory discovery
-                    if (ctorParams.Length == 0)
-                    {
-                        continue;
-                    }
-
-                    if (ctorParams.Length == constructorParams.Count)
-                    {
-                        // Check if parameter types are compatible
-                        bool compatible = true;
-                        for (int i = 0; i < ctorParams.Length; i++)
-                        {
-                            if (constructorParams[i] != null)
-                            {
-                                if (!ctorParams[i].ParameterType.IsAssignableFrom(constructorParams[i]!.GetType()))
-                                {
-                                    compatible = false;
-                                    break;
-                                }
-                            }
-                            // null is compatible with any reference type or nullable value type
-                        }
-
-                        if (compatible)
-                        {
-                            try
-                            {
-                                instance = ctor.Invoke(constructorParams.ToArray());
-                                break;
-                            }
-                            catch (Exception ex)
-                            {
-                                System.Diagnostics.Debug.WriteLine($"    Constructor invocation failed: {ex.Message}");
-                                continue;
-                            }
-                        }
-                    }
-                }
+                // Use VerbRegistry to create the instance (no constructor reflection needed!)
+                object? instance = _verbRegistry.CreateVerbInstance(implementationType, constructorParams.ToArray());
 
                 if (instance == null)
                 {
@@ -327,7 +193,7 @@ namespace FluNET.Sentences
                     return null;
                 }
 
-                // Validate using CanHandle method if it exists (it's on concrete verb classes, not interface)
+                // Validate using CanHandle method if it exists
                 MethodInfo? canHandleMethod = implementationType.GetMethod("CanHandle");
                 if (canHandleMethod != null)
                 {
@@ -359,34 +225,37 @@ namespace FluNET.Sentences
         /// </summary>
         private object? ResolveWhatParameter(IWord root, Type implementationType, object tempInstance)
         {
-            // Determine data flow direction based on verb semantics:
-            // **Retrieval verbs** (GET, LOAD, DOWNLOAD): WHAT is OUTPUT (where to store retrieved data)
-            //   - Pattern: "GET [result] FROM source" - [result] is target for storing data
-            //   - Pattern: "DOWNLOAD [file] FROM url TO path" - [file] is target for storing data
-            //   - Variables in WHAT should NOT be resolved (they don't exist yet)
-            //
-            // **Action verbs** (DELETE, SAVE, POST, SEND, SAY): WHAT is INPUT (data to act upon)
-            //   - Pattern: "DELETE [filepath]" - [filepath] is input value
-            //   - Pattern: "SAVE [data] TO file" - [data] is input value
-            //   - Variables in WHAT SHOULD be resolved (they must exist)
-            //
-            // Detection: Check if verb is Get, Load, or Download base class
+            // Determine if this is a retrieval verb (GET/LOAD/DOWNLOAD) where WHAT is OUTPUT
+            // versus an action verb where WHAT is INPUT
             Type? baseType = implementationType.BaseType;
             bool isRetrievalVerb = baseType != null &&
                 (baseType.Name.StartsWith("Get") || baseType.Name.StartsWith("Load") || baseType.Name.StartsWith("Download"));
 
             System.Diagnostics.Debug.WriteLine($"    Verb base type: {baseType?.Name}, isRetrievalVerb: {isRetrievalVerb}");
 
-            // Get all words after the verb until we hit a preposition or end
+            // Collect words until we hit a preposition
+            string whatString = CollectWordsUntilPreposition(root.Next, isRetrievalVerb);
+            System.Diagnostics.Debug.WriteLine($"    Resolved WHAT: '{whatString}' (isRetrievalVerb={isRetrievalVerb})");
+
+            // Try to call ResolveWhat method if it exists on the verb
+            return TryInvokeResolveMethod(implementationType, tempInstance, "ResolveWhat", typeof(string), whatString) ?? whatString;
+        }
+
+        /// <summary>
+        /// Collects words from the sentence until a preposition is encountered.
+        /// For retrieval verbs, keeps variable names unresolve (output targets).
+        /// For action verbs, resolves variables to their values (inputs).
+        /// </summary>
+        private string CollectWordsUntilPreposition(IWord? startWord, bool isRetrievalVerb)
+        {
             List<string> parts = new();
-            IWord? currentWord = root.Next;
+            IWord? currentWord = startWord;
 
             while (currentWord != null && !(currentWord is From || currentWord is To || currentWord is Using))
             {
                 // For retrieval verbs, if WHAT is a variable, don't resolve it - it's an output target
                 if (isRetrievalVerb && currentWord is Words.VariableWord varWord)
                 {
-                    // Keep variable name without brackets for later resolution
                     string varName = varWord.VariableReference.TrimStart('[').TrimEnd(']').TrimEnd('.');
                     parts.Add(varName);
                     System.Diagnostics.Debug.WriteLine($"    Output variable detected: [{varName}] (not resolving - will store result here)");
@@ -419,18 +288,7 @@ namespace FluNET.Sentences
                 currentWord = currentWord.Next;
             }
 
-            string whatString = string.Join(" ", parts);
-            System.Diagnostics.Debug.WriteLine($"    Resolved WHAT: '{whatString}' (isRetrievalVerb={isRetrievalVerb})");
-
-            // Try to call ResolveWhat method if it exists on the verb
-            MethodInfo? resolveMethod = implementationType.GetMethod("ResolveWhat");
-            if (resolveMethod != null)
-            {
-                return resolveMethod.Invoke(tempInstance, new object[] { whatString });
-            }
-
-            // Default: return the string itself
-            return whatString;
+            return string.Join(" ", parts);
         }
 
         /// <summary>
@@ -446,27 +304,22 @@ namespace FluNET.Sentences
             IWord valueWord = preposition.Next;
 
             // Try typed overloads first (Resolve(ReferenceWord), Resolve(VariableWord))
-            // This allows verbs to handle special word types differently
             if (valueWord is ReferenceWord refWord)
             {
-                // Try Resolve(ReferenceWord) overload
-                MethodInfo? refResolveMethod = implementationType.GetMethod(resolveMethodName, new[] { typeof(ReferenceWord) });
-                if (refResolveMethod != null)
+                object? result = TryInvokeResolveMethod(implementationType, tempInstance, resolveMethodName, typeof(ReferenceWord), refWord);
+                if (result != null)
                 {
-                    object? result = refResolveMethod.Invoke(tempInstance, new object[] { refWord });
-                    System.Diagnostics.Debug.WriteLine($"    {resolveMethodName}(ReferenceWord) result: {result?.GetType().Name ?? "null"}");
+                    System.Diagnostics.Debug.WriteLine($"    {resolveMethodName}(ReferenceWord) result: {result.GetType().Name}");
                     return result;
                 }
             }
 
             if (valueWord is VariableWord varWord)
             {
-                // Try Resolve(VariableWord) overload
-                MethodInfo? varResolveMethod = implementationType.GetMethod(resolveMethodName, new[] { typeof(VariableWord) });
-                if (varResolveMethod != null)
+                object? result = TryInvokeResolveMethod(implementationType, tempInstance, resolveMethodName, typeof(VariableWord), varWord);
+                if (result != null)
                 {
-                    object? result = varResolveMethod.Invoke(tempInstance, new object[] { varWord });
-                    System.Diagnostics.Debug.WriteLine($"    {resolveMethodName}(VariableWord) result: {result?.GetType().Name ?? "null"}");
+                    System.Diagnostics.Debug.WriteLine($"    {resolveMethodName}(VariableWord) result: {result.GetType().Name}");
                     return result;
                 }
             }
@@ -476,17 +329,25 @@ namespace FluNET.Sentences
             string valueString = valueObj?.ToString() ?? "";
             System.Diagnostics.Debug.WriteLine($"    Resolved {resolveMethodName} input: '{valueString}'");
 
-            // Try to call the resolve method (Resolve, ResolveTo, ResolveUsing)
-            MethodInfo? resolveMethod = implementationType.GetMethod(resolveMethodName, new[] { typeof(string) });
-            if (resolveMethod != null)
+            object? stringResult = TryInvokeResolveMethod(implementationType, tempInstance, resolveMethodName, typeof(string), valueString);
+            if (stringResult != null)
             {
-                object? result = resolveMethod.Invoke(tempInstance, new object[] { valueString });
-                System.Diagnostics.Debug.WriteLine($"    {resolveMethodName} result: {result?.GetType().Name ?? "null"}");
-                return result;
+                System.Diagnostics.Debug.WriteLine($"    {resolveMethodName} result: {stringResult.GetType().Name}");
+                return stringResult;
             }
 
             // Fallback: return the string value
             return valueString;
+        }
+
+        /// <summary>
+        /// Attempts to invoke a resolve method with the given parameter type.
+        /// Returns null if the method doesn't exist.
+        /// </summary>
+        private static object? TryInvokeResolveMethod(Type implementationType, object tempInstance, string methodName, Type parameterType, object parameter)
+        {
+            MethodInfo? method = implementationType.GetMethod(methodName, new[] { parameterType });
+            return method?.Invoke(tempInstance, new object[] { parameter });
         }
 
         /// <summary>
