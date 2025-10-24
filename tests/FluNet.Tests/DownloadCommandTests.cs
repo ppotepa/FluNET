@@ -14,7 +14,7 @@ namespace FluNET.Tests
     [TestFixture]
     public class DownloadCommandTests
     {
-        private FluNetContext _context = null!;
+        private FluNETContext _context = null!;
         private Engine engine = null!;
         private string testDirectory = null!;
         private string testServerUrl = null!;
@@ -22,7 +22,7 @@ namespace FluNET.Tests
         [SetUp]
         public void Setup()
         {
-            _context = FluNetContext.Create();
+            _context = FluNETContext.Create();
             engine = _context.GetEngine();
 
             // Create test directory

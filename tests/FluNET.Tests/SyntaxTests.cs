@@ -14,13 +14,13 @@ namespace FluNET.Tests
     [TestFixture]
     public class SyntaxTests
     {
-        private FluNetContext _context = null!;
+        private FluNETContext _context = null!;
         private Engine engine = null!;
 
         [SetUp]
         public void Setup()
         {
-            _context = FluNetContext.Create();
+            _context = FluNETContext.Create();
             engine = _context.GetEngine();
         }
 

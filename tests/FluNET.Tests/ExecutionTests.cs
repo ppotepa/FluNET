@@ -11,14 +11,14 @@ namespace FluNET.Tests
     [TestFixture]
     public class ExecutionTests
     {
-        private FluNetContext _context = null!;
+        private FluNETContext _context = null!;
         private Engine _engine = null!;
         private IVariableResolver _variableResolver = null!;
 
         [SetUp]
         public void Setup()
         {
-            _context = FluNetContext.Create();
+            _context = FluNETContext.Create();
             _engine = _context.GetEngine();
             _variableResolver = _context.GetService<IVariableResolver>();
         }

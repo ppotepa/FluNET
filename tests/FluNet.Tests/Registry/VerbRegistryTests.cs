@@ -8,13 +8,13 @@ namespace FluNET.Tests.Registry
     [TestFixture]
     public class VerbRegistryTests
     {
-        private FluNetContext? _context;
+        private FluNETContext? _context;
         private VerbRegistry? _registry;
 
         [SetUp]
         public void Setup()
         {
-            _context = FluNetContext.Create();
+            _context = FluNETContext.Create();
             _registry = _context.GetService<VerbRegistry>();
         }
 

@@ -31,7 +31,7 @@ namespace FluNET.IntegrationTests
         {
             // Setup DI container with proper scope management
             ServiceCollection services = new();
-            FluNetContext.ConfigureDefaultServices(services);
+            FluNETContext.ConfigureDefaultServices(services);
 
             serviceProvider = services.BuildServiceProvider();
             scope = serviceProvider.CreateScope();

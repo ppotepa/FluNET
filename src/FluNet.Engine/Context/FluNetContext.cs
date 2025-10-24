@@ -14,9 +14,9 @@ namespace FluNET.Context
     /// Provides a single source of truth for dependency injection setup across
     /// CLI applications, web applications, and tests.
     /// </summary>
-    public class FluNetContext : IDisposable
+    public class FluNETContext : IDisposable
     {
-        private static FluNetContext? _defaultContext;
+        private static FluNETContext? _defaultContext;
         private readonly ServiceProvider _serviceProvider;
         private readonly IServiceScope? _scope;
 
@@ -24,9 +24,9 @@ namespace FluNET.Context
         /// Gets the global default context with standard configuration.
         /// Lazily creates the context on first access.
         /// </summary>
-        public static FluNetContext Default => _defaultContext ??= Create();
+        public static FluNETContext Default => _defaultContext ??= Create();
 
-        private FluNetContext(ServiceProvider serviceProvider, bool createScope = true)
+        private FluNETContext(ServiceProvider serviceProvider, bool createScope = true)
         {
             _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
             if (createScope)
@@ -36,18 +36,18 @@ namespace FluNET.Context
         }
 
         /// <summary>
-        /// Creates a new FluNetContext with standard configuration.
+        /// Creates a new FluNETContext with standard configuration.
         /// Optionally allows additional service registration.
         /// </summary>
         /// <param name="configureServices">Optional callback to add or override services.
         /// Called AFTER default services are registered, so you can override defaults.</param>
-        /// <returns>A new FluNetContext instance</returns>
-        public static FluNetContext Create(Action<IServiceCollection>? configureServices = null)
+        /// <returns>A new FluNETContext instance</returns>
+        public static FluNETContext Create(Action<IServiceCollection>? configureServices = null)
         {
             var services = new ServiceCollection();
             ConfigureDefaultServices(services);
             configureServices?.Invoke(services);
-            return new FluNetContext(services.BuildServiceProvider());
+            return new FluNETContext(services.BuildServiceProvider());
         }
 
         /// <summary>

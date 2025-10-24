@@ -28,7 +28,7 @@ namespace FluNET.Tests
         {
             // Setup DI container
             ServiceCollection services = new();
-            FluNetContext.ConfigureDefaultServices(services);
+            FluNETContext.ConfigureDefaultServices(services);
 
             serviceProvider = services.BuildServiceProvider();
             scope = serviceProvider.CreateScope();
