@@ -123,6 +123,16 @@ public class CompressFile : Compress<byte[], string>
 
 Now you can write: `COMPRESS [data] TO archive.gz`
 
+### Growing Your Own Verbs
+
+To extend the language in your own domain:
+- Define a verb class implementing `IVerb<,>` plus the noun interfaces you need (`IWhat<T>`, `IFrom<T>`, `ITo<T>`, etc.).
+- Implement `Validate` to declare which words/positions are allowed.
+- Implement `Resolve` to turn raw text into typed values.
+- Register the verb so `DiscoveryService` can find it.
+- Document an example sentence in your README so others can reuse it.
+
+
 ## Connection to Natural Language
 
 The design deliberately parallels linguistic concepts:
@@ -142,3 +152,19 @@ The project achieves 88.8% test coverage (293/330 tests passing). The remaining 
 ## Why This Matters
 
 This experiment explores whether natural language structures can make programming more intuitive without sacrificing type safety or performance. It's a study in domain-specific languages, demonstrating how reflection, generics, and careful interface design can create a bridge between human expression and machine execution.
+
+## Recommended GitHub Topics
+
+Apply the following Topics (via Settings → Topics) to highlight FluNET's unique combination of linguistic structure, DSL design, and .NET tooling. Each tag signals a searchable angle that aligns with how the project currently works:
+
+- `natural-language-programming` — signals the primary goal of expressing code as English-like sentences.
+- `domain-specific-language` — shows that FluNET exposes a custom grammar and vocabulary.
+- `dsl` — reinforces that FluNET is a domain-specific language and not a general-purpose compiler.
+- `csharp` — ties the project to its native language so C# developers can discover it.
+- `dotnet` — connects to the broader .NET ecosystem.
+- `command-interpreter` — highlights the syntax parsing and execution pipeline.
+- `tokenization` — points at the tokenizer, TokenTree, and token factories that underpin sentence parsing.
+- `reflection` — reflects the use of runtime discovery, verbs, and word metadata.
+- `experimental` — flags that this is a research/training project exploring a novel interface.
+
+Add more topics as new capabilities emerge (e.g., `file-processing`, `compression`, or `cli-tools`) so GitHub search keeps reflecting the repo's growth.
