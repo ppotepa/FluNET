@@ -39,35 +39,14 @@ All of this is orchestrated by the `Engine` using an `ExecutionPipeline` compose
 
 Keywords are first‑class types implementing `IKeyword`/`IWord` (for example `Get`, `Save`, `Post`, `Delete`, `Load`, `Send`, `Transform`). They define the textual surface of verbs (e.g. `"GET"`) and participate in validation. `DiscoveryService` scans assemblies to discover available keywords and verbs.
 
-## Adding your own verbs
+## Evolving the language
 
-Minimal flow for adding a custom verb:
+To grow the language, you extend the vocabulary and verbs rather than touching the core engine:
 
-1. Implement a verb:
-
-   ```csharp
-   public sealed class CompressText : IVerb<string, string>,
-       IWhat<string>, IFrom<string>
-   {
-       public string What { get; private set; } = string.Empty;
-       public string From { get; private set; } = string.Empty;
-
-       public Func<string, string> Act => path =>
-           Compress(File.ReadAllText(path));
-
-       public string? Resolve(string value) => value;
-       public string Invoke() => Act(From);
-   }
-   ```
-
-2. Add a keyword class (e.g. `Compress : IKeyword, IWord`) if you want a new verb name.
-3. Make sure the assembly containing your verb/keyword is loaded so `DiscoveryService` can find it.
-
-After that you can write sentences like:
-
-```text
-COMPRESS [output] FROM input.txt
-```
+1. **Add keywords** – create `IKeyword`/`IWord` types for new verbs or prepositions (e.g. `Compress`, `Using`).
+2. **Implement verbs** – add `IVerb<,>` implementations that model real actions in your domain, plus `IWhat<T>`, `IFrom<T>`, `ITo<T>` etc. as needed.
+3. **Load assemblies** – ensure assemblies with your keywords/verbs are loaded so `DiscoveryService` can discover them.
+4. **Document usage** – add example sentences and tests so the new constructs stay stable as the engine evolves.
 
 ## License
 
