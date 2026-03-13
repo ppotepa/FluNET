@@ -1,8 +1,11 @@
 # FluNET
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+
 **Author:** Paweł Potępa
 
-FluNET is an experimental C#/.NET engine for writing small programs as English‑like commands instead of method calls. It focuses on language design, internal DSLs and metaprogramming, not on being a full general‑purpose language.
+FluNET is an experimental C#/.NET engine for expressing small programs as English‑like commands instead of method calls. It focuses on language design, internal DSLs, and metaprogramming rather than being a full general‑purpose language.
 
 ## Example
 
@@ -24,30 +27,48 @@ var data = await httpClient.GetAsync("https://api.example.com");
 
 Pipeline:
 
-1. **Tokenization** – raw input is split into typed tokens (words, variables `[x]`, references like `file.txt`).
-2. **TokenTree** – tokens are arranged into a small AST‑like structure representing the sentence.
-3. **Verb resolution** – the engine finds a verb matching the root token and expected arguments.
-4. **Execution** – a strongly‑typed verb object is created and invoked.
+1. **Tokenization** – raw input is split into `RawToken` and `Token` objects (`TokenFactory`).
+2. **TokenTree** – tokens are arranged into a small AST‑like structure.
+3. **Sentence building** – `SentenceFactory` + `DiscoveryService` resolve verbs and arguments.
+4. **Validation** – `SentenceValidator` checks that the sentence is syntactically valid.
+5. **Execution** – `SentenceExecutor` runs a strongly‑typed verb instance.
 
-## Core concepts
+All of this is orchestrated by the `Engine` using an `ExecutionPipeline` composed of small `IExecutionStep` processors (parse, validate, execute, error handling, etc.).
 
-- **Verbs** implement a generic interface:
+## Keywords
 
-  ```csharp
-  public interface IVerb<TWhat, TFrom> : IVerb
-  {
-      Func<TFrom, TWhat> Act { get; }
-      TFrom? Resolve(string value);
-      TWhat Invoke();
-  }
-  ```
+Keywords are first‑class types implementing `IKeyword`/`IWord` (for example `Get`, `Save`, `Post`, `Delete`, `Load`, `Send`, `Transform`). They define the textual surface of verbs (e.g. `"GET"`) and participate in validation. `DiscoveryService` scans assemblies to discover available keywords and verbs.
 
-- **Tokens & TokenTree** capture the structure of a command in a simple AST.
-- **DiscoveryService** uses reflection to find available verbs and their "grammar".
-- **SentenceExecutor** builds and runs verb instances from the TokenTree.
+## Adding your own verbs
 
-## Status
+Minimal flow for adding a custom verb:
 
-- Target runtime: **.NET / C#**
-- Focus: experiments with natural‑language‑inspired syntax, type safety and reflection‑based discovery.
-- Test coverage is high; remaining gaps are mostly around test infrastructure, not core engine logic.
+1. Implement a verb:
+
+   ```csharp
+   public sealed class CompressText : IVerb<string, string>,
+       IWhat<string>, IFrom<string>
+   {
+       public string What { get; private set; } = string.Empty;
+       public string From { get; private set; } = string.Empty;
+
+       public Func<string, string> Act => path =>
+           Compress(File.ReadAllText(path));
+
+       public string? Resolve(string value) => value;
+       public string Invoke() => Act(From);
+   }
+   ```
+
+2. Add a keyword class (e.g. `Compress : IKeyword, IWord`) if you want a new verb name.
+3. Make sure the assembly containing your verb/keyword is loaded so `DiscoveryService` can find it.
+
+After that you can write sentences like:
+
+```text
+COMPRESS [output] FROM input.txt
+```
+
+## License
+
+This project is licensed under the [MIT License](LICENSE).
