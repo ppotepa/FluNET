@@ -76,6 +76,7 @@ GET [left] FROM {a.txt} AND GET [right] FROM {b.txt} THEN SAY [left] [right].
 ## Embedding
 
 ```csharp
+using FluNET.Compilation;
 using FluNET.Context;
 using FluNET.Execution;
 using FluNET.Prompt;

@@ -19,6 +19,7 @@ public sealed class SemanticProgramValidator(LanguageSnapshot language)
         {
             ValidateRegistration(command, diagnostics);
             ValidateMarkers(command, diagnostics);
+            ValidateQualifierUsage(command, diagnostics);
             ValidateSlots(command, diagnostics);
         }
 
@@ -77,6 +78,39 @@ public sealed class SemanticProgramValidator(LanguageSnapshot language)
                 $"{command.Command.Name}.",
                 SourceSpan.FromBounds(first.Keyword!.Start, last.Span.End));
         }
+    }
+
+    private static void ValidateQualifierUsage(BoundCommand command, DiagnosticBag diagnostics)
+    {
+        ClauseSyntax subject = command.Syntax.Clauses.First(clause =>
+            clause.Kind == PromptClauseKind.Subject);
+        if (subject.Values.Count != 1)
+        {
+            return;
+        }
+
+        PromptToken token = subject.Values[0];
+        bool isQualifier = token.Kind == PromptTokenKind.Word &&
+            command.Frame.Qualifiers.Contains(token.Text, StringComparer.OrdinalIgnoreCase);
+        if (!isQualifier)
+        {
+            return;
+        }
+
+        // LOAD historically accepts a lone TEXT/CONFIG-like token as the output
+        // target while also using it to select the frame. Preserve only that
+        // compatibility construction; other qualifiers introduce a realization
+        // and therefore require a following subject value.
+        if (command.Command.Name.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        diagnostics.Add(
+            CompilationDiagnosticCodes.SurplusArgument,
+            CompilationPhase.Validate,
+            $"Qualifier '{token.Text.ToUpperInvariant()}' for {command.Command.Name} must be followed by a subject value.",
+            token.Span);
     }
 
     private static void ValidateSlots(BoundCommand command, DiagnosticBag diagnostics)

@@ -33,7 +33,7 @@ public sealed class ParsingStep : IExecutionStep
             return ValueTask.FromResult(ExecutionResult.Failed(
                 ExecutionFailureKind.Syntax,
                 CompilationDiagnosticCodes.EmptyProgram,
-                "Prompt does not contain a command."));
+                "Empty prompt does not contain a command."));
         }
 
         context.Program = new FluNetProgram(context.Prompt);

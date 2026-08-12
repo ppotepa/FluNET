@@ -109,7 +109,7 @@ namespace FluNET
 
             if (prompt.Syntax.Commands.Count == 0)
             {
-                const string reason = "Prompt does not contain a command.";
+                const string reason = "Empty prompt does not contain a command.";
                 diagnostics.Add(
                     CompilationDiagnosticCodes.EmptyProgram,
                     CompilationPhase.Parse,
