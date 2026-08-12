@@ -1,3 +1,4 @@
+using FluNET.Compilation;
 using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Prompt;
@@ -70,12 +71,23 @@ public sealed class SemanticBindingTests
     }
 
     [Test]
-    public void Bind_RejectsAMissingRequiredSemanticRole()
+    public void SemanticValidation_RejectsAMissingRequiredSemanticRole()
     {
-        SemanticBindingException? error = Assert.Throws<SemanticBindingException>(() =>
-            _binder.Bind(Parse("SAVE content.")));
+        ProcessedPrompt prompt = new("SAVE content.", _binder.Language.Grammar);
+        BoundCommand command = _binder.Bind(prompt.Syntax.Commands.Single());
+        BoundProgram program = new(
+            new FluNetProgram(prompt),
+            [new BoundCommandStatement(command)]);
 
-        Assert.That(error!.Message, Does.Contain("TO clause"));
+        DiagnosticBag diagnostics = new SemanticProgramValidator(_binder.Language).Validate(program);
+        CompilationDiagnostic diagnostic = diagnostics.Single(item =>
+            item.Code == CompilationDiagnosticCodes.MissingRequiredRole);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(diagnostic.Phase, Is.EqualTo(CompilationPhase.Validate));
+            Assert.That(diagnostic.Message, Does.Contain("TO clause"));
+        });
     }
 
     [Test]

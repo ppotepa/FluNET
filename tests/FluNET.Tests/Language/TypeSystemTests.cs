@@ -1,3 +1,4 @@
+using FluNET.Compilation;
 using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Prompt;
@@ -37,11 +38,21 @@ public sealed class TypeSystemTests
             .Marked<string>(comparison, "AS");
         LanguageSnapshot language = builder.Build();
         ProcessedPrompt prompt = new("CHECK value AS first second", language.Grammar);
+        IReadOnlyList<BoundCommand> commands = new SemanticCommandBinder(language)
+            .BindProgram(prompt.Syntax);
+        BoundProgram program = new(
+            new FluNetProgram(prompt),
+            commands.Select(command => new BoundCommandStatement(command)));
 
-        SemanticBindingException exception = Assert.Throws<SemanticBindingException>(() =>
-            new SemanticCommandBinder(language).BindProgram(prompt.Syntax))!;
+        DiagnosticBag diagnostics = new SemanticProgramValidator(language).Validate(program);
+        CompilationDiagnostic diagnostic = diagnostics.Single(item =>
+            item.Code == CompilationDiagnosticCodes.SurplusArgument);
 
-        Assert.That(exception.Message, Does.Contain("COMPARISON"));
+        Assert.Multiple(() =>
+        {
+            Assert.That(diagnostic.Phase, Is.EqualTo(CompilationPhase.Validate));
+            Assert.That(diagnostic.Message, Does.Contain("COMPARISON"));
+        });
     }
 
     private sealed record Predicate(string Text);
