@@ -10,6 +10,7 @@ using FluNET.Capabilities;
 using FluNET.Language;
 using FluNET.Execution.Commands;
 using FluNET.Language.Binding;
+using FluNET.Execution.Planning;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context
@@ -95,7 +96,7 @@ namespace FluNET.Context
             services.AddTransient<SentenceFactory>();
             services.AddTransient<SentenceExecutor>();
 
-            // Typed command routes; unmatched commands use the legacy verb adapter
+            // Typed command routes used by the standard execution plan
             services.AddTypedCommand<SayCommand, string, SayCommandBinder, SayCommandHandler>();
             services.AddTypedCommand<GetTextCommand, string[], GetTextCommandBinder, GetTextCommandHandler>();
             services.AddTypedCommand<LoadTextCommand, string[], LoadTextCommandBinder, LoadTextCommandHandler>();
@@ -107,6 +108,8 @@ namespace FluNET.Context
             services.AddTypedCommand<SendEmailCommand, string, SendEmailCommandBinder, SendEmailCommandHandler>();
             services.AddTypedCommand<TransformEncodingCommand, string, TransformEncodingCommandBinder, TransformEncodingCommandHandler>();
             services.AddTransient<CommandDispatcher>();
+            services.AddSingleton<ExecutionPlanner>();
+            services.AddTransient<ExecutionPlanExecutor>();
 
             // Pattern matchers (regex and string-based implementations)
             services.AddPatternMatchers();

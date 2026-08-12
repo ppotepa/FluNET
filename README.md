@@ -97,7 +97,7 @@ as a backward-compatible default, so production hosts should replace it.
 1. `ProcessedPrompt` performs quote-aware lexical analysis and emits stable
    diagnostics (`FLN001` and later) with source positions.
 2. `PromptSyntax` represents the top-level command sequence; the older linked
-   token/word chain remains an execution compatibility layer.
+   token/word chain remains a public compatibility view, not an execution path.
 3. An immutable `LanguageSnapshot` is the single definition of commands,
    aliases, typed frames, semantic roles, and keywords. `LanguageRegistry`
    projects the legacy word-chain view from that snapshot.
@@ -106,10 +106,13 @@ as a backward-compatible default, so production hosts should replace it.
    but remains message text in `SEND Hello from FluNET TO ...`.
 5. `SentenceValidator` validates every command, including commands after
    `THEN`, before execution starts.
-6. The asynchronous execution pipeline first dispatches syntax through generic
-   `ICommandHandler<TCommand, TResult>` routes, then uses the legacy verb
-   adapter for commands not yet migrated. Cancellation flows through both paths
-   into injected effect capabilities.
+6. `ExecutionPlanner` turns bound commands into immutable steps with explicit
+   sequence, variable-flow, and result-storage edges.
+7. `ExecutionPlanExecutor` dispatches every step through generic
+   `ICommandHandler<TCommand, TResult>` routes. Cancellation flows into injected
+   effect capabilities. Typed dispatch and effect execution do not use
+   reflection; only projection of the legacy `ISentence` compatibility view may
+   instantiate old word types.
 
 Language extensions are explicit modules rather than an ambient scan of all
 loaded assemblies. Implement `IFluNetModule`, declare each command frame, and
@@ -157,8 +160,8 @@ Windows, and macOS.
 
 - The grammar is intentionally small and still evolving.
 - Every built-in frame executes through a typed command and handler. The old
-  word-chain executor remains only as a compatibility fallback for extensions
-  that have not registered a typed route.
+  word-chain executor remains callable only as a compatibility API; extensions
+  participate in the standard pipeline by registering a typed route.
 - The default `IEmailTransport` is diagnostic-only; production hosts should
   inject an SMTP or API-backed implementation.
 - This project does not make untrusted prompts safe by itself. Configure a

@@ -1,5 +1,6 @@
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
+using FluNET.Execution.Planning;
 
 namespace FluNET.Execution;
 
@@ -29,22 +30,32 @@ public sealed class ExecutionResult
     public ISentence? Sentence { get; }
     public object? Result { get; }
     public ExecutionError? Error { get; }
+    public ExecutionPlan? Plan { get; }
+    public IReadOnlyList<ExecutionStepResult> Steps { get; }
     public bool IsSuccess => Error is null && ValidationResult.IsValid;
 
     private ExecutionResult(
         ValidationResult validationResult,
         ISentence? sentence,
         object? result,
-        ExecutionError? error)
+        ExecutionError? error,
+        ExecutionPlan? plan,
+        IEnumerable<ExecutionStepResult>? steps)
     {
         ValidationResult = validationResult ?? throw new ArgumentNullException(nameof(validationResult));
         Sentence = sentence;
         Result = result;
         Error = error;
+        Plan = plan;
+        Steps = steps?.ToArray() ?? Array.Empty<ExecutionStepResult>();
     }
 
-    public static ExecutionResult Success(ISentence sentence, object? result) =>
-        new(ValidationResult.Success(), sentence, result, null);
+    public static ExecutionResult Success(
+        ISentence sentence,
+        object? result,
+        ExecutionPlan? plan = null,
+        IEnumerable<ExecutionStepResult>? steps = null) =>
+        new(ValidationResult.Success(), sentence, result, null, plan, steps);
 
     public static ExecutionResult Failed(ValidationResult validationResult) =>
         new(
@@ -54,21 +65,27 @@ public sealed class ExecutionResult
             new ExecutionError(
                 ExecutionFailureKind.Validation,
                 "FLN100",
-                validationResult.FailureReason ?? "Validation failed."));
+                validationResult.FailureReason ?? "Validation failed."),
+            null,
+            null);
 
     public static ExecutionResult Failed(
         ExecutionFailureKind kind,
         string code,
         string message,
         Exception? exception = null,
-        ISentence? sentence = null) =>
+        ISentence? sentence = null,
+        ExecutionPlan? plan = null,
+        IEnumerable<ExecutionStepResult>? steps = null) =>
         new(
             kind == ExecutionFailureKind.Validation
                 ? ValidationResult.Failure(message)
                 : ValidationResult.Success(),
             sentence,
             null,
-            new ExecutionError(kind, code, message, exception));
+            new ExecutionError(kind, code, message, exception),
+            plan,
+            steps);
 
     public static ExecutionResult Failed(string message) =>
         Failed(ExecutionFailureKind.Internal, "FLN999", message);

@@ -70,6 +70,10 @@ public sealed class ExecutionPipeline
                 "The pipeline completed without producing a sentence."));
         }
 
-        return ValueTask.FromResult(ExecutionResult.Success(context.Sentence, context.Result));
+        return ValueTask.FromResult(ExecutionResult.Success(
+            context.Sentence,
+            context.Result,
+            context.Plan,
+            context.StepResults));
     }
 }

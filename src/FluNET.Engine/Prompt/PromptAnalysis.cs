@@ -1,6 +1,7 @@
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Language.Binding;
+using FluNET.Execution.Planning;
 
 namespace FluNET.Prompt;
 
@@ -13,4 +14,5 @@ public sealed record PromptAnalysis(
     public bool IsValid => ValidationResult.IsValid && Sentence is not null;
     public IReadOnlyList<PromptDiagnostic> Diagnostics => Prompt.Diagnostics;
     public IReadOnlyList<BoundCommand> BoundCommands { get; init; } = Array.Empty<BoundCommand>();
+    public ExecutionPlan? Plan { get; init; }
 }

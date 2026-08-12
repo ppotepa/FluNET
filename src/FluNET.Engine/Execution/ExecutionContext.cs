@@ -3,6 +3,7 @@ using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Language.Binding;
+using FluNET.Execution.Planning;
 
 namespace FluNET.Execution
 {
@@ -15,6 +16,9 @@ namespace FluNET.Execution
         public ProcessedPrompt Prompt { get; }
         public IReadOnlyList<TokenTree> CommandTrees { get; internal set; } = Array.Empty<TokenTree>();
         public IReadOnlyList<BoundCommand> BoundCommands { get; internal set; } = Array.Empty<BoundCommand>();
+        public ExecutionPlan? Plan { get; internal set; }
+        internal List<ExecutionStepResult> CompletedSteps { get; } = [];
+        public IReadOnlyList<ExecutionStepResult> StepResults => CompletedSteps;
 
         /// <summary>
         /// Compatibility view of the first command. New pipeline stages should use

@@ -1,5 +1,4 @@
 ﻿using FluNET.Execution;
-using FluNET.Matching;
 using FluNET.Prompt;
 using FluNET.Sentences;
 using FluNET.Syntax.Core;
@@ -7,8 +6,8 @@ using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
 using FluNET.Words;
-using System.Text.Json;
 using FluNET.Language.Binding;
+using FluNET.Execution.Planning;
 
 namespace FluNET
 {
@@ -25,23 +24,21 @@ namespace FluNET
         private readonly TokenTreeFactory tokenTreeFactory;
         private readonly SentenceFactory sentenceFactory;
         private readonly SentenceValidator sentenceValidator;
-        private readonly SentenceExecutor sentenceExecutor;
-        private readonly MatcherResolver matcherResolver;
         private readonly SemanticCommandBinder semanticBinder;
+        private readonly ExecutionPlanner executionPlanner;
 
         public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory,
             SentenceValidator sentenceValidator, IVariableResolver variableResolver,
-            SentenceExecutor sentenceExecutor, MatcherResolver matcherResolver,
             ExecutionPipelineFactory pipelineFactory,
-            SemanticCommandBinder semanticBinder)
+            SemanticCommandBinder semanticBinder,
+            ExecutionPlanner executionPlanner)
         {
             this.tokenTreeFactory = tokenTreeFactory;
             this.sentenceFactory = sentenceFactory;
             this.sentenceValidator = sentenceValidator;
             this.variableResolver = variableResolver;
-            this.sentenceExecutor = sentenceExecutor;
-            this.matcherResolver = matcherResolver;
             this.semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
+            this.executionPlanner = executionPlanner ?? throw new ArgumentNullException(nameof(executionPlanner));
             _pipelineFactory = pipelineFactory ?? throw new ArgumentNullException(nameof(pipelineFactory));
         }
 
@@ -77,6 +74,7 @@ namespace FluNET
                 IReadOnlyList<BoundCommand> boundCommands = semanticBinder.BindProgram(prompt.Syntax);
                 ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
                 ISentence? sentence = validation.IsValid ? sentenceFactory.CreateFromTrees(commandTrees) : null;
+                ExecutionPlan? plan = validation.IsValid ? executionPlanner.Create(boundCommands) : null;
 
                 if (validation.IsValid && sentence is null)
                 {
@@ -85,10 +83,12 @@ namespace FluNET
 
                 return new PromptAnalysis(prompt, validation, sentence)
                 {
-                    BoundCommands = boundCommands
+                    BoundCommands = boundCommands,
+                    Plan = plan
                 };
             }
-            catch (Exception exception) when (exception is PromptSyntaxException or SemanticBindingException)
+            catch (Exception exception) when (
+                exception is PromptSyntaxException or SemanticBindingException or ExecutionPlanException)
             {
                 return new PromptAnalysis(prompt, ValidationResult.Failure(exception.Message), null);
             }
