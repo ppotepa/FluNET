@@ -1,16 +1,17 @@
 using FluNET.Keywords;
+using FluNET.Language;
 using FluNET.Syntax.Core;
-using System.Reflection;
 
 namespace FluNET.Syntax.Registry;
 
 /// <summary>
-/// Single deterministic registry for words, verbs, synonyms, and verb families.
-/// Discovery happens in one place so tokenization, validation, and execution use
-/// the same language definition.
+/// Compatibility registry projected from one immutable language snapshot.
+/// Parsing, validation, discovery, and execution therefore observe exactly the
+/// same command names, aliases, implementations, and families.
 /// </summary>
 public sealed class LanguageRegistry
 {
+    private readonly LanguageSnapshot _snapshot;
     private IReadOnlyList<Type> _words = Array.Empty<Type>();
     private IReadOnlyList<Type> _verbs = Array.Empty<Type>();
     private IReadOnlyList<Type> _nouns = Array.Empty<Type>();
@@ -19,82 +20,84 @@ public sealed class LanguageRegistry
     private Dictionary<string, Type> _verbBaseTypes = new(StringComparer.OrdinalIgnoreCase);
     private Dictionary<Type, Type> _concreteToBase = [];
 
-    public LanguageRegistry()
+    public LanguageRegistry() : this(StandardLanguage.CreateSnapshot())
     {
+    }
+
+    public LanguageRegistry(LanguageSnapshot snapshot)
+    {
+        _snapshot = snapshot ?? throw new ArgumentNullException(nameof(snapshot));
         Refresh();
     }
 
+    public LanguageSnapshot Snapshot => _snapshot;
     public IReadOnlyList<Type> Words => _words;
-
     public IReadOnlyList<Type> Verbs => _verbs;
-
     public IReadOnlyList<Type> Nouns => _nouns;
+    public IEnumerable<string> VerbNames => _snapshot.CommandNames;
 
-    public IEnumerable<string> VerbNames => _verbTypes.Keys.Order(StringComparer.OrdinalIgnoreCase);
-
+    /// <summary>
+    /// Rebuilds compatibility indexes from the same immutable snapshot. It does
+    /// not scan newly loaded assemblies or mutate the language definition.
+    /// </summary>
     public void Refresh()
     {
-        Type[] words = AppDomain.CurrentDomain.GetAssemblies()
-            .OrderBy(assembly => assembly.FullName, StringComparer.Ordinal)
-            .SelectMany(GetLoadableTypes)
-            .Where(type => typeof(IWord).IsAssignableFrom(type) && !type.IsInterface && !type.IsAbstract)
+        Type[] verbs = _snapshot.Commands
+            .SelectMany(command => command.Frames)
+            .Select(frame => frame.ImplementationType)
             .Distinct()
             .OrderBy(type => type.AssemblyQualifiedName, StringComparer.Ordinal)
             .ToArray();
 
-        Type[] verbs = words.Where(type => typeof(IVerb).IsAssignableFrom(type)).ToArray();
-        Type[] nouns = words.Where(type => typeof(INoun).IsAssignableFrom(type)).ToArray();
+        Type[] keywordTypes = _snapshot.Keywords
+            .Select(keyword => keyword.ImplementationType)
+            .Distinct()
+            .ToArray();
+
+        Type[] words = verbs.Concat(keywordTypes)
+            .Distinct()
+            .OrderBy(type => type.AssemblyQualifiedName, StringComparer.Ordinal)
+            .ToArray();
+
         Dictionary<string, Type> wordTypes = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, Type> verbTypes = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, Type> verbBaseTypes = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<Type, Type> concreteToBase = [];
 
-        foreach (Type verbType in verbs)
+        foreach (CommandDescriptor command in _snapshot.Commands)
         {
-            IVerb verb = CreatePrototype<IVerb>(verbType);
-            Type baseType = GetVerbBaseType(verbType);
-            concreteToBase.Add(verbType, baseType);
-
-            RegisterVerbName(verb.Text, verbType, baseType, verbTypes, verbBaseTypes);
-            foreach (string synonym in verb.Synonyms)
+            // The legacy word-chain can materialize only one concrete root.
+            // Preserve its former deterministic discovery order while the
+            // executor selects the actual frame from the complete snapshot.
+            CommandFrameDescriptor primaryFrame = command.Frames
+                .OrderBy(frame => frame.ImplementationType.AssemblyQualifiedName, StringComparer.Ordinal)
+                .First();
+            foreach (CommandFrameDescriptor frame in command.Frames)
             {
-                RegisterVerbName(synonym, verbType, baseType, verbTypes, verbBaseTypes);
+                if (!concreteToBase.TryAdd(frame.ImplementationType, frame.FamilyType) &&
+                    concreteToBase[frame.ImplementationType] != frame.FamilyType)
+                {
+                    throw new LanguageRegistrationException(
+                        $"Verb '{frame.ImplementationType.FullName}' maps to multiple families.");
+                }
+            }
+
+            foreach (string surface in command.SurfaceForms)
+            {
+                verbTypes.Add(surface, primaryFrame.ImplementationType);
+                verbBaseTypes.Add(surface, primaryFrame.FamilyType);
+                wordTypes.Add(surface, primaryFrame.ImplementationType);
             }
         }
 
-        foreach (Type wordType in words.Where(type => !typeof(IVerb).IsAssignableFrom(type)))
+        foreach (KeywordDescriptor keyword in _snapshot.Keywords)
         {
-            if (wordType.GetConstructor(Type.EmptyTypes) is null)
-            {
-                continue;
-            }
-
-            if (Activator.CreateInstance(wordType) is not IKeyword keyword)
-            {
-                continue;
-            }
-
-            if (!wordTypes.TryAdd(keyword.Text, wordType))
-            {
-                Type existing = wordTypes[keyword.Text];
-                throw new LanguageRegistrationException(
-                    $"Keyword '{keyword.Text}' is declared by both '{existing.FullName}' and '{wordType.FullName}'.");
-            }
-        }
-
-        foreach ((string name, Type type) in verbTypes)
-        {
-            if (wordTypes.ContainsKey(name))
-            {
-                throw new LanguageRegistrationException(
-                    $"'{name}' is registered as both a verb and a non-verb keyword.");
-            }
-            wordTypes.Add(name, type);
+            wordTypes.Add(keyword.Text, keyword.ImplementationType);
         }
 
         _words = words;
         _verbs = verbs;
-        _nouns = nouns;
+        _nouns = words.Where(type => typeof(INoun).IsAssignableFrom(type)).ToArray();
         _wordTypes = wordTypes;
         _verbTypes = verbTypes;
         _verbBaseTypes = verbBaseTypes;
@@ -117,73 +120,18 @@ public sealed class LanguageRegistry
     public Type? GetBaseTypeForConcrete(Type concreteType) =>
         _concreteToBase.TryGetValue(concreteType, out Type? type) ? type : null;
 
-    private static IEnumerable<Type> GetLoadableTypes(Assembly assembly)
-    {
-        try
-        {
-            return assembly.GetTypes();
-        }
-        catch (ReflectionTypeLoadException exception)
-        {
-            string details = string.Join("; ", exception.LoaderExceptions
-                .OfType<Exception>()
-                .Select(loaderException => loaderException.Message));
-            throw new LanguageRegistrationException(
-                $"Could not inspect assembly '{assembly.FullName}': {details}",
-                exception);
-        }
-    }
-
     private static T CreatePrototype<T>(Type type) where T : class
     {
         if (type.GetConstructor(Type.EmptyTypes) is null)
         {
             throw new LanguageRegistrationException(
-                $"Language type '{type.FullName}' must provide a public parameterless constructor for discovery.");
+                $"Language type '{type.FullName}' must provide a public parameterless constructor " +
+                "while the legacy word-chain adapter is enabled.");
         }
 
         return Activator.CreateInstance(type) as T
             ?? throw new LanguageRegistrationException(
                 $"Could not create language type '{type.FullName}'.");
-    }
-
-    private static Type GetVerbBaseType(Type verbType)
-    {
-        Type? baseType = verbType.BaseType;
-        while (baseType is not null && !baseType.IsAbstract && baseType != typeof(object))
-        {
-            baseType = baseType.BaseType;
-        }
-
-        if (baseType is null || baseType == typeof(object))
-        {
-            throw new LanguageRegistrationException(
-                $"Verb '{verbType.FullName}' must inherit from an abstract verb family.");
-        }
-
-        return baseType.IsGenericType ? baseType.GetGenericTypeDefinition() : baseType;
-    }
-
-    private static void RegisterVerbName(
-        string name,
-        Type verbType,
-        Type baseType,
-        IDictionary<string, Type> verbTypes,
-        IDictionary<string, Type> verbBaseTypes)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            throw new LanguageRegistrationException($"Verb '{verbType.FullName}' declares an empty name.");
-        }
-
-        if (verbBaseTypes.TryGetValue(name, out Type? existingBase) && existingBase != baseType)
-        {
-            throw new LanguageRegistrationException(
-                $"Verb name or synonym '{name}' maps to both '{existingBase.FullName}' and '{baseType.FullName}'.");
-        }
-
-        verbBaseTypes[name] = baseType;
-        verbTypes.TryAdd(name, verbType);
     }
 }
 

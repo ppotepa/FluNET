@@ -1,6 +1,7 @@
 using FluNET.Keywords;
 using FluNET.Syntax.Core;
 using FluNET.Syntax.Registry;
+using FluNET.Language;
 
 namespace FluNET;
 
@@ -25,6 +26,8 @@ public sealed class DiscoveryService
     public IReadOnlyList<Type> Verbs => _registry.Verbs;
 
     public IReadOnlyList<Type> Nouns => _registry.Nouns;
+
+    public LanguageSnapshot Language => _registry.Snapshot;
 
     internal LanguageRegistry Registry => _registry;
 

@@ -7,6 +7,7 @@ using FluNET.Variables;
 using FluNET.Words;
 using FluNET.Syntax.Registry;
 using FluNET.Capabilities;
+using FluNET.Language;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context
@@ -60,7 +61,8 @@ namespace FluNET.Context
         /// <param name="services">The service collection to configure</param>
         public static void ConfigureDefaultServices(IServiceCollection services)
         {
-            // One deterministic language registry shared by discovery, parsing, and execution
+            // One immutable language definition shared by discovery, parsing, and execution
+            services.AddSingleton(_ => StandardLanguage.CreateSnapshot());
             services.AddSingleton<LanguageRegistry>();
             services.AddSingleton<DiscoveryService>();
 

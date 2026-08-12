@@ -97,17 +97,41 @@ as a backward-compatible default, so production hosts should replace it.
    diagnostics (`FLN001` and later) with source positions.
 2. `PromptSyntax` represents the top-level command sequence; the older linked
    token/word chain remains an execution compatibility layer.
-3. `LanguageRegistry` performs one deterministic, sorted discovery pass and
-   rejects ambiguous names or synonyms.
+3. An immutable `LanguageSnapshot` is the single definition of commands,
+   aliases, typed frames, semantic roles, and keywords. `LanguageRegistry`
+   projects the legacy word-chain view from that snapshot.
 4. `SentenceValidator` validates every command, including commands after
    `THEN`, before execution starts.
 5. The asynchronous execution pipeline activates typed verbs through one
    registry and passes cancellation into injected effect capabilities.
 
-To add a verb, implement the appropriate `IVerb`/noun interfaces and ensure its
-assembly is loaded before creating `FluNETContext`. Add executable examples and
-tests for its grammar, activation, success path, and failure path. Name and
-synonym collisions fail registry construction with a clear error.
+Language extensions are explicit modules rather than an ambient scan of all
+loaded assemblies. Implement `IFluNetModule`, declare each command frame, and
+compose one snapshot at host startup:
+
+```csharp
+public sealed class ReportingModule : IFluNetModule
+{
+    public void Register(LanguageBuilder language) =>
+        language.Command<GenerateReport, FileInfo>("GENERATE", "Report")
+            .Aliases("BUILD")
+            .Qualifiers("REPORT")
+            .Positional<FileInfo>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<DateOnly>(SemanticRole.Source, "FROM");
+}
+
+LanguageSnapshot language = new LanguageBuilder()
+    .AddModule(new StandardLanguageModule())
+    .AddModule(new ReportingModule())
+    .Build();
+
+using FluNETContext context = FluNETContext.Create(services =>
+    services.AddSingleton(language));
+```
+
+The snapshot validates command, synonym, and keyword collisions atomically.
+Add executable examples and tests for every frame's grammar, activation,
+success path, and failure path.
 
 ## Tests
 
