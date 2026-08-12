@@ -95,6 +95,8 @@ public sealed class ExecutionPlan
 
 public sealed class ExecutionPlanner
 {
+    private const int MaximumRetryCount = 100;
+
     public ExecutionPlan Create(
         IReadOnlyList<BoundCommand> commands,
         Prompt.PromptSyntax? syntax = null)
@@ -318,9 +320,10 @@ public sealed class ExecutionPlanner
     }
 
     private static int ParseRetry(string value) =>
-        int.TryParse(value, out int retries) && retries >= 0
+        int.TryParse(value, out int retries) && retries is >= 0 and <= MaximumRetryCount
             ? retries
-            : throw new ExecutionPlanException($"Retry count '{value}' must be a non-negative integer.");
+            : throw new ExecutionPlanException(
+                $"Retry count '{value}' must be between 0 and {MaximumRetryCount}.");
 
     private static TimeSpan ParseTimeout(string value)
     {
@@ -333,13 +336,20 @@ public sealed class ExecutionPlanner
             _ when normalized.EndsWith('h') => (normalized[..^1], 3_600_000),
             _ => (normalized, 1_000)
         };
-        return double.TryParse(
+        if (!double.TryParse(
             parts.Number,
             System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture,
-            out double number) && number > 0
-                ? TimeSpan.FromMilliseconds(number * parts.Multiplier)
-                : throw new ExecutionPlanException($"Timeout '{value}' must be a positive duration.");
+            out double number) || number <= 0)
+        {
+            throw new ExecutionPlanException($"Timeout '{value}' must be a positive duration.");
+        }
+        double milliseconds = number * parts.Multiplier;
+        if (!double.IsFinite(milliseconds) || milliseconds > int.MaxValue)
+        {
+            throw new ExecutionPlanException($"Timeout '{value}' is too large.");
+        }
+        return TimeSpan.FromMilliseconds(milliseconds);
     }
 
     private static string Unwrap(string value) =>
@@ -564,6 +574,7 @@ public sealed class ExecutionPlanExecutor
         for (int attempt = 1; attempt <= maxAttempts; attempt++)
         {
             attempts = attempt;
+            lastError = null;
             await RecordAsync(
                 workflow,
                 step.Index,
@@ -578,9 +589,10 @@ public sealed class ExecutionPlanExecutor
             timeout?.CancelAfter(step.Policy.Timeout.Value);
             CancellationToken stepToken = timeout?.Token ?? cancellationToken;
 
+            CommandDispatchResult dispatch = default;
             try
             {
-                CommandDispatchResult dispatch = await dispatcher
+                dispatch = await dispatcher
                     .TryExecuteAsync(step.Command, stepToken)
                     .ConfigureAwait(false);
                 if (!dispatch.IsHandled)
@@ -589,6 +601,21 @@ public sealed class ExecutionPlanExecutor
                         $"No typed route is registered for " +
                         $"'{step.Command.Command.Name}/{step.Command.Frame.UsageName}'.");
                 }
+            }
+            catch (OperationCanceledException exception)
+                when (!cancellationToken.IsCancellationRequested && timeout?.IsCancellationRequested == true)
+            {
+                lastError = new WorkflowTimeoutException(
+                    $"Execution step {step.Index} exceeded timeout {step.Policy.Timeout}.",
+                    exception);
+            }
+            catch (Exception exception)
+            {
+                lastError = exception;
+            }
+
+            if (lastError is null)
+            {
                 string? resultJson = valueSerializer.Serialize(
                     dispatch.Result,
                     step.Command.Frame.ResultType);
@@ -607,17 +634,6 @@ public sealed class ExecutionPlanExecutor
                     attempt,
                     null,
                     false);
-            }
-            catch (OperationCanceledException exception)
-                when (!cancellationToken.IsCancellationRequested && timeout?.IsCancellationRequested == true)
-            {
-                lastError = new WorkflowTimeoutException(
-                    $"Execution step {step.Index} exceeded timeout {step.Policy.Timeout}.",
-                    exception);
-            }
-            catch (Exception exception)
-            {
-                lastError = exception;
             }
 
             if (attempt < maxAttempts && IsRetryable(lastError))
@@ -737,7 +753,11 @@ public sealed class ExecutionPlanExecutor
         {
             bool boolean => boolean,
             string text when bool.TryParse(text, out bool boolean) => boolean,
-            string text when decimal.TryParse(text, out decimal number) => number != 0,
+            string text when decimal.TryParse(
+                text,
+                System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out decimal number) => number != 0,
             string text => !string.IsNullOrWhiteSpace(text),
             int integer => integer != 0,
             decimal number => number != 0,

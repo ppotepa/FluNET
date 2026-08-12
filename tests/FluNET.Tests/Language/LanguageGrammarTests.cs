@@ -28,4 +28,34 @@ public sealed class LanguageGrammarTests
             Assert.That(language.Grammar.ClauseMarkers, Does.Contain("VIA"));
         });
     }
+
+    [Test]
+    public void LanguageRejectsAmbiguousConstructionSurfaces()
+    {
+        LanguageBuilder builder = new LanguageBuilder()
+            .ClauseMarker("NEXT");
+
+        LanguageDefinitionException exception = Assert.Throws<LanguageDefinitionException>(() =>
+            builder.CommandConnector("NEXT", CommandLinkKind.Sequence))!;
+
+        Assert.That(exception.Message, Does.Contain("clause marker"));
+    }
+
+    [Test]
+    public void SpecificTwoWordModifierWinsOverGenericIntroducer()
+    {
+        PromptGrammar grammar = new(
+            Array.Empty<KeyValuePair<string, PromptClauseKind>>(),
+            Array.Empty<KeyValuePair<string, CommandLinkKind>>(),
+            new[]
+            {
+                new CommandModifierDescriptor("WITH", null, CommandModifierKind.Condition),
+                new CommandModifierDescriptor("WITH", "RETRY", CommandModifierKind.Retry)
+            });
+
+        ProcessedPrompt prompt = new("SAY value WITH RETRY {2}", grammar);
+
+        Assert.That(prompt.Syntax.Commands.Single().Modifiers.Single().Kind,
+            Is.EqualTo(CommandModifierKind.Retry));
+    }
 }

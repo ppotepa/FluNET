@@ -140,6 +140,26 @@ public sealed class WorkflowRuntimeTests
         });
     }
 
+    [Test]
+    public async Task JournalFailureAfterAnEffectDoesNotRetryTheEffect()
+    {
+        CapturingOutput output = new();
+        using FluNETContext context = FluNETContext.Create(services =>
+        {
+            services.AddSingleton<ITextOutput>(output);
+            services.AddSingleton<IWorkflowStateStore>(new FailingCompletionStore());
+        });
+
+        ExecutionResult result = await context.GetEngine().ExecuteAsync(
+            new ProcessedPrompt("SAY once WITH RETRY {3}."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsSuccess, Is.False);
+            Assert.That(output.Messages, Is.EqualTo(new[] { "once" }));
+        });
+    }
+
     private sealed class FlakyOutput(int failures) : ITextOutput
     {
         private int _calls;
@@ -182,6 +202,28 @@ public sealed class WorkflowRuntimeTests
             cancellationToken.ThrowIfCancellationRequested();
             _messages.Add(message);
             return ValueTask.CompletedTask;
+        }
+    }
+
+    private sealed class FailingCompletionStore : IWorkflowStateStore
+    {
+        public ValueTask AppendAsync(
+            WorkflowEvent item,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return item.Status == WorkflowStepStatus.Succeeded
+                ? ValueTask.FromException(new IOException("Workflow journal unavailable."))
+                : ValueTask.CompletedTask;
+        }
+
+        public ValueTask<IReadOnlyList<WorkflowEvent>> ReadAsync(
+            Guid runId,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<IReadOnlyList<WorkflowEvent>>(
+                Array.Empty<WorkflowEvent>());
         }
     }
 }

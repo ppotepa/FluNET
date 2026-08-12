@@ -77,7 +77,7 @@ public sealed record CommandSlotDescriptor
         SlotCardinality cardinality,
         string? marker)
     {
-        RoleId = role;
+        RoleId = new FrameRoleId(role.Value);
         ValueType = valueType ?? throw new ArgumentNullException(nameof(valueType));
         Direction = direction;
         Cardinality = cardinality;
@@ -252,6 +252,30 @@ public sealed class LanguageSnapshot
 
         _commandsBySurface = new ReadOnlyDictionary<string, CommandDescriptor>(commandIndex);
         _keywordsBySurface = new ReadOnlyDictionary<string, KeywordDescriptor>(keywordIndex);
+        string? ambiguousConstruction = Grammar.ClauseMarkers
+            .Intersect(Grammar.CommandConnectors, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+        if (ambiguousConstruction is not null)
+        {
+            throw new LanguageDefinitionException(
+                $"'{ambiguousConstruction}' cannot be both a clause marker and a command connector.");
+        }
+        foreach (string connector in Grammar.CommandConnectors)
+        {
+            if (commandIndex.TryGetValue(connector, out CommandDescriptor? command))
+            {
+                throw new LanguageDefinitionException(
+                    $"Command surface form '{connector}' conflicts with a command connector " +
+                    $"registered by '{command.Name}'.");
+            }
+            if (Grammar.CommandModifiers.Any(modifier =>
+                modifier.Introducer.Equals(connector, StringComparison.OrdinalIgnoreCase) ||
+                modifier.Name?.Equals(connector, StringComparison.OrdinalIgnoreCase) == true))
+            {
+                throw new LanguageDefinitionException(
+                    $"'{connector}' cannot be both a command connector and part of a command modifier.");
+            }
+        }
         _qualifiers = Commands.SelectMany(command => command.Frames)
             .SelectMany(frame => frame.Qualifiers)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -347,6 +371,11 @@ public sealed class LanguageBuilder
         {
             throw new LanguageDefinitionException("Subject is implicit and cannot be registered as a clause marker.");
         }
+        if (_commandConnectors.ContainsKey(normalized))
+        {
+            throw new LanguageDefinitionException(
+                $"'{normalized}' is already registered as a command connector.");
+        }
         if (!_clauseMarkers.TryAdd(normalized, kind))
         {
             throw new LanguageDefinitionException($"Clause marker '{normalized}' is registered more than once.");
@@ -357,6 +386,18 @@ public sealed class LanguageBuilder
     public LanguageBuilder CommandConnector(string surface, CommandLinkKind kind)
     {
         string normalized = NormalizeName(surface);
+        if (_clauseMarkers.ContainsKey(normalized))
+        {
+            throw new LanguageDefinitionException(
+                $"'{normalized}' is already registered as a clause marker.");
+        }
+        if (_commandModifiers.Any(modifier =>
+            modifier.Introducer.Equals(normalized, StringComparison.OrdinalIgnoreCase) ||
+            modifier.Name?.Equals(normalized, StringComparison.OrdinalIgnoreCase) == true))
+        {
+            throw new LanguageDefinitionException(
+                $"'{normalized}' is already part of a command modifier.");
+        }
         if (!_commandConnectors.TryAdd(normalized, kind))
         {
             throw new LanguageDefinitionException($"Command connector '{normalized}' is registered more than once.");
@@ -369,13 +410,22 @@ public sealed class LanguageBuilder
         string? name,
         CommandModifierKind kind)
     {
-        CommandModifierDescriptor descriptor = new(introducer, name, kind);
-        if (_commandModifiers.Any(existing =>
-            existing.Introducer.Equals(introducer, StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase)))
+        CommandModifierDescriptor descriptor = new(
+            NormalizeName(introducer),
+            string.IsNullOrWhiteSpace(name) ? null : NormalizeName(name),
+            kind);
+        if (_commandConnectors.ContainsKey(descriptor.Introducer) ||
+            descriptor.Name is not null && _commandConnectors.ContainsKey(descriptor.Name))
         {
             throw new LanguageDefinitionException(
-                $"Command modifier '{introducer} {name}' is registered more than once.");
+                $"Command modifier '{descriptor.Introducer} {descriptor.Name}' conflicts with a connector.");
+        }
+        if (_commandModifiers.Any(existing =>
+            existing.Introducer.Equals(descriptor.Introducer, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(existing.Name, descriptor.Name, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new LanguageDefinitionException(
+                $"Command modifier '{descriptor.Introducer} {descriptor.Name}' is registered more than once.");
         }
         _commandModifiers.Add(descriptor);
         return this;

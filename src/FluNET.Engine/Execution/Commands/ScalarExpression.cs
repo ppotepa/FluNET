@@ -25,7 +25,7 @@ public sealed class ScalarExpression<TValue> : IValueExpression<TValue>
         _token = argument.Tokens.Count == 1
             ? argument.Tokens[0]
             : throw new ArgumentException(
-                $"Semantic role {argument.Role} must contain exactly one scalar token.",
+                $"Semantic role {argument.RoleId} must contain exactly one scalar token.",
                 nameof(argument));
     }
 

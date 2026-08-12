@@ -47,12 +47,25 @@ public sealed class PromptGrammar
                 pair => Normalize(pair.Key),
                 pair => pair.Value,
                 StringComparer.OrdinalIgnoreCase));
-        _commandModifiers = (commandModifiers ?? Array.Empty<CommandModifierDescriptor>())
+        CommandModifierDescriptor[] modifiers =
+            (commandModifiers ?? Array.Empty<CommandModifierDescriptor>())
             .Select(descriptor => new CommandModifierDescriptor(
                 Normalize(descriptor.Introducer),
                 string.IsNullOrWhiteSpace(descriptor.Name) ? null : Normalize(descriptor.Name),
                 descriptor.Kind))
+            .OrderByDescending(descriptor => descriptor.Name is not null)
             .ToArray();
+        HashSet<string> modifierKeys = new(StringComparer.OrdinalIgnoreCase);
+        foreach (CommandModifierDescriptor descriptor in modifiers)
+        {
+            if (!modifierKeys.Add($"{descriptor.Introducer}\0{descriptor.Name}"))
+            {
+                throw new ArgumentException(
+                    $"Command modifier '{descriptor.Introducer} {descriptor.Name}' is declared more than once.",
+                    nameof(commandModifiers));
+            }
+        }
+        _commandModifiers = modifiers;
     }
 
     public static PromptGrammar Standard { get; } = new(

@@ -199,7 +199,7 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
             tokens.Count > 1)
         {
             throw new SemanticBindingException(
-                $"{slot.Marker} accepts one value for semantic role {slot.Role}.",
+                $"{slot.Marker} accepts one value for semantic role {slot.RoleId}.",
                 SourceSpan.FromBounds(tokens[0].Start, tokens[^1].Span.End));
         }
     }
