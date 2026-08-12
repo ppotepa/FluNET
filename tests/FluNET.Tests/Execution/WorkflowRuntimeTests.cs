@@ -160,6 +160,60 @@ public sealed class WorkflowRuntimeTests
         });
     }
 
+    [Test]
+    public async Task JsonJournalResumesAcrossHostInstances()
+    {
+        string directory = Path.Combine(
+            Path.GetTempPath(),
+            $"FluNET_Workflow_{Guid.NewGuid():N}");
+        Guid runId = Guid.NewGuid();
+        CapturingOutput firstOutput = new();
+        CapturingOutput resumedOutput = new();
+
+        try
+        {
+            using (FluNETContext firstContext = FluNETContext.Create(services =>
+            {
+                services.AddSingleton<ITextOutput>(firstOutput);
+                services.AddSingleton<IWorkflowStateStore>(
+                    new JsonFileWorkflowStateStore(directory, new AllowAllExecutionPolicy()));
+            }))
+            {
+                ExecutionResult first = await firstContext.GetEngine().ExecuteAsync(
+                    new ProcessedPrompt("SAY persistent."),
+                    new WorkflowExecutionOptions(runId));
+                Assert.That(first.IsSuccess, Is.True, first.Error?.Message);
+            }
+
+            using (FluNETContext resumedContext = FluNETContext.Create(services =>
+            {
+                services.AddSingleton<ITextOutput>(resumedOutput);
+                services.AddSingleton<IWorkflowStateStore>(
+                    new JsonFileWorkflowStateStore(directory, new AllowAllExecutionPolicy()));
+            }))
+            {
+                ExecutionResult resumed = await resumedContext.GetEngine().ExecuteAsync(
+                    new ProcessedPrompt("SAY persistent."),
+                    new WorkflowExecutionOptions(runId, Resume: true));
+
+                Assert.Multiple(() =>
+                {
+                    Assert.That(resumed.IsSuccess, Is.True, resumed.Error?.Message);
+                    Assert.That(resumed.Result, Is.EqualTo("persistent"));
+                    Assert.That(firstOutput.Messages, Is.EqualTo(new[] { "persistent" }));
+                    Assert.That(resumedOutput.Messages, Is.Empty);
+                });
+            }
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+        }
+    }
+
     private sealed class FlakyOutput(int failures) : ITextOutput
     {
         private int _calls;

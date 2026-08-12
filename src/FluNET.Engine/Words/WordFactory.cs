@@ -229,6 +229,16 @@ namespace FluNET.Words
 
         public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon)
         {
+            // Historic LOAD syntax treats a lone frame selector as the direct
+            // object: LOAD config FROM file. Keep that compatibility shape
+            // while typed syntax also supports LOAD CONFIG [value] FROM file.
+            if (nextWord is Keywords.From &&
+                Previous is IVerb verb &&
+                verb.Text.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
+            {
+                return ValidationResult.Success();
+            }
+
             // If the previous word is a verb that implements IFrom (like GET, LOAD, DELETE),
             // then this qualifier MUST be followed by [what] (variable or reference)
             if (Previous != null)

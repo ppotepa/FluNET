@@ -586,7 +586,10 @@ public sealed class ExecutionPlanExecutor
             using CancellationTokenSource? timeout = step.Policy.Timeout is null
                 ? null
                 : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-            timeout?.CancelAfter(step.Policy.Timeout.Value);
+            if (timeout is not null && step.Policy.Timeout is TimeSpan timeoutDelay)
+            {
+                timeout.CancelAfter(timeoutDelay);
+            }
             CancellationToken stepToken = timeout?.Token ?? cancellationToken;
 
             CommandDispatchResult dispatch = default;

@@ -180,7 +180,7 @@ public sealed class SentenceValidator(Lexicon.Lexicon lexicon, WordFactory wordF
             return ValidationResult.Failure($"{verb} requires a subject before {prepositionName}.");
         }
 
-        if (words[1] is QualifierWord && prepositionIndex == 2)
+        if (words[1] is QualifierWord && prepositionIndex == 2 && verb != "LOAD")
         {
             return ValidationResult.Failure(
                 $"{verb} requires a subject after the qualifier and before {prepositionName}.");

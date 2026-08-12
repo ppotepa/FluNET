@@ -109,6 +109,7 @@ namespace FluNET.Syntax.Verbs
             return nextWord is Words.VariableWord
                 || nextWord is Words.LiteralWord
                 || nextWord is Words.ReferenceWord
+                || nextWord is Words.QualifierWord
                 || nextWord is IWhat<TWhat>
                     ? ValidationResult.Success()
                     : ValidationResult.Failure(
