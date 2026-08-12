@@ -1,4 +1,9 @@
-﻿using FluNET.Execution;
+using FluNET.Compilation;
+using FluNET.Execution;
+using FluNET.Execution.Planning;
+using FluNET.Execution.Workflow;
+using FluNET.Language;
+using FluNET.Language.Binding;
 using FluNET.Prompt;
 using FluNET.Sentences;
 using FluNET.Syntax.Core;
@@ -6,10 +11,6 @@ using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
 using FluNET.Words;
-using FluNET.Language.Binding;
-using FluNET.Execution.Planning;
-using FluNET.Language;
-using FluNET.Execution.Workflow;
 
 namespace FluNET
 {
@@ -60,45 +61,154 @@ namespace FluNET
         }
 
         /// <summary>
-        /// Parses and validates a prompt without executing it or performing external effects.
+        /// Parses, binds, validates, and plans a prompt without executing it or
+        /// performing external effects. The result exposes the canonical parsed
+        /// and bound program together with source-aware compiler diagnostics.
         /// </summary>
-        public PromptAnalysis Analyze(ProcessedPrompt prompt)
+        public CompilationResult Analyze(ProcessedPrompt prompt)
         {
             ArgumentNullException.ThrowIfNull(prompt);
             prompt = prompt.WithGrammar(language.Grammar);
 
+            FluNetProgram program = new(prompt);
+            DiagnosticBag diagnostics = new();
+            AddPromptDiagnostics(diagnostics, prompt, prompt.Diagnostics);
+
+            // Parse
             if (!prompt.IsValid)
             {
                 string reason = string.Join(" ", prompt.Diagnostics.Select(diagnostic =>
                     $"{diagnostic.Code}: {diagnostic.Message}"));
-                return new PromptAnalysis(prompt, ValidationResult.Failure(reason), null);
+                return new CompilationResult(
+                    program,
+                    ValidationResult.Failure(reason),
+                    null,
+                    diagnostics,
+                    null,
+                    null,
+                    CompilationPhase.Parse);
             }
 
+            IReadOnlyList<TokenTree> commandTrees;
             try
             {
-                IReadOnlyList<TokenTree> commandTrees = tokenTreeFactory.ProcessCommands(prompt);
-                IReadOnlyList<BoundCommand> boundCommands = semanticBinder.BindProgram(prompt.Syntax);
-                ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
-                ISentence? sentence = validation.IsValid ? sentenceFactory.CreateFromTrees(commandTrees) : null;
-                ExecutionPlan? plan = validation.IsValid
-                    ? executionPlanner.Create(boundCommands, prompt.Syntax)
-                    : null;
-
-                if (validation.IsValid && sentence is null)
+                // Compatibility token trees are still required by the legacy
+                // validator until Batch 5 removes them from the canonical path.
+                commandTrees = tokenTreeFactory.ProcessCommands(prompt);
+            }
+            catch (PromptSyntaxException exception)
+            {
+                AddPromptDiagnostics(diagnostics, prompt, exception.Diagnostics);
+                if (exception.Diagnostics.Count == 0)
                 {
-                    validation = ValidationResult.Failure("Could not create a sentence from the prompt.");
+                    diagnostics.Add(
+                        CompilationDiagnosticCodes.ParseFailure,
+                        CompilationPhase.Parse,
+                        exception.Message,
+                        prompt.Syntax.Span);
                 }
 
-                return new PromptAnalysis(prompt, validation, sentence)
-                {
-                    BoundCommands = boundCommands,
-                    Plan = plan
-                };
+                return new CompilationResult(
+                    program,
+                    ValidationResult.Failure(exception.Message),
+                    null,
+                    diagnostics,
+                    null,
+                    null,
+                    CompilationPhase.Parse);
             }
-            catch (Exception exception) when (
-                exception is PromptSyntaxException or SemanticBindingException or ExecutionPlanException)
+
+            // Bind
+            BoundProgram boundProgram;
+            try
             {
-                return new PromptAnalysis(prompt, ValidationResult.Failure(exception.Message), null);
+                IReadOnlyList<BoundCommand> boundCommands = semanticBinder.BindProgram(prompt.Syntax);
+                boundProgram = BoundProgram.FromCommands(program, boundCommands);
+            }
+            catch (SemanticBindingException exception)
+            {
+                diagnostics.Add(
+                    CompilationDiagnosticCodes.BindingFailure,
+                    CompilationPhase.Bind,
+                    exception.Message,
+                    exception.Span);
+                return new CompilationResult(
+                    program,
+                    ValidationResult.Failure(exception.Message),
+                    null,
+                    diagnostics,
+                    null,
+                    null,
+                    CompilationPhase.Bind);
+            }
+
+            // Validate
+            ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
+            if (!validation.IsValid)
+            {
+                string reason = validation.FailureReason ?? "Semantic validation failed.";
+                diagnostics.Add(
+                    CompilationDiagnosticCodes.ValidationFailure,
+                    CompilationPhase.Validate,
+                    reason,
+                    prompt.Syntax.Span);
+                return new CompilationResult(
+                    program,
+                    validation,
+                    null,
+                    diagnostics,
+                    boundProgram,
+                    null,
+                    CompilationPhase.Validate);
+            }
+
+            ISentence? sentence = sentenceFactory.CreateFromTrees(commandTrees);
+            if (sentence is null)
+            {
+                const string reason = "Could not create a compatibility sentence from the prompt.";
+                diagnostics.Add(
+                    CompilationDiagnosticCodes.CompatibilitySentenceFailure,
+                    CompilationPhase.Validate,
+                    reason,
+                    prompt.Syntax.Span);
+                return new CompilationResult(
+                    program,
+                    ValidationResult.Failure(reason),
+                    null,
+                    diagnostics,
+                    boundProgram,
+                    null,
+                    CompilationPhase.Validate);
+            }
+
+            // Plan
+            try
+            {
+                ExecutionPlan plan = executionPlanner.Create(boundProgram.Commands, prompt.Syntax);
+                return new CompilationResult(
+                    program,
+                    validation,
+                    sentence,
+                    diagnostics,
+                    boundProgram,
+                    plan,
+                    null);
+            }
+            catch (ExecutionPlanException exception)
+            {
+                diagnostics.Add(
+                    CompilationDiagnosticCodes.PlanningFailure,
+                    CompilationPhase.Plan,
+                    exception.Message,
+                    prompt.Syntax.Span);
+                return new CompilationResult(
+                    program,
+                    ValidationResult.Failure(exception.Message),
+                    sentence,
+                    diagnostics,
+                    boundProgram,
+                    null,
+                    CompilationPhase.Plan);
             }
         }
 
@@ -166,6 +276,21 @@ namespace FluNET
             return (compatibilityValidation, result.Sentence, result.Result);
         }
 
-
+        private static void AddPromptDiagnostics(
+            DiagnosticBag diagnostics,
+            ProcessedPrompt prompt,
+            IEnumerable<PromptDiagnostic> promptDiagnostics)
+        {
+            foreach (PromptDiagnostic diagnostic in promptDiagnostics)
+            {
+                int start = Math.Clamp(diagnostic.Position, 0, prompt.SourceText.Length);
+                int length = start < prompt.SourceText.Length ? 1 : 0;
+                diagnostics.Add(
+                    diagnostic.Code,
+                    CompilationPhase.Parse,
+                    diagnostic.Message,
+                    new SourceSpan(start, length));
+            }
+        }
     }
 }

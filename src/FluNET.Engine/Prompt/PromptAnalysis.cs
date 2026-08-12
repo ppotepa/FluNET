@@ -5,8 +5,12 @@ using FluNET.Execution.Planning;
 
 namespace FluNET.Prompt;
 
-/// <summary>The side-effect-free result of parsing and validating a prompt.</summary>
-public sealed record PromptAnalysis(
+/// <summary>
+/// Compatibility view of a side-effect-free analysis. The concrete value
+/// returned by Engine.Analyze is CompilationResult and carries the canonical
+/// parsed/bound program and compiler diagnostics in addition to these members.
+/// </summary>
+public record PromptAnalysis(
     ProcessedPrompt Prompt,
     ValidationResult ValidationResult,
     ISentence? Sentence)
