@@ -6,8 +6,8 @@
 
 FluNET is an experimental external DSL and execution engine for small,
 English-like automation commands. It is a proof of concept, not a sandbox or a
-general-purpose language. The current focus is predictable parsing, typed verb
-activation, explicit capabilities, and useful diagnostics.
+general-purpose language. The current focus is predictable parsing, typed
+semantic binding, explicit capabilities, and useful diagnostics.
 
 ```text
 GET [text] FROM {input.txt} THEN SAVE [text] TO {copy.txt}.
@@ -83,7 +83,7 @@ using FluNET.Prompt;
 using FluNETContext context = FluNETContext.Create();
 Engine engine = context.GetEngine();
 
-PromptAnalysis analysis = engine.Analyze(
+CompilationResult analysis = engine.Analyze(
     new ProcessedPrompt("GET [text] FROM {input.txt}."));
 
 ExecutionResult execution = await engine.ExecuteAsync(
@@ -118,10 +118,10 @@ process. Register `JsonFileWorkflowStateStore` (or an application-specific
 prevents a run identifier from being resumed with changed commands. Extensions
 with non-JSON result types can replace `IWorkflowValueSerializer`.
 
-`Analyze` is side-effect free. `ExecuteAsync` returns structured syntax,
-validation, activation, capability, cancellation, or execution errors; an
-operation failure is never represented as a successful validation plus an
-unexplained `null`.
+`Analyze` is side-effect free and returns the canonical `CompilationResult`.
+`ExecuteAsync` returns structured syntax, validation, activation, capability,
+cancellation, or execution errors; an operation failure is never represented
+as a successful validation plus an unexplained `null`.
 
 Hosts can replace `IFluNetFileSystem`, `IHttpTransport`, `ITextOutput`,
 `IEmailTransport`, and `IExecutionPolicy` through
@@ -133,54 +133,59 @@ as a backward-compatible default, so production hosts should replace it.
 
 1. `ProcessedPrompt` performs quote-aware lexical analysis and emits stable
    diagnostics (`FLN001` and later) with source positions.
-2. `PromptSyntax` represents commands, language-defined clause markers,
-   connectors, and execution modifiers; the older linked
-   token/word chain remains a public compatibility view, not an execution path.
+2. `PromptSyntax` is the canonical syntax tree for commands, language-defined
+   clause markers, connectors, and execution modifiers.
 3. An immutable `LanguageSnapshot` is the single definition of constructions,
-   commands, aliases, typed frames, extensible frame roles, type symbols, and
-   keywords. `LanguageRegistry` projects the legacy word-chain view from that
-   snapshot.
-4. `SemanticCommandBinder` selects one lexical frame and labels its arguments
-   by role. Prepositions are frame-sensitive, so `FROM` is a marker in `GET`
-   but remains message text in `SEND Hello from FluNET TO ...`.
-5. `SentenceValidator` validates every command, including commands after
-   `THEN`, before execution starts.
+   stable `CommandId`/`FrameId` values, aliases, typed frames, extensible frame
+   roles, type symbols, and keywords.
+4. `SemanticCommandBinder` selects one frame and labels its arguments by role.
+   Prepositions are frame-sensitive, so `FROM` is a marker in `GET` but remains
+   message text in `SEND Hello from FluNET TO ...`.
+5. `SemanticProgramValidator` validates the selected frames and slots before
+   planning. It does not use `WordFactory`, `IWord`, or `SentenceValidator`.
 6. Every argument is compiled to a typed `IExpression<T>` tree (literal,
    variable, list, conversion, JSON, or extension-defined expression).
-7. `ExecutionPlanner` turns bound commands into a typed DAG with explicit
+7. `ExecutionPlanner` turns the bound program into a typed DAG with explicit
    sequence, parallel-stage, condition, variable-flow, and result-storage edges.
 8. `ExecutionPlanExecutor` schedules ready nodes concurrently, persists
    append-only workflow events, restores completed outputs on resume, and
    applies retry, timeout, condition, and error policies.
-9. Each node dispatches through generic
-   `ICommandHandler<TCommand, TResult>` routes. Cancellation flows into injected
-   effect capabilities. Typed dispatch and effect execution do not use
-   reflection; only projection of the legacy `ISentence` compatibility view may
-   instantiate old word types.
+9. Each node dispatches through generic `ICommandHandler<TCommand, TResult>`
+   routes selected by stable `FrameId`. Typed dispatch and effect execution do
+   not use the legacy word-chain.
+
+The standard execution path is:
+
+```text
+Parse -> Bind -> Validate -> Plan -> Execute
+```
+
+`ISentence`, `SentenceValidator`, old verb objects, and token trees are retained
+only behind `LegacySentenceAdapter` for source compatibility. `Engine.Run` and
+`ISentence` are deprecated; new code should use `Analyze`, `CompilationResult`,
+and `ExecuteAsync`. See [the 0.3 migration guide](docs/legacy-api-migration.md).
 
 Language extensions are explicit modules rather than an ambient scan of all
-loaded assemblies. Implement `IFluNetModule`, declare each command frame, and
-compose one snapshot at host startup:
+loaded assemblies. Native modules declare a typed command, semantic frame,
+binder, and handler without inheriting from `IVerb` or `IWord`:
 
 ```csharp
 public sealed class ReportingModule : IFluNetModule
 {
-    public void Register(LanguageBuilder language)
+    public void Register(FluNetModuleBuilder module)
     {
-        language.Command<GenerateReport, FileInfo>("GENERATE", "Report")
+        module.Language
+            .Module("reporting")
+            .CommandConnector("AFTER", CommandLinkKind.Sequence);
+
+        module.Command<GenerateReportCommand, FileInfo>("GENERATE", "Report")
+            .FrameId("reporting.generate")
             .Aliases("BUILD")
             .Qualifiers("REPORT")
             .Positional<FileInfo>(SemanticRole.Output, SlotDirection.Output)
-            .Marked<DateOnly>(SemanticRole.Source, "FROM");
-
-        language.CommandConnector("AFTER", CommandLinkKind.Sequence);
-    }
-
-    public void Register(FluNetModuleBuilder module)
-    {
-        Register(module.Language);
-        module.Route<GenerateReport, GenerateReportCommand, FileInfo,
-            GenerateReportBinder, GenerateReportHandler>();
+            .Marked<DateOnly>(SemanticRole.Source, "FROM")
+            .BindWith<GenerateReportBinder>()
+            .HandleWith<GenerateReportHandler>();
     }
 }
 
@@ -215,8 +220,7 @@ Windows, and macOS.
 - The grammar is intentionally controlled rather than an attempt at unrestricted
   natural-language understanding. New surface forms belong in language modules.
 - Every built-in frame executes through a typed command and handler. The old
-  word-chain executor remains callable only as a compatibility API; extensions
-  participate in the standard pipeline by registering a typed route.
+  word-chain remains only as a deprecated compatibility projection.
 - The default `IEmailTransport` is diagnostic-only; production hosts should
   inject an SMTP or API-backed implementation.
 - This project does not make untrusted prompts safe by itself. Configure a
