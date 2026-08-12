@@ -8,6 +8,7 @@ using FluNET.Variables;
 using FluNET.Words;
 using FluNET.Execution.Commands;
 using FluNET.Prompt;
+using FluNET.Language.Binding;
 using System.Reflection;
 
 namespace FluNET.Sentences
@@ -52,7 +53,7 @@ namespace FluNET.Sentences
 
         public async ValueTask<object?> ExecuteAsync(
             ISentence sentence,
-            CommandSyntax? commandSyntax,
+            BoundCommand? boundCommand,
             CancellationToken cancellationToken = default)
         {
             if (sentence?.Root == null)
@@ -62,10 +63,10 @@ namespace FluNET.Sentences
 
             cancellationToken.ThrowIfCancellationRequested();
 
-            if (commandSyntax is not null)
+            if (boundCommand is not null)
             {
                 CommandDispatchResult dispatch = await _commandDispatcher
-                    .TryExecuteAsync(commandSyntax, cancellationToken)
+                    .TryExecuteAsync(boundCommand, cancellationToken)
                     .ConfigureAwait(false);
                 if (dispatch.IsHandled)
                 {

@@ -1,5 +1,8 @@
 using FluNET.Variables;
 using System.Collections.ObjectModel;
+using FluNET.Language;
+using FluNET.Language.Binding;
+using FluNET.Prompt;
 
 namespace FluNET.Execution.Commands;
 
@@ -27,6 +30,17 @@ public sealed class TextExpression : IValueExpression<string>
     }
 
     public IReadOnlyList<TextPart> Parts => _parts;
+
+    public static TextExpression Bind(
+        BoundArgument argument,
+        LanguageSnapshot language,
+        bool preserveStructuredReferences = false)
+    {
+        ArgumentNullException.ThrowIfNull(argument);
+        ArgumentNullException.ThrowIfNull(language);
+        return new TextExpression(argument.Tokens.Select(token =>
+            BindPart(token, language, preserveStructuredReferences)));
+    }
 
     public string Evaluate(IVariableResolver variables)
     {
@@ -56,6 +70,41 @@ public sealed class TextExpression : IValueExpression<string>
                 $"Variable {normalized} not found in context. " +
                 $"Variables must be stored before use with commands like: GET {normalized} FROM file.txt");
     }
+
+    private static TextPart BindPart(
+        PromptToken token,
+        LanguageSnapshot language,
+        bool preserveStructuredReferences) => token.Kind switch
+    {
+        PromptTokenKind.Variable => new VariableTextPart(token.Text),
+        PromptTokenKind.Reference when preserveStructuredReferences && LooksLikeJson(token.Text) =>
+            new LiteralTextPart(token.Text),
+        PromptTokenKind.Reference => new LiteralTextPart(Unwrap(token.Text, '{', '}')),
+        _ => new LiteralTextPart(NormalizeLiteral(token.Text, language))
+    };
+
+    private static bool LooksLikeJson(string value) =>
+        value.Length >= 2 && value[0] == '{' && value[^1] == '}' && value.Contains(':');
+
+    private static string NormalizeLiteral(string value, LanguageSnapshot language)
+    {
+        if (value.Length >= 2 &&
+            ((value[0] == '"' && value[^1] == '"') ||
+             (value[0] == '\'' && value[^1] == '\'')))
+        {
+            return Unwrap(value, value[0], value[^1])
+                .Replace("\\\"", "\"")
+                .Replace("\\'", "'")
+                .Replace("\\\\", "\\");
+        }
+
+        return language.FindCommand(value)?.Name ?? value;
+    }
+
+    private static string Unwrap(string value, char opening, char closing) =>
+        value.Length >= 2 && value[0] == opening && value[^1] == closing
+            ? value[1..^1]
+            : value;
 
     private static void AppendValue(ICollection<string> values, object value)
     {

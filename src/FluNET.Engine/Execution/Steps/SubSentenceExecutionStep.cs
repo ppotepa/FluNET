@@ -24,12 +24,12 @@ public sealed class SubSentenceExecutionStep(
             {
                 ISentence subSentence = context.Sentence.SubSentences[index];
                 int syntaxIndex = index + 1;
-                var commandSyntax = syntaxIndex < context.Prompt.Syntax.Commands.Count
-                    ? context.Prompt.Syntax.Commands[syntaxIndex]
+                var boundCommand = syntaxIndex < context.BoundCommands.Count
+                    ? context.BoundCommands[syntaxIndex]
                     : null;
                 object? subResult = await sentenceExecutor.ExecuteAsync(
                         subSentence,
-                        commandSyntax,
+                        boundCommand,
                         cancellationToken)
                     .ConfigureAwait(false);
                 context.Result = subResult;

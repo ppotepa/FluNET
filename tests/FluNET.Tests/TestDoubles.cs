@@ -66,3 +66,18 @@ internal sealed class RecordingTextOutput : ITextOutput
         return ValueTask.CompletedTask;
     }
 }
+
+internal sealed class RecordingEmailTransport : IEmailTransport
+{
+    public List<(string Recipient, string Message)> Messages { get; } = [];
+
+    public ValueTask<string> SendAsync(
+        string recipient,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Messages.Add((recipient, message));
+        return ValueTask.FromResult($"accepted:{recipient}");
+    }
+}

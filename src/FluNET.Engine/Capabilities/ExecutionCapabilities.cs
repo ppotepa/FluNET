@@ -164,6 +164,29 @@ public interface ITextOutput
     ValueTask WriteLineAsync(string message, CancellationToken cancellationToken = default);
 }
 
+public interface IEmailTransport
+{
+    ValueTask<string> SendAsync(
+        string recipient,
+        string message,
+        CancellationToken cancellationToken = default);
+}
+
+/// <summary>Default deterministic email boundary; hosts can replace it with SMTP or an API.</summary>
+public sealed class DiagnosticEmailTransport : IEmailTransport
+{
+    public ValueTask<string> SendAsync(
+        string recipient,
+        string message,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        System.Diagnostics.Debug.WriteLine($"Sending email to {recipient}");
+        System.Diagnostics.Debug.WriteLine($"Message: {message}");
+        return ValueTask.FromResult($"Email sent to {recipient}");
+    }
+}
+
 public sealed class ConsoleTextOutput : ITextOutput
 {
     public ValueTask WriteLineAsync(string message, CancellationToken cancellationToken = default)

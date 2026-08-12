@@ -75,6 +75,7 @@ namespace FluNET.Context
             services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
             services.AddSingleton<IHttpTransport, HttpTransport>();
             services.AddSingleton<ITextOutput, ConsoleTextOutput>();
+            services.AddSingleton<IEmailTransport, DiagnosticEmailTransport>();
 
             // Token processing
             services.AddTransient<TokenFactory>();
@@ -96,6 +97,15 @@ namespace FluNET.Context
 
             // Typed command routes; unmatched commands use the legacy verb adapter
             services.AddTypedCommand<SayCommand, string, SayCommandBinder, SayCommandHandler>();
+            services.AddTypedCommand<GetTextCommand, string[], GetTextCommandBinder, GetTextCommandHandler>();
+            services.AddTypedCommand<LoadTextCommand, string[], LoadTextCommandBinder, LoadTextCommandHandler>();
+            services.AddTypedCommand<LoadConfigCommand, Dictionary<string, object>, LoadConfigCommandBinder, LoadConfigCommandHandler>();
+            services.AddTypedCommand<SaveTextCommand, string, SaveTextCommandBinder, SaveTextCommandHandler>();
+            services.AddTypedCommand<DeleteFileCommand, string, DeleteFileCommandBinder, DeleteFileCommandHandler>();
+            services.AddTypedCommand<DownloadFileCommand, FileInfo, DownloadFileCommandBinder, DownloadFileCommandHandler>();
+            services.AddTypedCommand<PostJsonCommand, string, PostJsonCommandBinder, PostJsonCommandHandler>();
+            services.AddTypedCommand<SendEmailCommand, string, SendEmailCommandBinder, SendEmailCommandHandler>();
+            services.AddTypedCommand<TransformEncodingCommand, string, TransformEncodingCommandBinder, TransformEncodingCommandHandler>();
             services.AddTransient<CommandDispatcher>();
 
             // Pattern matchers (regex and string-based implementations)

@@ -1,6 +1,8 @@
 using FluNET.Context;
 using FluNET.Execution.Commands;
 using FluNET.Prompt;
+using FluNET.Language.Binding;
+using FluNET.Language;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests.Execution;
@@ -8,6 +10,27 @@ namespace FluNET.Tests.Execution;
 [TestFixture]
 public sealed class TypedCommandTests
 {
+    [TestCase("GET [value] FROM {input.txt}.")]
+    [TestCase("LOAD TEXT [value] FROM {input.txt}.")]
+    [TestCase("LOAD CONFIG [value] FROM {input.json}.")]
+    [TestCase("SAVE value TO {output.txt}.")]
+    [TestCase("DELETE {output.txt}.")]
+    [TestCase("DOWNLOAD [file] FROM {https://example.test/file}.")]
+    [TestCase("POST {\"ok\":true} TO {https://example.test/api}.")]
+    [TestCase("SAY value.")]
+    [TestCase("SEND value TO user@example.test.")]
+    [TestCase("TRANSFORM value USING UTF8.")]
+    public void EveryStandardFrameHasATypedRoute(string source)
+    {
+        using FluNETContext context = FluNETContext.Create();
+        BoundCommand command = new SemanticCommandBinder(StandardLanguage.CreateSnapshot())
+            .Bind(new ProcessedPrompt(source).Syntax.Commands.Single());
+
+        bool hasRoute = context.GetService<CommandDispatcher>().CanDispatch(command);
+
+        Assert.That(hasRoute, Is.True, $"Missing typed route for {command.Frame.ImplementationType.Name}.");
+    }
+
     [Test]
     public async Task Engine_UsesTheRegisteredTypedSayHandler()
     {
@@ -51,10 +74,10 @@ public sealed class TypedCommandTests
         {
             new CommandRoute<CountCommand, int>(new CountBinder(), new CountHandler())
         });
-        CommandSyntax syntax = new ProcessedPrompt("COUNT one two three.")
-            .Syntax.Commands.Single();
+        BoundCommand command = new SemanticCommandBinder(StandardLanguage.CreateSnapshot())
+            .Bind(new ProcessedPrompt("SAY one two three.").Syntax.Commands.Single());
 
-        CommandDispatchResult result = await dispatcher.TryExecuteAsync(syntax);
+        CommandDispatchResult result = await dispatcher.TryExecuteAsync(command);
 
         Assert.Multiple(() =>
         {
@@ -84,9 +107,9 @@ public sealed class TypedCommandTests
 
     private sealed class CountBinder : ICommandBinder<CountCommand, int>
     {
-        public CountCommand? TryBind(CommandSyntax syntax) =>
-            syntax.Verb.Text.Equals("COUNT", StringComparison.OrdinalIgnoreCase)
-                ? new CountCommand(syntax.Arguments.Count)
+        public CountCommand? TryBind(BoundCommand command) =>
+            command.Command.Name.Equals("SAY", StringComparison.OrdinalIgnoreCase)
+                ? new CountCommand(command.Syntax.Arguments.Count)
                 : null;
     }
 

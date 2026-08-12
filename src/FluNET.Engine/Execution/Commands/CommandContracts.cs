@@ -1,4 +1,4 @@
-using FluNET.Prompt;
+using FluNET.Language.Binding;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Execution.Commands;
@@ -17,11 +17,11 @@ public interface ICommandHandler<in TCommand, TResult>
         CancellationToken cancellationToken = default);
 }
 
-/// <summary>Binds canonical syntax to a typed command, or declines the syntax.</summary>
+/// <summary>Binds a semantic frame to a typed command, or declines the frame.</summary>
 public interface ICommandBinder<TCommand, TResult>
     where TCommand : class, ICommand<TResult>
 {
-    TCommand? TryBind(CommandSyntax syntax);
+    TCommand? TryBind(BoundCommand command);
 }
 
 /// <summary>
@@ -30,8 +30,10 @@ public interface ICommandBinder<TCommand, TResult>
 /// </summary>
 public interface ICommandRoute
 {
+    bool CanHandle(BoundCommand command);
+
     ValueTask<CommandDispatchResult> TryExecuteAsync(
-        CommandSyntax syntax,
+        BoundCommand command,
         CancellationToken cancellationToken = default);
 }
 
@@ -46,17 +48,19 @@ public sealed class CommandRoute<TCommand, TResult>(
     ICommandHandler<TCommand, TResult> handler) : ICommandRoute
     where TCommand : class, ICommand<TResult>
 {
+    public bool CanHandle(BoundCommand command) => binder.TryBind(command) is not null;
+
     public async ValueTask<CommandDispatchResult> TryExecuteAsync(
-        CommandSyntax syntax,
+        BoundCommand command,
         CancellationToken cancellationToken = default)
     {
-        TCommand? command = binder.TryBind(syntax);
-        if (command is null)
+        TCommand? typedCommand = binder.TryBind(command);
+        if (typedCommand is null)
         {
             return CommandDispatchResult.NotHandled;
         }
 
-        TResult result = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+        TResult result = await handler.HandleAsync(typedCommand, cancellationToken).ConfigureAwait(false);
         return CommandDispatchResult.Handled(result);
     }
 }
@@ -66,16 +70,22 @@ public sealed class CommandDispatcher(IEnumerable<ICommandRoute> routes)
 {
     private readonly IReadOnlyList<ICommandRoute> _routes = routes.ToArray();
 
+    public bool CanDispatch(BoundCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return _routes.Any(route => route.CanHandle(command));
+    }
+
     public async ValueTask<CommandDispatchResult> TryExecuteAsync(
-        CommandSyntax syntax,
+        BoundCommand command,
         CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(syntax);
+        ArgumentNullException.ThrowIfNull(command);
         cancellationToken.ThrowIfCancellationRequested();
 
         foreach (ICommandRoute route in _routes)
         {
-            CommandDispatchResult result = await route.TryExecuteAsync(syntax, cancellationToken)
+            CommandDispatchResult result = await route.TryExecuteAsync(command, cancellationToken)
                 .ConfigureAwait(false);
             if (result.IsHandled)
             {

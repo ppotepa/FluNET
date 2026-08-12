@@ -1,7 +1,8 @@
 using FluNET.Capabilities;
 using FluNET.Language;
-using FluNET.Prompt;
 using FluNET.Variables;
+using FluNET.Language.Binding;
+using FluNET.Syntax.Verbs;
 
 namespace FluNET.Execution.Commands;
 
@@ -10,48 +11,16 @@ public sealed record SayCommand(TextExpression Message) : ICommand<string>;
 public sealed class SayCommandBinder(LanguageSnapshot language)
     : ICommandBinder<SayCommand, string>
 {
-    public SayCommand? TryBind(CommandSyntax syntax)
+    public SayCommand? TryBind(BoundCommand command)
     {
-        ArgumentNullException.ThrowIfNull(syntax);
-        CommandDescriptor? descriptor = language.FindCommand(syntax.Verb.Text);
-        if (!string.Equals(descriptor?.Name, "SAY", StringComparison.Ordinal))
+        ArgumentNullException.ThrowIfNull(command);
+        if (command.Frame.ImplementationType != typeof(SayText))
         {
             return null;
         }
 
-        ClauseSyntax subject = syntax.Clauses.First(clause => clause.Kind == PromptClauseKind.Subject);
-        TextPart[] parts = subject.Values.Select(BindPart).ToArray();
-        return new SayCommand(new TextExpression(parts));
+        return new SayCommand(TextExpression.Bind(command[SemanticRole.Theme], language));
     }
-
-    private TextPart BindPart(PromptToken token) => token.Kind switch
-    {
-        PromptTokenKind.Variable => new VariableTextPart(token.Text),
-        PromptTokenKind.Reference => new LiteralTextPart(UnwrapReference(token.Text)),
-        _ => new LiteralTextPart(NormalizeLiteral(token.Text))
-    };
-
-    private string NormalizeLiteral(string value)
-    {
-        if (value.Length >= 2 &&
-            ((value[0] == '"' && value[^1] == '"') ||
-             (value[0] == '\'' && value[^1] == '\'')))
-        {
-            return value[1..^1]
-                .Replace("\\\"", "\"")
-                .Replace("\\'", "'")
-                .Replace("\\\\", "\\");
-        }
-
-        // Preserve compatibility with the legacy WordFactory, which resolves
-        // a command alias used as message text to its canonical command name.
-        return language.FindCommand(value)?.Name ?? value;
-    }
-
-    private static string UnwrapReference(string value) =>
-        value.Length >= 2 && value[0] == '{' && value[^1] == '}'
-            ? value[1..^1]
-            : value;
 }
 
 public sealed class SayCommandHandler(

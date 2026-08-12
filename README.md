@@ -86,8 +86,9 @@ validation, activation, capability, cancellation, or execution errors; an
 operation failure is never represented as a successful validation plus an
 unexplained `null`.
 
-Hosts can replace `IFluNetFileSystem`, `IHttpTransport`, `ITextOutput`, and
-`IExecutionPolicy` through `FluNETContext.Create(services => ...)`. The CLI uses
+Hosts can replace `IFluNetFileSystem`, `IHttpTransport`, `ITextOutput`,
+`IEmailTransport`, and `IExecutionPolicy` through
+`FluNETContext.Create(services => ...)`. The CLI uses
 `RestrictedExecutionPolicy`; the embedding API keeps `AllowAllExecutionPolicy`
 as a backward-compatible default, so production hosts should replace it.
 
@@ -155,9 +156,11 @@ Windows, and macOS.
 ## Status and limitations
 
 - The grammar is intentionally small and still evolving.
-- `SAY` is the first end-to-end typed command. Other built-in verbs still flow
-  through the compatibility word chain while they are migrated incrementally.
-- `SEND` is a simulated implementation rather than a real mail transport.
+- Every built-in frame executes through a typed command and handler. The old
+  word-chain executor remains only as a compatibility fallback for extensions
+  that have not registered a typed route.
+- The default `IEmailTransport` is diagnostic-only; production hosts should
+  inject an SMTP or API-backed implementation.
 - This project does not make untrusted prompts safe by itself. Configure a
   restrictive execution policy and isolate the host process where appropriate.
 

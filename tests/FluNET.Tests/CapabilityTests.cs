@@ -10,6 +10,24 @@ namespace FluNET.Tests;
 public sealed class CapabilityTests
 {
     [Test]
+    public async Task SendUsesTheInjectedEmailBoundary()
+    {
+        RecordingEmailTransport email = new();
+        using FluNETContext context = FluNETContext.Create(services =>
+            services.AddSingleton<IEmailTransport>(email));
+
+        ExecutionResult execution = await context.GetEngine().ExecuteAsync(
+            new ProcessedPrompt("SEND hello TO user@example.test."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
+            Assert.That(execution.Result, Is.EqualTo("accepted:user@example.test"));
+            Assert.That(email.Messages, Is.EqualTo(new[] { ("user@example.test", "hello") }));
+        });
+    }
+
+    [Test]
     public async Task ChainedCommandCapabilityFailureKeepsItsErrorKind()
     {
         string allowedRoot = Path.Combine(Path.GetTempPath(), $"FluNET_Allowed_{Guid.NewGuid():N}");
