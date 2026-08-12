@@ -17,6 +17,26 @@ public enum SemanticRole
     Format
 }
 
+/// <summary>
+/// Frame-local semantic role. Unlike <see cref="SemanticRole"/>, modules may
+/// introduce new role identifiers without changing the engine assembly.
+/// </summary>
+public readonly record struct FrameRoleId
+{
+    public FrameRoleId(string value)
+    {
+        Value = string.IsNullOrWhiteSpace(value)
+            ? throw new ArgumentException("A frame role cannot be empty.", nameof(value))
+            : value.Trim().ToUpperInvariant();
+    }
+
+    public string Value { get; }
+
+    public static implicit operator FrameRoleId(SemanticRole role) => new(role.ToString());
+
+    public override string ToString() => Value;
+}
+
 public enum SlotDirection
 {
     Input,
@@ -43,15 +63,34 @@ public sealed record CommandSlotDescriptor
         SlotCardinality cardinality,
         string? marker)
     {
-        Role = role;
+        RoleId = role;
         ValueType = valueType ?? throw new ArgumentNullException(nameof(valueType));
         Direction = direction;
         Cardinality = cardinality;
         Marker = NormalizeOptional(marker);
     }
 
-    public SemanticRole Role { get; }
+    public CommandSlotDescriptor(
+        FrameRoleId role,
+        Type valueType,
+        SlotDirection direction,
+        SlotCardinality cardinality,
+        string? marker)
+    {
+        RoleId = role;
+        ValueType = valueType ?? throw new ArgumentNullException(nameof(valueType));
+        Direction = direction;
+        Cardinality = cardinality;
+        Marker = NormalizeOptional(marker);
+    }
+
+    public FrameRoleId RoleId { get; }
+    public SemanticRole Role => Enum.TryParse(RoleId.Value, true, out SemanticRole role)
+        ? role
+        : throw new InvalidOperationException(
+            $"Role '{RoleId}' is frame-specific. Use RoleId instead of the compatibility Role property.");
     public Type ValueType { get; }
+    public TypeSymbol ValueTypeSymbol { get; internal set; } = null!;
     public SlotDirection Direction { get; }
     public SlotCardinality Cardinality { get; }
     public string? Marker { get; }
@@ -85,6 +124,7 @@ public sealed record CommandFrameDescriptor
     public Type ImplementationType { get; }
     public Type FamilyType { get; }
     public Type ResultType { get; }
+    public TypeSymbol ResultTypeSymbol { get; internal set; } = null!;
     public bool IsDefault { get; }
     public IReadOnlyList<string> Qualifiers { get; }
     public IReadOnlyList<CommandSlotDescriptor> Slots { get; }
@@ -162,11 +202,24 @@ public sealed class LanguageSnapshot
     internal LanguageSnapshot(
         IEnumerable<CommandDescriptor> commands,
         IEnumerable<KeywordDescriptor> keywords,
-        PromptGrammar grammar)
+        PromptGrammar grammar,
+        IReadOnlyDictionary<Type, string>? typeNames = null)
     {
         Commands = commands.OrderBy(command => command.Name, StringComparer.Ordinal).ToArray();
         Keywords = keywords.OrderBy(keyword => keyword.Text, StringComparer.Ordinal).ToArray();
         Grammar = grammar ?? throw new ArgumentNullException(nameof(grammar));
+        Types = new LanguageTypeSystem(
+            Commands.SelectMany(command => command.Frames)
+                .SelectMany(frame => frame.Slots.Select(slot => slot.ValueType).Append(frame.ResultType)),
+            typeNames ?? new Dictionary<Type, string>());
+        foreach (CommandFrameDescriptor frame in Commands.SelectMany(command => command.Frames))
+        {
+            frame.ResultTypeSymbol = Types.Get(frame.ResultType);
+            foreach (CommandSlotDescriptor slot in frame.Slots)
+            {
+                slot.ValueTypeSymbol = Types.Get(slot.ValueType);
+            }
+        }
 
         Dictionary<string, CommandDescriptor> commandIndex = new(StringComparer.OrdinalIgnoreCase);
         foreach (CommandDescriptor command in Commands)
@@ -203,6 +256,7 @@ public sealed class LanguageSnapshot
     public IReadOnlyList<CommandDescriptor> Commands { get; }
     public IReadOnlyList<KeywordDescriptor> Keywords { get; }
     public PromptGrammar Grammar { get; }
+    public LanguageTypeSystem Types { get; }
     public IEnumerable<string> CommandNames => _commandsBySurface.Keys.Order(StringComparer.OrdinalIgnoreCase);
 
     public CommandDescriptor? FindCommand(string surfaceForm) =>
@@ -224,6 +278,7 @@ public sealed class LanguageBuilder
     private readonly List<KeywordDescriptor> _keywords = [];
     private readonly Dictionary<string, PromptClauseKind> _clauseMarkers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CommandLinkKind> _commandConnectors = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<Type, string> _typeNames = [];
 
     public CommandFrameBuilder Command<TImplementation, TResult>(string name, string usageName)
         where TImplementation : class, IVerb
@@ -262,6 +317,15 @@ public sealed class LanguageBuilder
     {
         ArgumentNullException.ThrowIfNull(module);
         module.Register(this);
+        return this;
+    }
+
+    public LanguageBuilder Type<TValue>(string name)
+    {
+        if (!_typeNames.TryAdd(typeof(TValue), name))
+        {
+            throw new LanguageDefinitionException($"CLR type '{typeof(TValue)}' already has a language name.");
+        }
         return this;
     }
 
@@ -310,7 +374,8 @@ public sealed class LanguageBuilder
         return new LanguageSnapshot(
             commands,
             _keywords,
-            new PromptGrammar(_clauseMarkers, _commandConnectors));
+            new PromptGrammar(_clauseMarkers, _commandConnectors),
+            _typeNames);
     }
 
     private static Type FindVerbFamily(Type implementationType)
@@ -404,6 +469,12 @@ public sealed class LanguageBuilder
             SlotCardinality cardinality = SlotCardinality.Required) =>
             AddSlot<TValue>(role, null, direction, cardinality);
 
+        public CommandFrameBuilder Positional<TValue>(
+            FrameRoleId role,
+            SlotDirection direction = SlotDirection.Input,
+            SlotCardinality cardinality = SlotCardinality.Required) =>
+            AddSlot<TValue>(role, null, direction, cardinality);
+
         public CommandFrameBuilder Marked<TValue>(
             SemanticRole role,
             string marker,
@@ -411,13 +482,20 @@ public sealed class LanguageBuilder
             SlotDirection direction = SlotDirection.Input) =>
             AddSlot<TValue>(role, marker, direction, cardinality);
 
+        public CommandFrameBuilder Marked<TValue>(
+            FrameRoleId role,
+            string marker,
+            SlotCardinality cardinality = SlotCardinality.Required,
+            SlotDirection direction = SlotDirection.Input) =>
+            AddSlot<TValue>(role, marker, direction, cardinality);
+
         private CommandFrameBuilder AddSlot<TValue>(
-            SemanticRole role,
+            FrameRoleId role,
             string? marker,
             SlotDirection direction,
             SlotCardinality cardinality)
         {
-            if (_frame.Slots.Any(slot => slot.Role == role))
+            if (_frame.Slots.Any(slot => slot.RoleId == role))
             {
                 throw new LanguageDefinitionException(
                     $"Frame '{_command.Name}/{_frame.UsageName}' declares role '{role}' more than once.");

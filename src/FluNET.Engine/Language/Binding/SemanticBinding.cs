@@ -15,6 +15,7 @@ public sealed class BoundArgument
     }
 
     public CommandSlotDescriptor Slot { get; }
+    public FrameRoleId RoleId => Slot.RoleId;
     public SemanticRole Role => Slot.Role;
     public IReadOnlyList<PromptToken> Tokens => _tokens;
     public bool IsPresent => _tokens.Count > 0;
@@ -26,30 +27,33 @@ public sealed class BoundArgument
 /// <summary>A command whose lexical form has been assigned one frame and semantic roles.</summary>
 public sealed class BoundCommand
 {
-    private readonly ReadOnlyDictionary<SemanticRole, BoundArgument> _arguments;
+    private readonly ReadOnlyDictionary<FrameRoleId, BoundArgument> _arguments;
 
     internal BoundCommand(
         CommandSyntax syntax,
         CommandDescriptor command,
         CommandFrameDescriptor frame,
-        IDictionary<SemanticRole, BoundArgument> arguments)
+        IDictionary<FrameRoleId, BoundArgument> arguments)
     {
         Syntax = syntax;
         Command = command;
         Frame = frame;
-        _arguments = new ReadOnlyDictionary<SemanticRole, BoundArgument>(
-            new Dictionary<SemanticRole, BoundArgument>(arguments));
+        _arguments = new ReadOnlyDictionary<FrameRoleId, BoundArgument>(
+            new Dictionary<FrameRoleId, BoundArgument>(arguments));
     }
 
     public CommandSyntax Syntax { get; }
     public CommandDescriptor Command { get; }
     public CommandFrameDescriptor Frame { get; }
-    public IReadOnlyDictionary<SemanticRole, BoundArgument> Arguments => _arguments;
+    public IReadOnlyDictionary<FrameRoleId, BoundArgument> Arguments => _arguments;
 
-    public BoundArgument this[SemanticRole role] => _arguments[role];
+    public BoundArgument this[FrameRoleId role] => _arguments[role];
+    public BoundArgument this[SemanticRole role] => _arguments[(FrameRoleId)role];
 
-    public BoundArgument? Find(SemanticRole role) =>
+    public BoundArgument? Find(FrameRoleId role) =>
         _arguments.TryGetValue(role, out BoundArgument? argument) ? argument : null;
+
+    public BoundArgument? Find(SemanticRole role) => Find((FrameRoleId)role);
 }
 
 /// <summary>
@@ -73,7 +77,7 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
         FrameSelection selection = SelectFrame(command, syntax);
         IReadOnlyDictionary<string, IReadOnlyList<PromptToken>> clauses =
             SegmentForFrame(syntax, selection.Frame);
-        Dictionary<SemanticRole, BoundArgument> arguments = [];
+        Dictionary<FrameRoleId, BoundArgument> arguments = [];
 
         foreach (CommandSlotDescriptor slot in selection.Frame.Slots)
         {
@@ -87,7 +91,7 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
             }
 
             ValidateCardinality(syntax, slot, tokens);
-            arguments.Add(slot.Role, new BoundArgument(slot, tokens));
+            arguments.Add(slot.RoleId, new BoundArgument(slot, tokens));
         }
 
         return new BoundCommand(syntax, command, selection.Frame, arguments);
