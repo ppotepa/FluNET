@@ -24,6 +24,7 @@ public sealed class PlanExecutionStep(ExecutionPlanExecutor executor) : IExecuti
             context.Result = await executor.ExecuteAsync(
                 context.Plan,
                 context.CompletedSteps,
+                context.Workflow,
                 cancellationToken).ConfigureAwait(false);
             return await next(context, cancellationToken).ConfigureAwait(false);
         }
@@ -38,6 +39,14 @@ public sealed class PlanExecutionStep(ExecutionPlanExecutor executor) : IExecuti
         catch (CapabilityDeniedException exception)
         {
             return Failure(ExecutionFailureKind.Capability, "FLN230", exception.Message, exception, context);
+        }
+        catch (WorkflowTimeoutException exception)
+        {
+            return Failure(ExecutionFailureKind.Execution, "FLN240", exception.Message, exception, context);
+        }
+        catch (WorkflowResumeException exception)
+        {
+            return Failure(ExecutionFailureKind.Execution, "FLN241", exception.Message, exception, context);
         }
         catch (Exception exception)
         {
@@ -58,5 +67,6 @@ public sealed class PlanExecutionStep(ExecutionPlanExecutor executor) : IExecuti
             exception,
             context.Sentence,
             context.Plan,
-            context.StepResults);
+            context.StepResults,
+            context.Workflow);
 }

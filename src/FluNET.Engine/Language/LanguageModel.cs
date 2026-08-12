@@ -287,6 +287,7 @@ public sealed class LanguageBuilder
     private readonly Dictionary<string, PromptClauseKind> _clauseMarkers = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CommandLinkKind> _commandConnectors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Type, string> _typeNames = [];
+    private readonly List<CommandModifierDescriptor> _commandModifiers = [];
 
     public CommandFrameBuilder Command<TImplementation, TResult>(string name, string usageName)
         where TImplementation : class, IVerb
@@ -363,6 +364,23 @@ public sealed class LanguageBuilder
         return this;
     }
 
+    public LanguageBuilder CommandModifier(
+        string introducer,
+        string? name,
+        CommandModifierKind kind)
+    {
+        CommandModifierDescriptor descriptor = new(introducer, name, kind);
+        if (_commandModifiers.Any(existing =>
+            existing.Introducer.Equals(introducer, StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(existing.Name, name, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new LanguageDefinitionException(
+                $"Command modifier '{introducer} {name}' is registered more than once.");
+        }
+        _commandModifiers.Add(descriptor);
+        return this;
+    }
+
     public LanguageSnapshot Build()
     {
         CommandDescriptor[] commands = _commands.Values.Select(command =>
@@ -382,7 +400,7 @@ public sealed class LanguageBuilder
         return new LanguageSnapshot(
             commands,
             _keywords,
-            new PromptGrammar(_clauseMarkers, _commandConnectors),
+            new PromptGrammar(_clauseMarkers, _commandConnectors, _commandModifiers),
             _typeNames);
     }
 

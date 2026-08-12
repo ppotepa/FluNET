@@ -74,6 +74,7 @@ public sealed class ExecutionPipeline
             context.Sentence,
             context.Result,
             context.Plan,
-            context.StepResults));
+            context.StepResults,
+            context.Workflow));
     }
 }

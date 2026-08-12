@@ -75,16 +75,74 @@ public sealed record CommandSyntax
         }
 
         PromptToken[] snapshot = tokens.ToArray();
-        Tokens = snapshot;
+        PromptGrammar activeGrammar = grammar ?? PromptGrammar.Standard;
         Verb = snapshot[0];
-        Clauses = ParseClauses(snapshot.Skip(1), grammar ?? PromptGrammar.Standard);
+        AllTokens = snapshot;
+        (PromptToken[] arguments, CommandModifierSyntax[] modifiers) =
+            SplitModifiers(snapshot.Skip(1).ToArray(), activeGrammar);
+        Tokens = new[] { Verb }.Concat(arguments).ToArray();
+        Modifiers = modifiers;
+        Clauses = ParseClauses(arguments, activeGrammar);
     }
 
     public IReadOnlyList<PromptToken> Tokens { get; }
+    public IReadOnlyList<PromptToken> AllTokens { get; }
     public PromptToken Verb { get; }
     public IReadOnlyList<ClauseSyntax> Clauses { get; }
+    public IReadOnlyList<CommandModifierSyntax> Modifiers { get; }
     public IReadOnlyList<PromptToken> Arguments => Tokens.Skip(1).ToArray();
-    public SourceSpan Span => SourceSpan.FromBounds(Verb.Start, Tokens[^1].Span.End);
+    public SourceSpan Span => SourceSpan.FromBounds(Verb.Start, AllTokens[^1].Span.End);
+
+    private static (PromptToken[] Arguments, CommandModifierSyntax[] Modifiers) SplitModifiers(
+        IReadOnlyList<PromptToken> arguments,
+        PromptGrammar grammar)
+    {
+        int firstModifier = -1;
+        for (int index = 0; index < arguments.Count; index++)
+        {
+            if (grammar.TryGetModifier(arguments, index, out _, out _))
+            {
+                firstModifier = index;
+                break;
+            }
+        }
+        if (firstModifier < 0)
+        {
+            return (arguments.ToArray(), Array.Empty<CommandModifierSyntax>());
+        }
+
+        List<CommandModifierSyntax> modifiers = [];
+        int cursor = firstModifier;
+        while (cursor < arguments.Count)
+        {
+            if (!grammar.TryGetModifier(
+                arguments,
+                cursor,
+                out CommandModifierDescriptor? descriptor,
+                out int consumed))
+            {
+                throw new ArgumentException(
+                    $"Unexpected token '{arguments[cursor].Text}' after a command modifier.");
+            }
+
+            PromptToken introducer = arguments[cursor];
+            PromptToken? name = consumed == 2 ? arguments[cursor + 1] : null;
+            cursor += consumed;
+            List<PromptToken> values = [];
+            while (cursor < arguments.Count &&
+                !grammar.TryGetModifier(arguments, cursor, out _, out _))
+            {
+                values.Add(arguments[cursor++]);
+            }
+            modifiers.Add(new CommandModifierSyntax(
+                descriptor!.Kind,
+                introducer,
+                name,
+                values));
+        }
+
+        return (arguments.Take(firstModifier).ToArray(), modifiers.ToArray());
+    }
 
     private static IReadOnlyList<ClauseSyntax> ParseClauses(
         IEnumerable<PromptToken> tokens,
@@ -118,6 +176,12 @@ public sealed record CommandSyntax
         return clauses;
     }
 }
+
+public sealed record CommandModifierSyntax(
+    CommandModifierKind Kind,
+    PromptToken Introducer,
+    PromptToken? Name,
+    IReadOnlyList<PromptToken> Values);
 
 /// <summary>The connector between two adjacent command nodes.</summary>
 public sealed record CommandLinkSyntax(

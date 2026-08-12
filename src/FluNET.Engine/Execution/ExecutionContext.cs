@@ -4,6 +4,7 @@ using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Language.Binding;
 using FluNET.Execution.Planning;
+using FluNET.Execution.Workflow;
 
 namespace FluNET.Execution
 {
@@ -36,9 +37,14 @@ namespace FluNET.Execution
         /// </summary>
         public Dictionary<string, object> Data { get; } = new();
 
-        public ExecutionContext(ProcessedPrompt prompt)
+        public WorkflowRunState Workflow { get; }
+
+        public ExecutionContext(
+            ProcessedPrompt prompt,
+            WorkflowExecutionOptions? workflowOptions = null)
         {
             Prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
+            Workflow = new WorkflowRunState(workflowOptions);
         }
 
         /// <summary>

@@ -9,6 +9,7 @@ using FluNET.Words;
 using FluNET.Language.Binding;
 using FluNET.Execution.Planning;
 using FluNET.Language;
+using FluNET.Execution.Workflow;
 
 namespace FluNET
 {
@@ -127,11 +128,22 @@ namespace FluNET
         public async Task<ExecutionResult> ExecuteAsync(
             ProcessedPrompt prompt,
             CancellationToken cancellationToken = default)
+            => await ExecuteAsync(
+                prompt,
+                new WorkflowExecutionOptions(),
+                cancellationToken).ConfigureAwait(false);
+
+        /// <summary>Runs or resumes a workflow with an explicit stable run identifier.</summary>
+        public async Task<ExecutionResult> ExecuteAsync(
+            ProcessedPrompt prompt,
+            WorkflowExecutionOptions workflowOptions,
+            CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(prompt);
+            ArgumentNullException.ThrowIfNull(workflowOptions);
             prompt = prompt.WithGrammar(language.Grammar);
             ExecutionPipeline pipeline = _pipelineFactory.CreateStandardPipeline();
-            var context = new Execution.ExecutionContext(prompt);
+            var context = new Execution.ExecutionContext(prompt, workflowOptions);
             return await pipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
         }
 
@@ -143,6 +155,8 @@ namespace FluNET
             ProcessedPrompt prompt,
             Action<ExecutionPipeline> configurePipeline)
         {
+            ArgumentNullException.ThrowIfNull(prompt);
+            prompt = prompt.WithGrammar(language.Grammar);
             var pipeline = _pipelineFactory.CreateCustomPipeline(configurePipeline);
             var context = new Execution.ExecutionContext(prompt);
             var result = pipeline.Execute(context);

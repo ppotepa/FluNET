@@ -11,6 +11,7 @@ using FluNET.Language;
 using FluNET.Execution.Commands;
 using FluNET.Language.Binding;
 using FluNET.Execution.Planning;
+using FluNET.Execution.Workflow;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context
@@ -96,6 +97,8 @@ namespace FluNET.Context
             services.AddSingleton<IHttpTransport, HttpTransport>();
             services.AddSingleton<ITextOutput, ConsoleTextOutput>();
             services.AddSingleton<IEmailTransport, DiagnosticEmailTransport>();
+            services.AddSingleton<IWorkflowStateStore, InMemoryWorkflowStateStore>();
+            services.AddSingleton<IWorkflowValueSerializer, JsonWorkflowValueSerializer>();
 
             // Token processing
             services.AddTransient<TokenFactory>();

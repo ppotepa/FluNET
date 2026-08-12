@@ -90,6 +90,18 @@ namespace FluNET.Keywords
         }
     }
 
+    public class Else : IKeyword, IWord
+    {
+        public string Text => "ELSE";
+        public IWord? Next { get; set; }
+        public IWord? Previous { get; set; }
+        public ValidationResult ValidateNext(IWord nextWord, Lexicon.Lexicon lexicon) =>
+            nextWord is IVerb
+                ? ValidationResult.Success()
+                : ValidationResult.Failure("ELSE must be followed by a verb");
+        public bool Validate(IWord word) => true;
+    }
+
     public class Using : IKeyword, IWord
     {
         public string Text => "USING";

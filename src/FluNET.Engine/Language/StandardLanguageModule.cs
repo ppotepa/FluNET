@@ -40,13 +40,19 @@ public sealed class StandardLanguageModule : IFluNetModule
             .ClauseMarker("TO", Prompt.PromptClauseKind.To)
             .ClauseMarker("USING", Prompt.PromptClauseKind.Using)
             .CommandConnector("THEN", Prompt.CommandLinkKind.Sequence)
-            .CommandConnector("AND", Prompt.CommandLinkKind.Parallel);
+            .CommandConnector("AND", Prompt.CommandLinkKind.Parallel)
+            .CommandConnector("ELSE", Prompt.CommandLinkKind.Alternative)
+            .CommandModifier("WITH", "RETRY", Prompt.CommandModifierKind.Retry)
+            .CommandModifier("WITH", "TIMEOUT", Prompt.CommandModifierKind.Timeout)
+            .CommandModifier("ON", "ERROR", Prompt.CommandModifierKind.ErrorPolicy)
+            .CommandModifier("IF", null, Prompt.CommandModifierKind.Condition);
 
         language.Keyword<From>("FROM")
             .Keyword<To>("TO")
             .Keyword<Using>("USING")
             .Keyword<Then>("THEN")
-            .Keyword<And>("AND");
+            .Keyword<And>("AND")
+            .Keyword<Else>("ELSE");
 
         language.Command<GetText, string[]>("GET", "Text")
             .Aliases("FETCH", "RETRIEVE")

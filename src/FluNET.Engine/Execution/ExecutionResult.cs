@@ -1,6 +1,7 @@
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Execution.Planning;
+using FluNET.Execution.Workflow;
 
 namespace FluNET.Execution;
 
@@ -32,6 +33,7 @@ public sealed class ExecutionResult
     public ExecutionError? Error { get; }
     public ExecutionPlan? Plan { get; }
     public IReadOnlyList<ExecutionStepResult> Steps { get; }
+    public WorkflowRunState? Workflow { get; }
     public bool IsSuccess => Error is null && ValidationResult.IsValid;
 
     private ExecutionResult(
@@ -40,7 +42,8 @@ public sealed class ExecutionResult
         object? result,
         ExecutionError? error,
         ExecutionPlan? plan,
-        IEnumerable<ExecutionStepResult>? steps)
+        IEnumerable<ExecutionStepResult>? steps,
+        WorkflowRunState? workflow = null)
     {
         ValidationResult = validationResult ?? throw new ArgumentNullException(nameof(validationResult));
         Sentence = sentence;
@@ -48,14 +51,16 @@ public sealed class ExecutionResult
         Error = error;
         Plan = plan;
         Steps = steps?.ToArray() ?? Array.Empty<ExecutionStepResult>();
+        Workflow = workflow;
     }
 
     public static ExecutionResult Success(
         ISentence sentence,
         object? result,
         ExecutionPlan? plan = null,
-        IEnumerable<ExecutionStepResult>? steps = null) =>
-        new(ValidationResult.Success(), sentence, result, null, plan, steps);
+        IEnumerable<ExecutionStepResult>? steps = null,
+        WorkflowRunState? workflow = null) =>
+        new(ValidationResult.Success(), sentence, result, null, plan, steps, workflow);
 
     public static ExecutionResult Failed(ValidationResult validationResult) =>
         new(
@@ -67,6 +72,7 @@ public sealed class ExecutionResult
                 "FLN100",
                 validationResult.FailureReason ?? "Validation failed."),
             null,
+            null,
             null);
 
     public static ExecutionResult Failed(
@@ -76,7 +82,8 @@ public sealed class ExecutionResult
         Exception? exception = null,
         ISentence? sentence = null,
         ExecutionPlan? plan = null,
-        IEnumerable<ExecutionStepResult>? steps = null) =>
+        IEnumerable<ExecutionStepResult>? steps = null,
+        WorkflowRunState? workflow = null) =>
         new(
             kind == ExecutionFailureKind.Validation
                 ? ValidationResult.Failure(message)
@@ -85,7 +92,8 @@ public sealed class ExecutionResult
             null,
             new ExecutionError(kind, code, message, exception),
             plan,
-            steps);
+            steps,
+            workflow);
 
     public static ExecutionResult Failed(string message) =>
         Failed(ExecutionFailureKind.Internal, "FLN999", message);
