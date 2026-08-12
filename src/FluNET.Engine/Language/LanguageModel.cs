@@ -1,5 +1,5 @@
-using FluNET.Syntax.Core;
 using FluNET.Prompt;
+using FluNET.Syntax.Core;
 using System.Collections.ObjectModel;
 
 namespace FluNET.Language;
@@ -99,10 +99,13 @@ public sealed record CommandSlotDescriptor
         string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToUpperInvariant();
 }
 
-/// <summary>A typed realization of a command handled by one implementation.</summary>
+/// <summary>A typed realization of a command identified independently of its CLR adapter.</summary>
 public sealed record CommandFrameDescriptor
 {
     internal CommandFrameDescriptor(
+        FrameId id,
+        CommandId commandId,
+        ModuleId moduleId,
         string usageName,
         Type implementationType,
         Type familyType,
@@ -111,18 +114,29 @@ public sealed record CommandFrameDescriptor
         IEnumerable<string> qualifiers,
         IEnumerable<CommandSlotDescriptor> slots)
     {
+        Id = id.IsEmpty ? throw new ArgumentException("A frame id is required.", nameof(id)) : id;
+        CommandId = commandId.IsEmpty ? throw new ArgumentException("A command id is required.", nameof(commandId)) : commandId;
+        ModuleId = moduleId.IsEmpty ? throw new ArgumentException("A module id is required.", nameof(moduleId)) : moduleId;
         UsageName = RequireName(usageName, nameof(usageName));
-        ImplementationType = implementationType;
-        FamilyType = familyType;
-        ResultType = resultType;
+        ImplementationType = implementationType ?? throw new ArgumentNullException(nameof(implementationType));
+        FamilyType = familyType ?? throw new ArgumentNullException(nameof(familyType));
+        ResultType = resultType ?? throw new ArgumentNullException(nameof(resultType));
         IsDefault = isDefault;
         Qualifiers = qualifiers.Select(NormalizeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         Slots = slots.ToArray();
     }
 
+    public FrameId Id { get; }
+    public CommandId CommandId { get; }
+    public ModuleId ModuleId { get; }
     public string UsageName { get; }
+
+    /// <summary>Legacy CLR adapter type; not the identity of the frame.</summary>
     public Type ImplementationType { get; }
+
+    /// <summary>Legacy verb-family metadata retained for compatibility.</summary>
     public Type FamilyType { get; }
+
     public Type ResultType { get; }
     public TypeSymbol ResultTypeSymbol { get; internal set; } = null!;
     public bool IsDefault { get; }
@@ -142,10 +156,14 @@ public sealed record CommandFrameDescriptor
 public sealed record CommandDescriptor
 {
     internal CommandDescriptor(
+        CommandId id,
+        ModuleId moduleId,
         string name,
         IEnumerable<string> aliases,
         IEnumerable<CommandFrameDescriptor> frames)
     {
+        Id = id.IsEmpty ? throw new ArgumentException("A command id is required.", nameof(id)) : id;
+        ModuleId = moduleId.IsEmpty ? throw new ArgumentException("A module id is required.", nameof(moduleId)) : moduleId;
         Name = NormalizeName(name);
         Aliases = aliases.Select(NormalizeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         Frames = frames.ToArray();
@@ -153,6 +171,12 @@ public sealed record CommandDescriptor
         {
             throw new LanguageDefinitionException($"Command '{Name}' must declare at least one frame.");
         }
+        if (Frames.Any(frame => frame.CommandId != Id || frame.ModuleId != ModuleId))
+        {
+            throw new LanguageDefinitionException(
+                $"All frames of command '{Name}' must carry command id '{Id}' and module id '{ModuleId}'.");
+        }
+
         Type[] families = Frames.Select(frame => frame.FamilyType).Distinct().ToArray();
         if (families.Length != 1)
         {
@@ -168,6 +192,8 @@ public sealed record CommandDescriptor
         }
     }
 
+    public CommandId Id { get; }
+    public ModuleId ModuleId { get; }
     public string Name { get; }
     public IReadOnlyList<string> Aliases { get; }
     public IReadOnlyList<CommandFrameDescriptor> Frames { get; }
@@ -197,6 +223,8 @@ public sealed record KeywordDescriptor
 public sealed class LanguageSnapshot
 {
     private readonly IReadOnlyDictionary<string, CommandDescriptor> _commandsBySurface;
+    private readonly IReadOnlyDictionary<CommandId, CommandDescriptor> _commandsById;
+    private readonly IReadOnlyDictionary<FrameId, CommandFrameDescriptor> _framesById;
     private readonly IReadOnlyDictionary<string, KeywordDescriptor> _keywordsBySurface;
     private readonly IReadOnlySet<string> _qualifiers;
 
@@ -204,8 +232,12 @@ public sealed class LanguageSnapshot
         IEnumerable<CommandDescriptor> commands,
         IEnumerable<KeywordDescriptor> keywords,
         PromptGrammar grammar,
+        LanguageVersion version,
         IReadOnlyDictionary<Type, string>? typeNames = null)
     {
+        Version = version.IsEmpty
+            ? throw new ArgumentException("A language version is required.", nameof(version))
+            : version;
         Commands = commands.OrderBy(command => command.Name, StringComparer.Ordinal).ToArray();
         Keywords = keywords.OrderBy(keyword => keyword.Text, StringComparer.Ordinal).ToArray();
         Grammar = grammar ?? throw new ArgumentNullException(nameof(grammar));
@@ -223,8 +255,23 @@ public sealed class LanguageSnapshot
         }
 
         Dictionary<string, CommandDescriptor> commandIndex = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<CommandId, CommandDescriptor> commandIdIndex = [];
+        Dictionary<FrameId, CommandFrameDescriptor> frameIdIndex = [];
         foreach (CommandDescriptor command in Commands)
         {
+            if (!commandIdIndex.TryAdd(command.Id, command))
+            {
+                throw new LanguageDefinitionException($"Command id '{command.Id}' is registered more than once.");
+            }
+
+            foreach (CommandFrameDescriptor frame in command.Frames)
+            {
+                if (!frameIdIndex.TryAdd(frame.Id, frame))
+                {
+                    throw new LanguageDefinitionException($"Frame id '{frame.Id}' is registered more than once.");
+                }
+            }
+
             foreach (string surface in command.SurfaceForms)
             {
                 if (!commandIndex.TryAdd(surface, command))
@@ -251,6 +298,8 @@ public sealed class LanguageSnapshot
         }
 
         _commandsBySurface = new ReadOnlyDictionary<string, CommandDescriptor>(commandIndex);
+        _commandsById = new ReadOnlyDictionary<CommandId, CommandDescriptor>(commandIdIndex);
+        _framesById = new ReadOnlyDictionary<FrameId, CommandFrameDescriptor>(frameIdIndex);
         _keywordsBySurface = new ReadOnlyDictionary<string, KeywordDescriptor>(keywordIndex);
         string? ambiguousConstruction = Grammar.ClauseMarkers
             .Intersect(Grammar.CommandConnectors, StringComparer.OrdinalIgnoreCase)
@@ -281,6 +330,7 @@ public sealed class LanguageSnapshot
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
+    public LanguageVersion Version { get; }
     public IReadOnlyList<CommandDescriptor> Commands { get; }
     public IReadOnlyList<KeywordDescriptor> Keywords { get; }
     public PromptGrammar Grammar { get; }
@@ -289,6 +339,12 @@ public sealed class LanguageSnapshot
 
     public CommandDescriptor? FindCommand(string surfaceForm) =>
         _commandsBySurface.TryGetValue(surfaceForm, out CommandDescriptor? command) ? command : null;
+
+    public CommandDescriptor? FindCommand(CommandId id) =>
+        _commandsById.TryGetValue(id, out CommandDescriptor? command) ? command : null;
+
+    public CommandFrameDescriptor? FindFrame(FrameId id) =>
+        _framesById.TryGetValue(id, out CommandFrameDescriptor? frame) ? frame : null;
 
     public KeywordDescriptor? FindKeyword(string surfaceForm) =>
         _keywordsBySurface.TryGetValue(surfaceForm, out KeywordDescriptor? keyword) ? keyword : null;
@@ -312,6 +368,22 @@ public sealed class LanguageBuilder
     private readonly Dictionary<string, CommandLinkKind> _commandConnectors = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<Type, string> _typeNames = [];
     private readonly List<CommandModifierDescriptor> _commandModifiers = [];
+    private ModuleId _currentModule = StandardLanguageIdentity.Module;
+    private LanguageVersion _version = StandardLanguageIdentity.Version;
+
+    /// <summary>Sets the module identity used by subsequently declared commands.</summary>
+    public LanguageBuilder Module(string moduleId)
+    {
+        _currentModule = new ModuleId(moduleId);
+        return this;
+    }
+
+    /// <summary>Sets the immutable language contract version produced by Build.</summary>
+    public LanguageBuilder Version(string version)
+    {
+        _version = new LanguageVersion(version);
+        return this;
+    }
 
     public CommandFrameBuilder Command<TImplementation, TResult>(string name, string usageName)
         where TImplementation : class, IVerb
@@ -319,8 +391,13 @@ public sealed class LanguageBuilder
         string normalized = NormalizeName(name);
         if (!_commands.TryGetValue(normalized, out MutableCommand? command))
         {
-            command = new MutableCommand(normalized);
+            command = new MutableCommand(normalized, _currentModule);
             _commands.Add(normalized, command);
+        }
+        else if (command.ModuleId != _currentModule)
+        {
+            throw new LanguageDefinitionException(
+                $"Command '{normalized}' is already owned by module '{command.ModuleId}'.");
         }
 
         Type implementationType = typeof(TImplementation);
@@ -434,23 +511,39 @@ public sealed class LanguageBuilder
     public LanguageSnapshot Build()
     {
         CommandDescriptor[] commands = _commands.Values.Select(command =>
-            new CommandDescriptor(
-                command.Name,
-                command.Aliases,
-                command.Frames.Select(frame => new CommandFrameDescriptor(
+        {
+            CommandId commandId = command.Id ?? new CommandId(
+                $"{command.ModuleId.Value}.{command.Name.ToLowerInvariant()}");
+            CommandFrameDescriptor[] frames = command.Frames.Select(frame =>
+            {
+                FrameId frameId = frame.Id ?? new FrameId(
+                    $"{commandId.Value}.{NormalizeIdentifierPart(frame.UsageName)}");
+                return new CommandFrameDescriptor(
+                    frameId,
+                    commandId,
+                    command.ModuleId,
                     frame.UsageName,
                     frame.ImplementationType,
                     frame.FamilyType,
                     frame.ResultType,
                     frame.IsDefault,
                     frame.Qualifiers,
-                    frame.Slots))))
-            .ToArray();
+                    frame.Slots);
+            }).ToArray();
+
+            return new CommandDescriptor(
+                commandId,
+                command.ModuleId,
+                command.Name,
+                command.Aliases,
+                frames);
+        }).ToArray();
 
         return new LanguageSnapshot(
             commands,
             _keywords,
             new PromptGrammar(_clauseMarkers, _commandConnectors, _commandModifiers),
+            _version,
             _typeNames);
     }
 
@@ -476,9 +569,15 @@ public sealed class LanguageBuilder
             ? throw new ArgumentException("A non-empty command name is required.", nameof(value))
             : value.Trim().ToUpperInvariant();
 
-    internal sealed class MutableCommand(string name)
+    private static string NormalizeIdentifierPart(string value) =>
+        string.Join('-', value.Trim().ToLowerInvariant()
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
+
+    internal sealed class MutableCommand(string name, ModuleId moduleId)
     {
         public string Name { get; } = name;
+        public ModuleId ModuleId { get; set; } = moduleId;
+        public CommandId? Id { get; set; }
         public HashSet<string> Aliases { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<MutableFrame> Frames { get; } = [];
     }
@@ -490,6 +589,7 @@ public sealed class LanguageBuilder
         Type resultType)
     {
         public string UsageName { get; } = usageName;
+        public FrameId? Id { get; set; }
         public Type ImplementationType { get; } = implementationType;
         public Type FamilyType { get; } = familyType;
         public Type ResultType { get; } = resultType;
@@ -507,6 +607,39 @@ public sealed class LanguageBuilder
         {
             _command = command;
             _frame = frame;
+        }
+
+        /// <summary>Overrides the stable id shared by all frames of this command.</summary>
+        public CommandFrameBuilder CommandId(string id)
+        {
+            global::FluNET.Language.CommandId value = new(id);
+            if (_command.Id is { } existing && existing != value)
+            {
+                throw new LanguageDefinitionException(
+                    $"Command '{_command.Name}' already has id '{existing}'.");
+            }
+            _command.Id = value;
+            return this;
+        }
+
+        /// <summary>Overrides the owning module id for this command.</summary>
+        public CommandFrameBuilder ModuleId(string id)
+        {
+            _command.ModuleId = new global::FluNET.Language.ModuleId(id);
+            return this;
+        }
+
+        /// <summary>Assigns the stable semantic identity of this frame.</summary>
+        public CommandFrameBuilder FrameId(string id)
+        {
+            global::FluNET.Language.FrameId value = new(id);
+            if (_frame.Id is { } existing && existing != value)
+            {
+                throw new LanguageDefinitionException(
+                    $"Frame '{_command.Name}/{_frame.UsageName}' already has id '{existing}'.");
+            }
+            _frame.Id = value;
+            return this;
         }
 
         public CommandFrameBuilder Aliases(params string[] aliases)

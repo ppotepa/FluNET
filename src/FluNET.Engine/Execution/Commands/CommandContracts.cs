@@ -1,3 +1,4 @@
+using FluNET.Language;
 using FluNET.Language.Binding;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -29,12 +30,15 @@ public interface ICommandBinder<TCommand, TResult>
     TCommand? TryBind(BoundCommand command);
 }
 
-/// <summary>
-/// Type-erased route used only by orchestration. Binding and handling stay
-/// fully generic on either side of this boundary.
-/// </summary>
+/// <summary>Type-erased executable route selected by stable frame identity.</summary>
 public interface ICommandRoute
 {
+    /// <summary>
+    /// Stable frame id for canonical routes. Null is reserved for the legacy
+    /// direct-DI registration overload retained for source compatibility.
+    /// </summary>
+    FrameId? FrameId { get; }
+
     bool CanHandle(BoundCommand command);
 
     ValueTask<CommandDispatchResult> TryExecuteAsync(
@@ -48,29 +52,61 @@ public readonly record struct CommandDispatchResult(bool IsHandled, object? Resu
     public static CommandDispatchResult Handled(object? result) => new(true, result);
 }
 
-public sealed class CommandRoute<TCommand, TResult>(
-    ICommandBinder<TCommand, TResult> binder,
-    ICommandHandler<TCommand, TResult> handler) : ICommandRoute
+public sealed class CommandRoute<TCommand, TResult> : ICommandRoute
     where TCommand : class, ICommand<TResult>
 {
-    public bool CanHandle(BoundCommand command) => binder.TryBind(command) is not null;
+    private readonly ICommandBinder<TCommand, TResult> _binder;
+    private readonly ICommandHandler<TCommand, TResult> _handler;
+
+    /// <summary>Compatibility constructor for direct route construction.</summary>
+    public CommandRoute(
+        ICommandBinder<TCommand, TResult> binder,
+        ICommandHandler<TCommand, TResult> handler)
+        : this(null, binder, handler)
+    {
+    }
+
+    public CommandRoute(
+        FrameId? frameId,
+        ICommandBinder<TCommand, TResult> binder,
+        ICommandHandler<TCommand, TResult> handler)
+    {
+        FrameId = frameId;
+        _binder = binder ?? throw new ArgumentNullException(nameof(binder));
+        _handler = handler ?? throw new ArgumentNullException(nameof(handler));
+    }
+
+    public FrameId? FrameId { get; }
+
+    public bool CanHandle(BoundCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        return (FrameId is null || command.Frame.Id == FrameId.Value) &&
+            _binder.TryBind(command) is not null;
+    }
 
     public async ValueTask<CommandDispatchResult> TryExecuteAsync(
         BoundCommand command,
         CancellationToken cancellationToken = default)
     {
-        TCommand? typedCommand = binder.TryBind(command);
+        ArgumentNullException.ThrowIfNull(command);
+        if (FrameId is { } frameId && command.Frame.Id != frameId)
+        {
+            return CommandDispatchResult.NotHandled;
+        }
+
+        TCommand? typedCommand = _binder.TryBind(command);
         if (typedCommand is null)
         {
             return CommandDispatchResult.NotHandled;
         }
 
-        TResult result = await handler.HandleAsync(typedCommand, cancellationToken).ConfigureAwait(false);
+        TResult result = await _handler.HandleAsync(typedCommand, cancellationToken).ConfigureAwait(false);
         return CommandDispatchResult.Handled(result);
     }
 }
 
-/// <summary>Tries typed routes in registration order before legacy execution.</summary>
+/// <summary>Dispatches typed handlers by stable frame id, preserving registration order as a fallback.</summary>
 public sealed class CommandDispatcher(IEnumerable<ICommandRoute> routes)
 {
     private readonly IReadOnlyList<ICommandRoute> _routes = routes.ToArray();
@@ -78,7 +114,7 @@ public sealed class CommandDispatcher(IEnumerable<ICommandRoute> routes)
     public bool CanDispatch(BoundCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
-        return _routes.Any(route => route.CanHandle(command));
+        return MatchingRoutes(command).Any(route => route.CanHandle(command));
     }
 
     public async ValueTask<CommandDispatchResult> TryExecuteAsync(
@@ -88,7 +124,7 @@ public sealed class CommandDispatcher(IEnumerable<ICommandRoute> routes)
         ArgumentNullException.ThrowIfNull(command);
         cancellationToken.ThrowIfCancellationRequested();
 
-        foreach (ICommandRoute route in _routes)
+        foreach (ICommandRoute route in MatchingRoutes(command))
         {
             CommandDispatchResult result = await route.TryExecuteAsync(command, cancellationToken)
                 .ConfigureAwait(false);
@@ -100,10 +136,48 @@ public sealed class CommandDispatcher(IEnumerable<ICommandRoute> routes)
 
         return CommandDispatchResult.NotHandled;
     }
+
+    private IEnumerable<ICommandRoute> MatchingRoutes(BoundCommand command)
+    {
+        ICommandRoute[] exact = _routes
+            .Where(route => route.FrameId is { } frameId && frameId == command.Frame.Id)
+            .ToArray();
+        return exact.Length > 0
+            ? exact
+            : _routes.Where(route => route.FrameId is null);
+    }
 }
 
 public static class TypedCommandServiceCollectionExtensions
 {
+    /// <summary>Registers a typed route for one stable semantic frame.</summary>
+    public static IServiceCollection AddTypedCommand<TCommand, TResult, TBinder, THandler>(
+        this IServiceCollection services,
+        FrameId frameId)
+        where TCommand : class, ICommand<TResult>
+        where TBinder : class, ICommandBinder<TCommand, TResult>
+        where THandler : class, ICommandHandler<TCommand, TResult>
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        if (frameId.IsEmpty)
+        {
+            throw new ArgumentException("A frame id is required.", nameof(frameId));
+        }
+
+        services.AddTransient<ICommandBinder<TCommand, TResult>, TBinder>();
+        services.AddTransient<ICommandHandler<TCommand, TResult>, THandler>();
+        services.AddTransient<ICommandRoute>(provider =>
+            new CommandRoute<TCommand, TResult>(
+                frameId,
+                provider.GetRequiredService<ICommandBinder<TCommand, TResult>>(),
+                provider.GetRequiredService<ICommandHandler<TCommand, TResult>>()));
+        return services;
+    }
+
+    /// <summary>
+    /// Compatibility registration for callers that construct ICommandRoute
+    /// directly through DI without a language runtime definition.
+    /// </summary>
     public static IServiceCollection AddTypedCommand<TCommand, TResult, TBinder, THandler>(
         this IServiceCollection services)
         where TCommand : class, ICommand<TResult>
@@ -113,7 +187,11 @@ public static class TypedCommandServiceCollectionExtensions
         ArgumentNullException.ThrowIfNull(services);
         services.AddTransient<ICommandBinder<TCommand, TResult>, TBinder>();
         services.AddTransient<ICommandHandler<TCommand, TResult>, THandler>();
-        services.AddTransient<ICommandRoute, CommandRoute<TCommand, TResult>>();
+        services.AddTransient<ICommandRoute>(provider =>
+            new CommandRoute<TCommand, TResult>(
+                null,
+                provider.GetRequiredService<ICommandBinder<TCommand, TResult>>(),
+                provider.GetRequiredService<ICommandHandler<TCommand, TResult>>()));
         return services;
     }
 }
