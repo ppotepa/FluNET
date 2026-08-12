@@ -6,12 +6,6 @@ using FluNET.Prompt;
 
 namespace FluNET.Execution.Commands;
 
-/// <summary>A deferred, typed value evaluated against the execution scope.</summary>
-public interface IValueExpression<out TValue>
-{
-    TValue Evaluate(IVariableResolver variables);
-}
-
 public abstract record TextPart;
 
 public sealed record LiteralTextPart(string Value) : TextPart;
@@ -42,9 +36,9 @@ public sealed class TextExpression : IValueExpression<string>
             BindPart(token, language, preserveStructuredReferences)));
     }
 
-    public string Evaluate(IVariableResolver variables)
+    public string Evaluate(IExpressionEvaluationContext context)
     {
-        ArgumentNullException.ThrowIfNull(variables);
+        ArgumentNullException.ThrowIfNull(context);
         List<string> values = [];
 
         foreach (TextPart part in _parts)
@@ -52,7 +46,7 @@ public sealed class TextExpression : IValueExpression<string>
             object value = part switch
             {
                 LiteralTextPart literal => literal.Value,
-                VariableTextPart variable => ResolveVariable(variables, variable.Reference),
+                VariableTextPart variable => ResolveVariable(context.Variables, variable.Reference),
                 _ => throw new InvalidOperationException($"Unsupported text part '{part.GetType().FullName}'.")
             };
 
@@ -61,6 +55,9 @@ public sealed class TextExpression : IValueExpression<string>
 
         return string.Join(" ", values);
     }
+
+    public string Evaluate(IVariableResolver variables) =>
+        Evaluate(new ExpressionEvaluationContext(variables));
 
     private static object ResolveVariable(IVariableResolver variables, string reference)
     {

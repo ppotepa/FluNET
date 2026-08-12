@@ -4,21 +4,23 @@ using FluNET.Variables;
 
 namespace FluNET.Execution.Commands;
 
-public interface IValueConverter<out TValue>
+public interface IValueConverter<out TValue> : IValueCodec<TValue>
 {
     TValue Convert(object value);
+
+    TValue IValueCodec<TValue>.Decode(object value) => Convert(value);
 }
 
 /// <summary>A deferred scalar conversion from one semantically bound token.</summary>
 public sealed class ScalarExpression<TValue> : IValueExpression<TValue>
 {
     private readonly PromptToken _token;
-    private readonly IValueConverter<TValue> _converter;
+    private readonly IValueCodec<TValue> _codec;
 
-    public ScalarExpression(BoundArgument argument, IValueConverter<TValue> converter)
+    public ScalarExpression(BoundArgument argument, IValueCodec<TValue> codec)
     {
         ArgumentNullException.ThrowIfNull(argument);
-        _converter = converter ?? throw new ArgumentNullException(nameof(converter));
+        _codec = codec ?? throw new ArgumentNullException(nameof(codec));
         _token = argument.Tokens.Count == 1
             ? argument.Tokens[0]
             : throw new ArgumentException(
@@ -26,14 +28,17 @@ public sealed class ScalarExpression<TValue> : IValueExpression<TValue>
                 nameof(argument));
     }
 
-    public TValue Evaluate(IVariableResolver variables)
+    public TValue Evaluate(IExpressionEvaluationContext context)
     {
-        ArgumentNullException.ThrowIfNull(variables);
+        ArgumentNullException.ThrowIfNull(context);
         object value = _token.Kind == PromptTokenKind.Variable
-            ? ResolveVariable(variables, _token.Text)
+            ? ResolveVariable(context.Variables, _token.Text)
             : Unwrap(_token);
-        return value is TValue typed ? typed : _converter.Convert(value);
+        return value is TValue typed ? typed : _codec.Decode(value);
     }
+
+    public TValue Evaluate(IVariableResolver variables) =>
+        Evaluate(new ExpressionEvaluationContext(variables));
 
     private static object ResolveVariable(IVariableResolver variables, string reference) =>
         variables.Resolve<object>(reference.TrimEnd('.'))

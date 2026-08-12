@@ -24,28 +24,28 @@ public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>
     protected abstract TCommand Bind(BoundCommand command);
 }
 
-public sealed record GetTextCommand(IValueExpression<FileInfo> Source) : ICommand<string[]>;
-public sealed record LoadTextCommand(IValueExpression<FileInfo> Source) : ICommand<string[]>;
-public sealed record LoadConfigCommand(IValueExpression<FileInfo> Source)
+public sealed record GetTextCommand(IExpression<FileInfo> Source) : ICommand<string[]>;
+public sealed record LoadTextCommand(IExpression<FileInfo> Source) : ICommand<string[]>;
+public sealed record LoadConfigCommand(IExpression<FileInfo> Source)
     : ICommand<Dictionary<string, object>>;
 public sealed record SaveTextCommand(
-    IValueExpression<string> Theme,
-    IValueExpression<FileInfo> Goal) : ICommand<string>;
+    IExpression<string> Theme,
+    IExpression<FileInfo> Goal) : ICommand<string>;
 public sealed record DeleteFileCommand(
-    IValueExpression<string> Theme,
-    IValueExpression<DirectoryInfo>? Source) : ICommand<string>;
+    IExpression<string> Theme,
+    IExpression<DirectoryInfo>? Source) : ICommand<string>;
 public sealed record DownloadFileCommand(
-    IValueExpression<Uri> Source,
-    IValueExpression<FileInfo>? Goal) : ICommand<FileInfo>;
+    IExpression<Uri> Source,
+    IExpression<FileInfo>? Goal) : ICommand<FileInfo>;
 public sealed record PostJsonCommand(
-    IValueExpression<string> Theme,
-    IValueExpression<Uri> Goal) : ICommand<string>;
+    IExpression<string> Theme,
+    IExpression<Uri> Goal) : ICommand<string>;
 public sealed record SendEmailCommand(
-    IValueExpression<string> Theme,
-    IValueExpression<string> Recipient) : ICommand<string>;
+    IExpression<string> Theme,
+    IExpression<string> Recipient) : ICommand<string>;
 public sealed record TransformEncodingCommand(
-    IValueExpression<string> Theme,
-    IValueExpression<System.Text.Encoding> Instrument) : ICommand<string>;
+    IExpression<string> Theme,
+    IExpression<System.Text.Encoding> Instrument) : ICommand<string>;
 
 public sealed class GetTextCommandBinder :
     FrameCommandBinder<GetTextCommand, string[], GetText>
