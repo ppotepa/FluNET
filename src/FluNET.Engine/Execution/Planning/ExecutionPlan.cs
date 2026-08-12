@@ -128,6 +128,12 @@ public sealed class ExecutionPlanner
                 resultBinding.Type = command.Frame.ResultTypeSymbol;
                 foreach (string target in resultBinding.Targets)
                 {
+                    if (symbols.TryGetValue(target, out VariableSymbol? previous) &&
+                        stages[previous.ProducerIndex] == stages[index])
+                    {
+                        throw new ExecutionPlanException(
+                            $"Parallel steps {previous.ProducerIndex} and {index} both write [{target}].");
+                    }
                     producers[target] = index;
                     symbols[target] = new VariableSymbol(target, resultBinding.Type, index);
                 }
@@ -217,36 +223,57 @@ public sealed class ExecutionPlanExecutor(
         ArgumentNullException.ThrowIfNull(completedSteps);
         object? lastResult = null;
         HashSet<int> completed = [];
+        Dictionary<int, ExecutionPlanStep> pending = plan.Steps.ToDictionary(step => step.Index);
 
-        foreach (ExecutionPlanStep step in plan.Steps)
+        while (pending.Count > 0)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (step.Dependencies.Any(dependency => !completed.Contains(dependency.PredecessorIndex)))
+            ExecutionPlanStep[] ready = pending.Values
+                .Where(step => step.Dependencies.All(dependency =>
+                    completed.Contains(dependency.PredecessorIndex)))
+                .OrderBy(step => step.Index)
+                .ToArray();
+            if (ready.Length == 0)
             {
                 throw new ExecutionPlanException(
-                    $"Dependencies for execution step {step.Index} are not satisfied.");
-            }
-            CommandDispatchResult dispatch = await dispatcher
-                .TryExecuteAsync(step.Command, cancellationToken)
-                .ConfigureAwait(false);
-            if (!dispatch.IsHandled)
-            {
-                throw new CommandRouteNotFoundException(
-                    $"No typed route is registered for " +
-                    $"'{step.Command.Command.Name}/{step.Command.Frame.UsageName}'.");
+                    "The execution graph contains an unsatisfied dependency cycle.");
             }
 
-            lastResult = dispatch.Result;
-            if (lastResult is not null && step.ResultBinding is not null)
+            StepDispatch[] dispatched = await Task.WhenAll(ready.Select(step =>
+                DispatchAsync(step, cancellationToken))).ConfigureAwait(false);
+            foreach (StepDispatch item in dispatched.OrderBy(item => item.Step.Index))
             {
-                Store(step.ResultBinding, lastResult);
+                lastResult = item.Result;
+                if (lastResult is not null && item.Step.ResultBinding is not null)
+                {
+                    Store(item.Step.ResultBinding, lastResult);
+                }
+                completedSteps.Add(new ExecutionStepResult(item.Step, lastResult));
+                completed.Add(item.Step.Index);
+                pending.Remove(item.Step.Index);
             }
-            completedSteps.Add(new ExecutionStepResult(step, lastResult));
-            completed.Add(step.Index);
         }
 
         return lastResult;
     }
+
+    private async Task<StepDispatch> DispatchAsync(
+        ExecutionPlanStep step,
+        CancellationToken cancellationToken)
+    {
+        CommandDispatchResult dispatch = await dispatcher
+            .TryExecuteAsync(step.Command, cancellationToken)
+            .ConfigureAwait(false);
+        if (!dispatch.IsHandled)
+        {
+            throw new CommandRouteNotFoundException(
+                $"No typed route is registered for " +
+                $"'{step.Command.Command.Name}/{step.Command.Frame.UsageName}'.");
+        }
+        return new StepDispatch(step, dispatch.Result);
+    }
+
+    private sealed record StepDispatch(ExecutionPlanStep Step, object? Result);
 
     private void Store(ResultBinding binding, object result)
     {

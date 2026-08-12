@@ -12,6 +12,11 @@ public interface ICommand<out TResult>
 public interface ICommandHandler<in TCommand, TResult>
     where TCommand : ICommand<TResult>
 {
+    /// <remarks>
+    /// Handlers registered in one runtime may be invoked concurrently for
+    /// independent AND branches. Mutable handler state must therefore be
+    /// synchronized or scoped behind an injected capability.
+    /// </remarks>
     ValueTask<TResult> HandleAsync(
         TCommand command,
         CancellationToken cancellationToken = default);
