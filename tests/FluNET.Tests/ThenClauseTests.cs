@@ -4,6 +4,7 @@ using FluNET.Syntax.Verbs;
 using FluNET.Words;
 using FluNET.Syntax.Validation;
 using FluNET.Sentences;
+using FluNET.Execution;
 
 namespace FluNET.Tests
 {
@@ -147,14 +148,15 @@ namespace FluNET.Tests
             string nonExistentFile = Path.Combine(testDirectory!, "nonexistent.txt");
 
             // Act
-            (ValidationResult validation, _, object? result) =
-                engine!.Run(new ProcessedPrompt($"GET [data] FROM {nonExistentFile} THEN SAY [data]."));
+            ExecutionResult execution = engine!.Execute(
+                new ProcessedPrompt($"GET [data] FROM {{{nonExistentFile}}} THEN SAY [data]."));
 
             // Assert
             Assert.Multiple(() =>
             {
-                Assert.That(validation.IsValid, Is.False);
-                Assert.That(validation.FailureReason, Does.Contain("Variable [data] not found"));
+                Assert.That(execution.IsSuccess, Is.False);
+                Assert.That(execution.Error?.Kind, Is.EqualTo(ExecutionFailureKind.Execution));
+                Assert.That(execution.Error?.Message, Does.Contain("nonexistent.txt"));
             });
         }
 

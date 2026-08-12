@@ -48,7 +48,7 @@ namespace FluNET.Tests
         [Test]
         public void Get_WithFromPreposition_ShouldValidate()
         {
-            ProcessedPrompt processed = new("GET text FROM file.txt.");
+            ProcessedPrompt processed = new("GET [text] FROM {file.txt}.");
             TokenTree tree = processed.ToTokenTree();
 
             ValidationResult result = validator.ValidateSentence(tree);
@@ -61,17 +61,16 @@ namespace FluNET.Tests
         }
 
         [Test]
-        public void Get_WithoutTerminator_ShouldFail()
+        public void Get_WithoutTerminator_ShouldValidate()
         {
-            ProcessedPrompt processed = new("GET text FROM file");
+            ProcessedPrompt processed = new("GET [text] FROM {file}");
             TokenTree tree = processed.ToTokenTree();
 
             ValidationResult result = validator.ValidateSentence(tree);
 
             Assert.Multiple(() =>
             {
-                Assert.That(result.IsValid, Is.False);
-                Assert.That(result.FailureReason, Does.Contain("terminator"));
+                Assert.That(result.IsValid, Is.True, result.FailureReason);
             });
         }
 
@@ -94,7 +93,7 @@ namespace FluNET.Tests
         }
 
         [Test]
-        public void Post_WithoutTerminator_ShouldFail()
+        public void Post_WithoutTerminator_ShouldValidate()
         {
             ProcessedPrompt processed = new("POST data TO endpoint");
             TokenTree tree = processed.ToTokenTree();
@@ -103,8 +102,7 @@ namespace FluNET.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(result.IsValid, Is.False);
-                Assert.That(result.FailureReason, Does.Contain("terminator"));
+                Assert.That(result.IsValid, Is.True, result.FailureReason);
             });
         }
 
@@ -173,7 +171,7 @@ namespace FluNET.Tests
         }
 
         [Test]
-        public void Delete_WithoutTerminator_ShouldFail()
+        public void Delete_WithoutTerminator_ShouldValidate()
         {
             ProcessedPrompt processed = new("DELETE file FROM directory");
             TokenTree tree = processed.ToTokenTree();
@@ -182,8 +180,7 @@ namespace FluNET.Tests
 
             Assert.Multiple(() =>
             {
-                Assert.That(result.IsValid, Is.False);
-                Assert.That(result.FailureReason, Does.Contain("terminator"));
+                Assert.That(result.IsValid, Is.True, result.FailureReason);
             });
         }
 

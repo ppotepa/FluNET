@@ -1,148 +1,83 @@
+using FluNET.Capabilities;
 using FluNET.Context;
-using FluNET.Extensions;
+using FluNET.Execution;
 using FluNET.Prompt;
-using FluNET.Sentences;
-using FluNET.Syntax.Validation;
 using FluNET.Syntax.Verbs;
-using FluNET.Tokens.Tree;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace FluNET.Tests
+namespace FluNET.Tests;
+
+[TestFixture]
+public sealed class PostCommandTests
 {
-    /// <summary>
-    /// Test cases for the POST command.
-    /// These tests serve as both verification and usage examples.
-    /// Usage: POST [json] TO [https://api.example.com/endpoint]
-    /// </summary>
-    [TestFixture]
-    public class PostCommandTests
+    private FluNETContext _context = null!;
+    private FakeHttpTransport _http = null!;
+    private Engine _engine = null!;
+
+    [SetUp]
+    public void SetUp()
     {
-        private ServiceProvider? provider;
-        private IServiceScope? scope;
-        private Engine? engine;
+        _http = new FakeHttpTransport();
+        _context = FluNETContext.Create(services => services.AddSingleton<IHttpTransport>(_http));
+        _engine = _context.GetEngine();
+    }
 
-        [SetUp]
-        public void Setup()
+    [TearDown]
+    public void TearDown() => _context.Dispose();
+
+    [Test]
+    public async Task Post_JsonReferenceUsesInjectedTransport()
+    {
+        const string json = "{\"name\":\"test\",\"value\":42}";
+        const string endpoint = "https://example.test/post";
+
+        ExecutionResult execution = await _engine.ExecuteAsync(
+            new ProcessedPrompt($"POST {json} TO {{{endpoint}}}."));
+
+        Assert.Multiple(() =>
         {
-            var services = new ServiceCollection();
-            FluNETContext.ConfigureDefaultServices(services);
+            Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
+            Assert.That(execution.Sentence?.Root, Is.InstanceOf<PostJson>());
+            Assert.That(execution.Result, Is.EqualTo(_http.PostResponse));
+            Assert.That(_http.Posts, Has.Count.EqualTo(1));
+            Assert.That(_http.Posts[0].Uri, Is.EqualTo(new Uri(endpoint)));
+            Assert.That(_http.Posts[0].Json, Is.EqualTo(json));
+        });
+    }
 
-            provider = services.BuildServiceProvider();
-            scope = provider.CreateScope();
-            engine = scope.ServiceProvider.GetRequiredService<Engine>();
-        }
+    [Test]
+    public async Task Post_ResolvesPayloadAndEndpointVariables()
+    {
+        const string json = "{\"active\":true}";
+        const string endpoint = "https://example.test/variables";
+        _engine.RegisterVariable("payload", json);
+        _engine.RegisterVariable("endpoint", endpoint);
 
-        [TearDown]
-        public void TearDown()
+        ExecutionResult execution = await _engine.ExecuteAsync(
+            new ProcessedPrompt("POST [payload] TO [endpoint]."));
+
+        Assert.Multiple(() =>
         {
-            scope?.Dispose();
-            provider?.Dispose();
-        }
+            Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
+            Assert.That(_http.Posts.Single().Json, Is.EqualTo(json));
+            Assert.That(_http.Posts.Single().Uri, Is.EqualTo(new Uri(endpoint)));
+        });
+    }
 
-        [Test]
-        public void Post_ValidJsonToEndpoint_ShouldConstructSentence()
+    [Test]
+    public async Task Post_TransportFailureIsNotDisguisedAsNull()
+    {
+        _http.Failure = new HttpRequestException("simulated POST failure");
+
+        ExecutionResult execution = await _engine.ExecuteAsync(new ProcessedPrompt(
+            "POST {\"ok\":true} TO {https://example.test/failure}."));
+
+        Assert.Multiple(() =>
         {
-            // Arrange - Using httpbin.org as test endpoint (Note: actual HTTP call will happen)
-            string json = "{\"name\":\"test\",\"value\":42}";
-            string endpoint = "https://httpbin.org/post";
-
-            ProcessedPrompt prompt = new($"POST {json} TO {endpoint}.");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(sentence!.Root, Is.InstanceOf<PostJson>());
-                Assert.That(result, Is.Not.Null);
-                // Response will be JSON string from httpbin.org
-                Assert.That(result as string, Is.Not.Empty);
-            });
-        }
-
-        [Test]
-        public void Post_WithVariable_ShouldResolveAndPost()
-        {
-            // Arrange
-            engine!.RegisterVariable("payload", "{\"test\":true}");
-            engine.RegisterVariable("url", "https://httpbin.org/post");
-
-            ProcessedPrompt prompt = new("POST [payload] TO [url].");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(result, Is.Not.Null);
-            });
-        }
-
-        [Test]
-        public void Post_WithReference_ShouldResolveAndPost()
-        {
-            // Arrange
-            string endpoint = "https://httpbin.org/post";
-            ProcessedPrompt prompt = new($"POST {{{{\"ref\":\"data\"}}}} TO {endpoint}.");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(result, Is.Not.Null);
-            });
-        }
-
-        [Test]
-        public void Post_ComplexJson_ShouldHandleCorrectly()
-        {
-            // Arrange
-            string json = "{\"user\":{\"name\":\"John\",\"age\":30},\"items\":[1,2,3]}";
-            string endpoint = "https://httpbin.org/post";
-
-            ProcessedPrompt prompt = new($"POST {json} TO {endpoint}.");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(result, Is.Not.Null);
-            });
-        }
-
-        [Test]
-        public void Post_MultipleVariables_ShouldResolveAll()
-        {
-            // Arrange
-            engine!.RegisterVariable("data", "{\"status\":\"active\"}");
-            engine.RegisterVariable("endpoint", "https://httpbin.org/post");
-
-            ProcessedPrompt prompt = new("POST [data] TO [endpoint].");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(result, Is.Not.Null);
-            });
-        }
+            Assert.That(execution.IsSuccess, Is.False);
+            Assert.That(execution.Result, Is.Null);
+            Assert.That(execution.Error?.Kind, Is.EqualTo(ExecutionFailureKind.Execution));
+            Assert.That(execution.Error?.Message, Does.Contain("simulated POST failure"));
+        });
     }
 }

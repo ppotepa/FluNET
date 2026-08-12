@@ -6,26 +6,21 @@ namespace FluNET.Tests.Tokenization
     public class TokenizerEdgeCasesTests
     {
         [Test]
-        public void TokenizeWithQuotedString_TreatsQuotesAsRegularCharacters()
+        public void TokenizeWithQuotedString_PreservesOneLiteralToken()
         {
-            // Note: Current tokenizer doesn't have quote-awareness
             var prompt = new ProcessedPrompt("SAY \"hello world\" TO user");
-            
-            // Quotes are not special - spaces still split
-            Assert.That(prompt.Tokens, Has.Length.EqualTo(5));
-            Assert.That(prompt.Tokens[1], Is.EqualTo("\"hello"));
-            Assert.That(prompt.Tokens[2], Is.EqualTo("world\""));
+
+            Assert.That(prompt.Tokens, Has.Length.EqualTo(4));
+            Assert.That(prompt.Tokens[1], Is.EqualTo("\"hello world\""));
         }
 
         [Test]
-        public void TokenizeWithSingleQuotes_TreatsQuotesAsRegularCharacters()
+        public void TokenizeWithSingleQuotes_PreservesOneLiteralToken()
         {
             var prompt = new ProcessedPrompt("SAY 'hello world' TO user");
             
-            // Quotes are not special - spaces still split
-            Assert.That(prompt.Tokens, Has.Length.EqualTo(5));
-            Assert.That(prompt.Tokens[1], Is.EqualTo("'hello"));
-            Assert.That(prompt.Tokens[2], Is.EqualTo("world'"));
+            Assert.That(prompt.Tokens, Has.Length.EqualTo(4));
+            Assert.That(prompt.Tokens[1], Is.EqualTo("'hello world'"));
         }
 
         [Test]
@@ -38,14 +33,11 @@ namespace FluNET.Tests.Tokenization
         }
 
         [Test]
-        public void TokenizeWithBracesInsideQuotes_TreatsQuotesAsRegularCharacters()
+        public void TokenizeWithBracesInsideQuotes_PreservesQuotedToken()
         {
-            // Note: Current implementation doesn't have quote-awareness
-            // This documents current behavior
             var prompt = new ProcessedPrompt("SAY \"{value}\" TO user");
             
             Assert.That(prompt.Tokens, Has.Length.EqualTo(4));
-            // Braces are still processed even in quotes
             Assert.That(prompt.Tokens[1], Is.EqualTo("\"{value}\""));
         }
 
@@ -75,12 +67,13 @@ namespace FluNET.Tests.Tokenization
         }
 
         [Test]
-        public void TokenizeWithTrailingPeriod_IncludesInLastToken()
+        public void TokenizeWithTrailingPeriod_SeparatesTerminator()
         {
             var prompt = new ProcessedPrompt("GET text FROM file.txt.");
             
-            Assert.That(prompt.Tokens, Has.Length.EqualTo(4));
-            Assert.That(prompt.Tokens[3], Is.EqualTo("file.txt."));
+            Assert.That(prompt.Tokens, Has.Length.EqualTo(5));
+            Assert.That(prompt.Tokens[3], Is.EqualTo("file.txt"));
+            Assert.That(prompt.Tokens[4], Is.EqualTo("."));
         }
 
         [Test]

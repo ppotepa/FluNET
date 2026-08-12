@@ -192,15 +192,20 @@ namespace FluNET.Tests.Tokenization
             Assert.That(prompt.Tokens[1], Is.EqualTo("{my  file}"));
         }
 
-        [TestCase("GET {unclosed brace", 2, Description = "Unclosed brace keeps rest as single token")]
-        [TestCase("GET [unclosed bracket", 2, Description = "Unclosed bracket keeps rest as single token")]
-        [TestCase("GET text} FROM file", 2, Description = "Extra closing brace - depth goes negative, rest is single token")]
-        [TestCase("GET text] FROM file", 2, Description = "Extra closing bracket - depth goes negative, rest is single token")]
-        public void TokenizeMalformedBracesOrBrackets_StillTokenizes(string input, int expectedCount)
+        [TestCase("GET {unclosed brace", "FLN003")]
+        [TestCase("GET [unclosed bracket", "FLN003")]
+        [TestCase("GET text} FROM file", "FLN001")]
+        [TestCase("GET text] FROM file", "FLN001")]
+        public void TokenizeMalformedBracesOrBrackets_ReportsDiagnostics(string input, string expectedCode)
         {
             var prompt = new ProcessedPrompt(input);
-            
-            Assert.That(prompt.Tokens, Has.Length.EqualTo(expectedCount));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(prompt.IsValid, Is.False);
+                Assert.That(prompt.Diagnostics.Select(diagnostic => diagnostic.Code),
+                    Does.Contain(expectedCode));
+            });
         }
 
         [Test]

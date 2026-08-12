@@ -40,24 +40,23 @@ namespace FluNET.Tests
         }
 
         [Test]
-        public void ValidateSentence_WithoutTerminator_ShouldFail()
+        public void ValidateSentence_WithoutTerminator_ShouldPass()
         {
-            ProcessedPrompt processed = new("GET text FROM file");
+            ProcessedPrompt processed = new("GET [text] FROM {file}");
             TokenTree tree = processed.ToTokenTree();
 
             ValidationResult result = validator.ValidateSentence(tree);
 
             Assert.Multiple(() =>
             {
-                Assert.That(result.IsValid, Is.False);
-                Assert.That(result.FailureReason, Does.Contain("terminator"));
+                Assert.That(result.IsValid, Is.True, result.FailureReason);
             });
         }
 
         [Test]
         public void ValidateSentence_WithPeriod_ShouldPass()
         {
-            ProcessedPrompt processed = new("GET text FROM file.");
+            ProcessedPrompt processed = new("GET [text] FROM {file}.");
             TokenTree tree = processed.ToTokenTree();
 
             ValidationResult result = validator.ValidateSentence(tree);
@@ -73,7 +72,7 @@ namespace FluNET.Tests
         [Test]
         public void ValidateSentence_WithQuestionMark_ShouldPass()
         {
-            ProcessedPrompt processed = new("GET text FROM file?");
+            ProcessedPrompt processed = new("GET [text] FROM {file}?");
             TokenTree tree = processed.ToTokenTree();
 
             ValidationResult result = validator.ValidateSentence(tree);
@@ -87,7 +86,7 @@ namespace FluNET.Tests
         [Test]
         public void ValidateSentence_WithExclamation_ShouldPass()
         {
-            ProcessedPrompt processed = new("GET text FROM file!");
+            ProcessedPrompt processed = new("GET [text] FROM {file}!");
             TokenTree tree = processed.ToTokenTree();
 
             ValidationResult result = validator.ValidateSentence(tree);

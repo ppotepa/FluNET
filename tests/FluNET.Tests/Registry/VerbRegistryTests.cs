@@ -101,7 +101,7 @@ namespace FluNET.Tests.Registry
                 try
                 {
                     var verb = _registry!.GetVerbByName(name);
-                    return new { Name = name, Found = true, VerbText = verb.Text };
+                    return new { Name = name, Found = true, VerbText = (string?)verb.Text };
                 }
                 catch
                 {

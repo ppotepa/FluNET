@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\FluNET.Engine\FluNET.csproj" />
+    <ProjectReference Include="..\..\src\FluNET.Engine\FluNET.Engine.csproj" />
   </ItemGroup>
 
   <ItemGroup>

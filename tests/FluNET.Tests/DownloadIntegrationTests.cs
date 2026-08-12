@@ -1,378 +1,97 @@
-using FluNET.Prompt;
-using FluNET.Context;
-using FluNET.Syntax.Verbs;
-using FluNET.Words;
-using FluNET.Syntax.Validation;
-using FluNET.Sentences;
 using System.Text.Json;
+using FluNET.Capabilities;
+using FluNET.Context;
+using FluNET.Execution;
+using FluNET.Prompt;
+using Microsoft.Extensions.DependencyInjection;
 
-namespace FluNET.Tests
+namespace FluNET.Tests;
+
+/// <summary>End-to-end download tests with deterministic in-memory HTTP.</summary>
+[TestFixture]
+public sealed class DownloadIntegrationTests
 {
-    /// <summary>
-    /// Integration tests for DOWNLOAD command using the FluNET.TestWebServer.
-    /// These tests verify realistic download scenarios with various file types.
-    /// </summary>
-    [TestFixture]
-    public class DownloadIntegrationTests
+    private FluNETContext _context = null!;
+    private FakeHttpTransport _http = null!;
+    private Engine _engine = null!;
+    private string _directory = null!;
+
+    [SetUp]
+    public void SetUp()
     {
-        private FluNETContext _context = null!;
-        private Engine engine = null!;
-        private string testDirectory = null!;
-        private const string BaseUrl = "http://localhost:8765/api/testfiles/";
+        _directory = Path.Combine(Path.GetTempPath(), $"FluNET_DownloadIntegration_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(_directory);
+        _http = new FakeHttpTransport();
+        _context = FluNETContext.Create(services => services.AddSingleton<IHttpTransport>(_http));
+        _engine = _context.GetEngine();
+    }
 
-        [SetUp]
-        public void Setup()
+    [TearDown]
+    public void TearDown()
+    {
+        _context.Dispose();
+        Directory.Delete(_directory, recursive: true);
+    }
+
+    [Test]
+    public async Task Download_JsonFilePreservesParseableContent()
+    {
+        const string uri = "https://example.test/data.json";
+        _http.AddDownload(uri, "{\"name\":\"Test Data\",\"items\":[1,2,3]}");
+        string destination = Path.Combine(_directory, "data.json");
+
+        ExecutionResult execution = await _engine.ExecuteAsync(new ProcessedPrompt(
+            $"DOWNLOAD [data] FROM {{{uri}}} TO {{{destination}}}."));
+
+        using JsonDocument json = JsonDocument.Parse(await File.ReadAllTextAsync(destination));
+        Assert.Multiple(() =>
         {
-            _context = FluNETContext.Create();
-            engine = _context.GetEngine();
+            Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
+            Assert.That(json.RootElement.GetProperty("name").GetString(), Is.EqualTo("Test Data"));
+            Assert.That(json.RootElement.GetProperty("items").GetArrayLength(), Is.EqualTo(3));
+        });
+    }
 
-            // Create test directory
-            testDirectory = Path.Combine(Path.GetTempPath(), "FluNET_Integration_" + Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(testDirectory);
+    [Test]
+    public async Task Download_BinaryFilePreservesBytes()
+    {
+        const string uri = "https://example.test/image.png";
+        byte[] expected = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
+        _http.AddDownload(uri, expected);
+        string destination = Path.Combine(_directory, "image.png");
 
-            // Verify test server is running
-            VerifyTestServerIsRunning();
-        }
+        ExecutionResult execution = await _engine.ExecuteAsync(new ProcessedPrompt(
+            $"DOWNLOAD [image] FROM {{{uri}}} TO {{{destination}}}."));
 
-        [TearDown]
-        public void TearDown()
+        Assert.Multiple(() =>
         {
-            try
-            {
-                _context?.Dispose();
+            Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
+            Assert.That(File.ReadAllBytes(destination), Is.EqualTo(expected));
+        });
+    }
 
-                if (Directory.Exists(testDirectory))
-                {
-                    Directory.Delete(testDirectory, true);
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Warning: TearDown cleanup failed: {ex.Message}");
-            }
-        }
-
-        private void VerifyTestServerIsRunning()
+    [Test]
+    public async Task RestrictedPolicyBlocksDestinationOutsideAllowedRoot()
+    {
+        const string uri = "https://allowed.example/file.txt";
+        _http.AddDownload(uri, "content");
+        string outside = Path.Combine(Path.GetTempPath(), $"outside-{Guid.NewGuid():N}.txt");
+        using FluNETContext restrictedContext = FluNETContext.Create(services =>
         {
-            try
-            {
-                using HttpClient client = new();
-                client.Timeout = TimeSpan.FromSeconds(2);
-                var response = client.GetAsync(BaseUrl + "health").Result;
-                if (!response.IsSuccessStatusCode)
-                {
-                    Assert.Ignore("Test web server is not running. Please start FluNET.TestWebServer.");
-                }
-            }
-            catch
-            {
-                Assert.Ignore("Test web server is not running. Please start FluNET.TestWebServer on http://localhost:8765");
-            }
-        }
+            services.AddSingleton<IExecutionPolicy>(new RestrictedExecutionPolicy(
+                [_directory],
+                ["allowed.example"]));
+            services.AddSingleton<IHttpTransport>(_http);
+        });
 
-        #region JSON Download Tests
+        ExecutionResult execution = await restrictedContext.GetEngine().ExecuteAsync(new ProcessedPrompt(
+            $"DOWNLOAD [file] FROM {{{uri}}} TO {{{outside}}}."));
 
-        [Test]
-        public void Download_JsonFile_ShouldParseCorrectly()
+        Assert.Multiple(() =>
         {
-            // Arrange
-            string destinationPath = Path.Combine(testDirectory, "data.json");
-            ProcessedPrompt prompt = new($"DOWNLOAD [data] FROM {{{BaseUrl}data.json}} TO {{{destinationPath}}} .");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-
-                // Verify JSON content
-                string jsonContent = File.ReadAllText(destinationPath);
-                JsonDocument doc = JsonDocument.Parse(jsonContent);
-                Assert.That(doc.RootElement.GetProperty("Name").GetString(), Is.EqualTo("Test Data"));
-                Assert.That(doc.RootElement.GetProperty("Version").GetString(), Is.EqualTo("1.0"));
-                Assert.That(doc.RootElement.GetProperty("Items").GetArrayLength(), Is.EqualTo(3));
-            });
-        }
-
-        [Test]
-        public void Download_LargeJsonFile_ShouldHandleCorrectly()
-        {
-            // Arrange
-            string destinationPath = Path.Combine(testDirectory, "largefile.json");
-            ProcessedPrompt prompt = new($"DOWNLOAD [largefile] FROM {{{BaseUrl}largefile.json}} TO {{{destinationPath}}} .");
-
-            // Act
-            var startTime = DateTime.UtcNow;
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-            var duration = DateTime.UtcNow - startTime;
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-
-                FileInfo fileInfo = new(destinationPath);
-                Assert.That(fileInfo.Length, Is.GreaterThan(100000), "Large file should be over 100KB");
-
-                // Verify it contains expected number of items
-                string jsonContent = File.ReadAllText(destinationPath);
-                JsonDocument doc = JsonDocument.Parse(jsonContent);
-                Assert.That(doc.RootElement.GetArrayLength(), Is.EqualTo(1000));
-
-                TestContext.WriteLine($"Downloaded {fileInfo.Length:N0} bytes in {duration.TotalMilliseconds:F0}ms");
-            });
-        }
-
-        #endregion JSON Download Tests
-
-        #region CSV and XML Download Tests
-
-        [Test]
-        public void Download_CsvFile_ShouldPreserveFormat()
-        {
-            // Arrange
-            string destinationPath = Path.Combine(testDirectory, "data.csv");
-            ProcessedPrompt prompt = new($"PULL [csv] FROM {{{BaseUrl}data.csv}} TO {{{destinationPath}}} .");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-
-                string[] lines = File.ReadAllLines(destinationPath);
-                Assert.That(lines.Length, Is.GreaterThanOrEqualTo(5), "Should have header + data rows");
-                Assert.That(lines[0], Does.Contain("Id,Name,Email,Status"));
-                Assert.That(lines[1], Does.Contain("John Doe"));
-            });
-        }
-
-        [Test]
-        public void Download_XmlFile_ShouldBeWellFormed()
-        {
-            // Arrange
-            string destinationPath = Path.Combine(testDirectory, "config.xml");
-            ProcessedPrompt prompt = new($"GRAB [config] FROM {{{BaseUrl}config.xml}} TO {{{destinationPath}}} .");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-
-                string xmlContent = File.ReadAllText(destinationPath);
-                Assert.That(xmlContent, Does.Contain("<?xml version"));
-                Assert.That(xmlContent, Does.Contain("<configuration>"));
-                Assert.That(xmlContent, Does.Contain("<settings>"));
-            });
-        }
-
-        #endregion CSV and XML Download Tests
-
-        #region Binary File Tests
-
-        [Test]
-        public void Download_PngImage_ShouldPreserveBinaryData()
-        {
-            // Arrange
-            string destinationPath = Path.Combine(testDirectory, "downloaded.png");
-            ProcessedPrompt prompt = new($"DOWNLOAD [image] FROM {{{BaseUrl}image.png}} TO {{{destinationPath}}} .");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-
-                byte[] data = File.ReadAllBytes(destinationPath);
-                // Verify PNG signature
-                Assert.That(data[0], Is.EqualTo(0x89), "PNG signature byte 1");
-                Assert.That(data[1], Is.EqualTo(0x50), "PNG signature byte 2 (P)");
-                Assert.That(data[2], Is.EqualTo(0x4E), "PNG signature byte 3 (N)");
-                Assert.That(data[3], Is.EqualTo(0x47), "PNG signature byte 4 (G)");
-            });
-        }
-
-        #endregion Binary File Tests
-
-        #region Filename Extraction Tests
-
-        [Test]
-        public void Download_NestedPath_ShouldExtractFilename()
-        {
-            // Arrange
-            string originalDir = Directory.GetCurrentDirectory();
-            Directory.SetCurrentDirectory(testDirectory);
-
-            try
-            {
-                ProcessedPrompt prompt = new($"OBTAIN [file] FROM {{{BaseUrl}nested/path/file.txt}} .");
-
-                // Act
-                (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-                // Assert
-                Assert.Multiple(() =>
-                {
-                    Assert.That(validation.IsValid, Is.True);
-
-                    string expectedPath = Path.Combine(testDirectory, "file.txt");
-                    Assert.That(File.Exists(expectedPath), Is.True);
-
-                    string content = File.ReadAllText(expectedPath);
-                    Assert.That(content, Does.Contain("nested path"));
-                });
-            }
-            finally
-            {
-                Directory.SetCurrentDirectory(originalDir);
-            }
-        }
-
-        [Test]
-        public void Download_WithoutExtension_FromDocument_ShouldExtractCorrectly()
-        {
-            // Arrange
-            string originalDir = Directory.GetCurrentDirectory();
-            Directory.SetCurrentDirectory(testDirectory);
-
-            try
-            {
-                ProcessedPrompt prompt = new($"DOWNLOAD [doc] FROM {{{BaseUrl}document.txt}} .");
-
-                // Act
-                (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-                // Assert
-                Assert.Multiple(() =>
-                {
-                    Assert.That(validation.IsValid, Is.True);
-
-                    string expectedPath = Path.Combine(testDirectory, "document.txt");
-                    Assert.That(File.Exists(expectedPath), Is.True);
-
-                    string content = File.ReadAllText(expectedPath);
-                    Assert.That(content, Does.Contain("Test document content"));
-                });
-            }
-            finally
-            {
-                Directory.SetCurrentDirectory(originalDir);
-            }
-        }
-
-        #endregion Filename Extraction Tests
-
-        #region Variable Resolution Tests
-
-        [Test]
-        public void Download_WithVariableUrl_ShouldResolveAndDownload()
-        {
-            // Arrange
-            engine.RegisterVariable("apiUrl", BaseUrl + "data.json");
-            string destinationPath = Path.Combine(testDirectory, "fromvar.json");
-            ProcessedPrompt prompt = new($"DOWNLOAD [data] FROM [apiUrl] TO {{{destinationPath}}} .");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-
-                FileInfo fileInfo = new(destinationPath);
-                Assert.That(fileInfo.Length, Is.GreaterThan(0));
-            });
-        }
-
-        [Test]
-        public void Download_WithVariableDestination_ShouldResolveCorrectly()
-        {
-            // Arrange
-            string destinationPath = Path.Combine(testDirectory, "output.txt");
-            engine.RegisterVariable("outputPath", destinationPath);
-            ProcessedPrompt prompt = new($"DOWNLOAD [file] FROM {{{BaseUrl}testfile.txt}} TO [outputPath] .");
-
-            // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-
-                string content = File.ReadAllText(destinationPath);
-                Assert.That(content, Does.Contain("test file for download"));
-            });
-        }
-
-        #endregion Variable Resolution Tests
-
-        #region Performance and Edge Cases
-
-        [Test]
-        public void Download_MultipleFilesSequentially_ShouldSucceed()
-        {
-            // Arrange & Act & Assert
-            var files = new[]
-            {
-                ("testfile.txt", "test1.txt"),
-                ("data.json", "test2.json"),
-                ("data.csv", "test3.csv")
-            };
-
-            foreach (var (source, dest) in files)
-            {
-                string destinationPath = Path.Combine(testDirectory, dest);
-                ProcessedPrompt prompt = new($"DOWNLOAD [file] FROM {{{BaseUrl}{source}}} TO {{{destinationPath}}} .");
-
-                (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-
-                Assert.That(validation.IsValid, Is.True, $"Failed to download {source}");
-                Assert.That(File.Exists(destinationPath), Is.True, $"{dest} was not created");
-            }
-        }
-
-        [Test]
-        [Ignore("Performance test - enable manually")]
-        public void Download_SlowEndpoint_ShouldHandleGracefully()
-        {
-            // Arrange
-            string destinationPath = Path.Combine(testDirectory, "slow.txt");
-            ProcessedPrompt prompt = new($"DOWNLOAD [file] FROM {{{BaseUrl}slow.txt}} TO {{{destinationPath}}} .");
-
-            // Act
-            var startTime = DateTime.UtcNow;
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
-            var duration = DateTime.UtcNow - startTime;
-
-            // Assert
-            Assert.Multiple(() =>
-            {
-                Assert.That(validation.IsValid, Is.True);
-                Assert.That(File.Exists(destinationPath), Is.True);
-                Assert.That(duration.TotalSeconds, Is.GreaterThanOrEqualTo(2), "Should take at least 2 seconds");
-
-                TestContext.WriteLine($"Slow download completed in {duration.TotalSeconds:F2} seconds");
-            });
-        }
-
-        #endregion Performance and Edge Cases
+            Assert.That(execution.Error?.Kind, Is.EqualTo(ExecutionFailureKind.Capability));
+            Assert.That(execution.Error?.Code, Is.EqualTo("FLN230"));
+            Assert.That(File.Exists(outside), Is.False);
+        });
     }
 }

@@ -4,6 +4,7 @@ using FluNET.Syntax.Verbs;
 using FluNET.Words;
 using FluNET.Syntax.Validation;
 using FluNET.Sentences;
+using FluNET.Execution;
 
 namespace FluNET.Tests
 {
@@ -59,39 +60,39 @@ namespace FluNET.Tests
         public void Debug_ShowValidationState()
         {
             // This test helps diagnose why validation fails when tests run together
-            TestContext.WriteLine("=== Diagnostic Test ===");
+            TestContext.Out.WriteLine("=== Diagnostic Test ===");
 
             // Check DiscoveryService state
             var discovery = _context.GetService<DiscoveryService>();
-            TestContext.WriteLine($"Total words discovered: {discovery.Words.Count}");
-            TestContext.WriteLine($"Total verbs discovered: {discovery.Verbs.Count}");
-            TestContext.WriteLine($"Total nouns discovered: {discovery.Nouns.Count}");
+            TestContext.Out.WriteLine($"Total words discovered: {discovery.Words.Count}");
+            TestContext.Out.WriteLine($"Total verbs discovered: {discovery.Verbs.Count}");
+            TestContext.Out.WriteLine($"Total nouns discovered: {discovery.Nouns.Count}");
 
             // List all discovered verbs
-            TestContext.WriteLine("\nDiscovered Verbs:");
+            TestContext.Out.WriteLine("\nDiscovered Verbs:");
             foreach (var verb in discovery.Verbs)
             {
-                TestContext.WriteLine($"  - {verb.Name}");
+                TestContext.Out.WriteLine($"  - {verb.Name}");
             }
 
             // Check Lexicon state
             var lexicon = _context.GetService<Lexicon.Lexicon>();
             var getBaseType = typeof(Get<,>);
             var getUsages = lexicon[getBaseType];
-            TestContext.WriteLine($"\nGET verb implementations found: {getUsages.Count()}");
+            TestContext.Out.WriteLine($"\nGET verb implementations found: {getUsages.Count()}");
             foreach (var usage in getUsages)
             {
-                TestContext.WriteLine($"  - {usage.UsageName}: {usage.ImplementationType.Name}");
+                TestContext.Out.WriteLine($"  - {usage.UsageName}: {usage.ImplementationType.Name}");
             }
 
             // Try creating a simple sentence
             ProcessedPrompt prompt = new($"GET [text] FROM {{{testFilePath}}} .");
             var (validation, sentence, result) = engine.Run(prompt);
 
-            TestContext.WriteLine($"\nValidation result: {validation.IsValid}");
+            TestContext.Out.WriteLine($"\nValidation result: {validation.IsValid}");
             if (!validation.IsValid)
             {
-                TestContext.WriteLine($"Failure reason: {validation.FailureReason}");
+                TestContext.Out.WriteLine($"Failure reason: {validation.FailureReason}");
             }
 
             Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
@@ -109,8 +110,8 @@ namespace FluNET.Tests
             // Assert - Add diagnostic output
             if (!validation.IsValid)
             {
-                TestContext.WriteLine($"Validation failed: {validation.FailureReason}");
-                TestContext.WriteLine($"Prompt: GET [text] FROM {{{testFilePath}}} .");
+                TestContext.Out.WriteLine($"Validation failed: {validation.FailureReason}");
+                TestContext.Out.WriteLine($"Prompt: GET [text] FROM {{{testFilePath}}} .");
             }
 
             Assert.Multiple(() =>
@@ -128,21 +129,23 @@ namespace FluNET.Tests
         }
 
         [Test]
-        public void Get_FromNonExistentFile_ShouldReturnNull()
+        public void Get_FromNonExistentFile_ShouldReturnStructuredError()
         {
             // Arrange
             string nonExistentPath = Path.Combine(testDirectory, "does_not_exist.txt");
             ProcessedPrompt prompt = new($"GET [text] FROM {{{nonExistentPath}}} .");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            ExecutionResult execution = engine.Execute(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
-                Assert.That(validation.IsValid, Is.True); // Sentence structure is valid
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(result, Is.Null); // But execution returns null for non-existent file
+                Assert.That(execution.IsSuccess, Is.False);
+                Assert.That(execution.Sentence, Is.Not.Null);
+                Assert.That(execution.Result, Is.Null);
+                Assert.That(execution.Error?.Kind, Is.EqualTo(ExecutionFailureKind.Execution));
+                Assert.That(execution.Error?.Message, Does.Contain("does_not_exist.txt"));
             });
         }
 
@@ -172,9 +175,11 @@ namespace FluNET.Tests
             string relativePath = "test_relative.txt";
             string fullPath = Path.Combine(testDirectory, relativePath);
             File.WriteAllText(fullPath, "Relative path test");
+            string originalDirectory = Directory.GetCurrentDirectory();
 
             try
             {
+                Directory.SetCurrentDirectory(testDirectory);
                 ProcessedPrompt prompt = new($"GET [text] FROM {{{relativePath}}} .");
 
                 // Act
@@ -185,10 +190,12 @@ namespace FluNET.Tests
                 {
                     Assert.That(validation.IsValid, Is.True);
                     Assert.That(sentence, Is.Not.Null);
+                    Assert.That(result, Is.InstanceOf<string[]>());
                 });
             }
             finally
             {
+                Directory.SetCurrentDirectory(originalDirectory);
                 if (File.Exists(fullPath))
                 {
                     try
@@ -525,7 +532,7 @@ namespace FluNET.Tests
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result, Is.InstanceOf<string[]>());
                 string[]? lines = result as string[];
-                Assert.That(lines!.Length, Is.EqualTo(1)); // Empty file has one empty line
+                Assert.That(lines, Is.Empty);
             });
         }
 
