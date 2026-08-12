@@ -1,6 +1,7 @@
 using FluNET.Language.Binding;
 using FluNET.Prompt;
 using FluNET.Variables;
+using System.Globalization;
 
 namespace FluNET.Execution.Commands;
 
@@ -97,5 +98,26 @@ public sealed class EncodingValueConverter : IValueConverter<System.Text.Encodin
         "UNICODE" => System.Text.Encoding.Unicode,
         string name => System.Text.Encoding.GetEncoding(name),
         _ => throw new InvalidCastException("An encoding name cannot be null.")
+    };
+}
+
+public sealed class DecimalValueConverter : IValueConverter<decimal>
+{
+    public decimal Convert(object value) => value is decimal number
+        ? number
+        : decimal.TryParse(value.ToString(), NumberStyles.Number, CultureInfo.InvariantCulture, out decimal parsed)
+            ? parsed
+            : throw new FormatException($"'{value}' is not a number.");
+}
+
+public sealed class BooleanValueConverter : IValueConverter<bool>
+{
+    public bool Convert(object value) => value switch
+    {
+        bool boolean => boolean,
+        _ when bool.TryParse(value.ToString(), out bool parsed) => parsed,
+        _ when value.ToString()?.Equals("yes", StringComparison.OrdinalIgnoreCase) == true => true,
+        _ when value.ToString()?.Equals("no", StringComparison.OrdinalIgnoreCase) == true => false,
+        _ => throw new FormatException($"'{value}' is not a boolean.")
     };
 }

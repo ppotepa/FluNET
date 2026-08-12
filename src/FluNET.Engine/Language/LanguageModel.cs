@@ -198,6 +198,7 @@ public sealed class LanguageSnapshot
 {
     private readonly IReadOnlyDictionary<string, CommandDescriptor> _commandsBySurface;
     private readonly IReadOnlyDictionary<string, KeywordDescriptor> _keywordsBySurface;
+    private readonly IReadOnlySet<string> _qualifiers;
 
     internal LanguageSnapshot(
         IEnumerable<CommandDescriptor> commands,
@@ -251,6 +252,9 @@ public sealed class LanguageSnapshot
 
         _commandsBySurface = new ReadOnlyDictionary<string, CommandDescriptor>(commandIndex);
         _keywordsBySurface = new ReadOnlyDictionary<string, KeywordDescriptor>(keywordIndex);
+        _qualifiers = Commands.SelectMany(command => command.Frames)
+            .SelectMany(frame => frame.Qualifiers)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
     public IReadOnlyList<CommandDescriptor> Commands { get; }
@@ -264,6 +268,8 @@ public sealed class LanguageSnapshot
 
     public KeywordDescriptor? FindKeyword(string surfaceForm) =>
         _keywordsBySurface.TryGetValue(surfaceForm, out KeywordDescriptor? keyword) ? keyword : null;
+
+    public bool IsQualifier(string surfaceForm) => _qualifiers.Contains(surfaceForm);
 }
 
 public interface IFluNetModule

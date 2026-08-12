@@ -2,6 +2,7 @@ using FluNET.Keywords;
 using FluNET.Syntax.Verbs;
 using System.Text;
 using FluNET.Execution.Commands;
+using System.Text.Json;
 
 namespace FluNET.Language;
 
@@ -22,11 +23,19 @@ public sealed class StandardLanguageModule : IFluNetModule
             .Route<DownloadFile, DownloadFileCommand, FileInfo, DownloadFileCommandBinder, DownloadFileCommandHandler>()
             .Route<PostJson, PostJsonCommand, string, PostJsonCommandBinder, PostJsonCommandHandler>()
             .Route<SendEmail, SendEmailCommand, string, SendEmailCommandBinder, SendEmailCommandHandler>()
-            .Route<TransformEncoding, TransformEncodingCommand, string, TransformEncodingCommandBinder, TransformEncodingCommandHandler>();
+            .Route<TransformEncoding, TransformEncodingCommand, string, TransformEncodingCommandBinder, TransformEncodingCommandHandler>()
+            .Route<SetText, SetTextCommand, string, SetTextCommandBinder, SetTextCommandHandler>()
+            .Route<SetJson, SetJsonCommand, JsonElement, SetJsonCommandBinder, SetJsonCommandHandler>()
+            .Route<SetNumber, SetNumberCommand, decimal, SetNumberCommandBinder, SetNumberCommandHandler>()
+            .Route<SetBoolean, SetBooleanCommand, bool, SetBooleanCommandBinder, SetBooleanCommandHandler>()
+            .Route<ParseJson, ParseJsonCommand, JsonElement, ParseJsonCommandBinder, ParseJsonCommandHandler>()
+            .Route<FormatJson, FormatJsonCommand, string, FormatJsonCommandBinder, FormatJsonCommandHandler>();
     }
 
     public void Register(LanguageBuilder language)
     {
+        language.Type<decimal>("Number");
+
         language.ClauseMarker("FROM", Prompt.PromptClauseKind.From)
             .ClauseMarker("TO", Prompt.PromptClauseKind.To)
             .ClauseMarker("USING", Prompt.PromptClauseKind.Using)
@@ -87,6 +96,37 @@ public sealed class StandardLanguageModule : IFluNetModule
         language.Command<TransformEncoding, string>("TRANSFORM", "Encoding")
             .Positional<string>(SemanticRole.Theme)
             .Marked<Encoding>(SemanticRole.Instrument, "USING");
+
+        language.Command<SetText, string>("SET", "Text")
+            .Default()
+            .Qualifiers("TEXT")
+            .Positional<string>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<string>(SemanticRole.Theme, "TO", SlotCardinality.Repeated);
+
+        language.Command<SetJson, JsonElement>("SET", "Json")
+            .Qualifiers("JSON")
+            .Positional<JsonElement>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<JsonElement>(SemanticRole.Theme, "TO");
+
+        language.Command<SetNumber, decimal>("SET", "Number")
+            .Qualifiers("NUMBER")
+            .Positional<decimal>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<decimal>(SemanticRole.Theme, "TO");
+
+        language.Command<SetBoolean, bool>("SET", "Boolean")
+            .Qualifiers("BOOLEAN", "BOOL")
+            .Positional<bool>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<bool>(SemanticRole.Theme, "TO");
+
+        language.Command<ParseJson, JsonElement>("PARSE", "Json")
+            .Qualifiers("JSON")
+            .Positional<JsonElement>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<string>(SemanticRole.Source, "FROM");
+
+        language.Command<FormatJson, string>("FORMAT", "Json")
+            .Qualifiers("JSON")
+            .Positional<string>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<JsonElement>(SemanticRole.Source, "FROM");
     }
 }
 

@@ -138,11 +138,6 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
 
     private static FrameSelection SelectFrame(CommandDescriptor command, CommandSyntax syntax)
     {
-        if (command.Frames.Count == 1)
-        {
-            return new FrameSelection(command.Frames[0], false);
-        }
-
         ClauseSyntax subject = syntax.Clauses.First(clause => clause.Kind == PromptClauseKind.Subject);
         PromptToken? selector = subject.Values.FirstOrDefault();
         if (selector is not null)
@@ -159,6 +154,11 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
                 return new FrameSelection(explicitMatches[0], consume);
             }
 
+            if (command.Frames.Count == 1)
+            {
+                return new FrameSelection(command.Frames[0], false);
+            }
+
             // Compatibility rule for the original PoC: LOAD [configname]
             // selected the Config realization from the output variable name.
             if (selector.Kind == PromptTokenKind.Variable)
@@ -173,6 +173,11 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
             }
         }
 
+        if (command.Frames.Count == 1)
+        {
+            return new FrameSelection(command.Frames[0], false);
+        }
+
         return new FrameSelection(
             command.Frames.Single(frame => frame.IsDefault),
             false);
@@ -183,7 +188,7 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
         CommandSlotDescriptor slot,
         IReadOnlyList<PromptToken> tokens)
     {
-        if (slot.Cardinality == SlotCardinality.Required && tokens.Count == 0)
+        if (slot.Cardinality != SlotCardinality.Optional && tokens.Count == 0)
         {
             string position = slot.Marker is null ? "subject" : $"{slot.Marker} clause";
             throw Error(syntax, $"{syntax.Verb.Text.ToUpperInvariant()} requires a value for its {position}.");

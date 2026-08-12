@@ -37,9 +37,8 @@ namespace FluNET.Words
                 return new ReferenceWord(token.Value);
             }
 
-            // Check if this token is a common qualifier (TEXT, JSON, XML, BINARY, etc.)
-            string[] commonQualifiers = { "TEXT", "JSON", "XML", "BINARY", "CSV", "HTML", "YAML", "IMAGE", "VIDEO", "AUDIO" };
-            if (commonQualifiers.Contains(token.Value.ToUpperInvariant()))
+            // Qualifiers are declared by frames in the immutable language snapshot.
+            if (_languageRegistry.Snapshot.IsQualifier(token.Value))
             {
                 return new QualifierWord(token.Value);
             }
