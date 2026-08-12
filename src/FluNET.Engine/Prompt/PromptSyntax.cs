@@ -29,7 +29,8 @@ public enum PromptClauseKind
     Subject,
     From,
     To,
-    Using
+    Using,
+    Marked
 }
 
 /// <summary>A subject or prepositional clause within a command.</summary>
@@ -65,7 +66,7 @@ public sealed record ClauseSyntax
 /// <summary>A hierarchical command node, excluding the THEN separator.</summary>
 public sealed record CommandSyntax
 {
-    public CommandSyntax(IReadOnlyList<PromptToken> tokens)
+    public CommandSyntax(IReadOnlyList<PromptToken> tokens, PromptGrammar? grammar = null)
     {
         ArgumentNullException.ThrowIfNull(tokens);
         if (tokens.Count == 0)
@@ -76,7 +77,7 @@ public sealed record CommandSyntax
         PromptToken[] snapshot = tokens.ToArray();
         Tokens = snapshot;
         Verb = snapshot[0];
-        Clauses = ParseClauses(snapshot.Skip(1));
+        Clauses = ParseClauses(snapshot.Skip(1), grammar ?? PromptGrammar.Standard);
     }
 
     public IReadOnlyList<PromptToken> Tokens { get; }
@@ -85,7 +86,9 @@ public sealed record CommandSyntax
     public IReadOnlyList<PromptToken> Arguments => Tokens.Skip(1).ToArray();
     public SourceSpan Span => SourceSpan.FromBounds(Verb.Start, Tokens[^1].Span.End);
 
-    private static IReadOnlyList<ClauseSyntax> ParseClauses(IEnumerable<PromptToken> tokens)
+    private static IReadOnlyList<ClauseSyntax> ParseClauses(
+        IEnumerable<PromptToken> tokens,
+        PromptGrammar grammar)
     {
         List<ClauseSyntax> clauses = [];
         PromptClauseKind kind = PromptClauseKind.Subject;
@@ -94,15 +97,10 @@ public sealed record CommandSyntax
 
         foreach (PromptToken token in tokens)
         {
-            PromptClauseKind? nextKind = token.Kind == PromptTokenKind.Word
-                ? token.Text.ToUpperInvariant() switch
-                {
-                    "FROM" => PromptClauseKind.From,
-                    "TO" => PromptClauseKind.To,
-                    "USING" => PromptClauseKind.Using,
-                    _ => null
-                }
-                : null;
+            PromptClauseKind? nextKind = token.Kind == PromptTokenKind.Word &&
+                grammar.TryGetClauseKind(token.Text, out PromptClauseKind clauseKind)
+                    ? clauseKind
+                    : null;
 
             if (nextKind is null)
             {
@@ -121,15 +119,26 @@ public sealed record CommandSyntax
     }
 }
 
+/// <summary>The connector between two adjacent command nodes.</summary>
+public sealed record CommandLinkSyntax(
+    int PredecessorIndex,
+    int SuccessorIndex,
+    CommandLinkKind Kind,
+    PromptToken Connector);
+
 /// <summary>The immutable parsed top-level shape of a prompt.</summary>
 public sealed record PromptSyntax
 {
-    public PromptSyntax(IEnumerable<CommandSyntax> commands)
+    public PromptSyntax(
+        IEnumerable<CommandSyntax> commands,
+        IEnumerable<CommandLinkSyntax>? links = null)
     {
         Commands = commands?.ToArray() ?? throw new ArgumentNullException(nameof(commands));
+        Links = links?.ToArray() ?? Array.Empty<CommandLinkSyntax>();
     }
 
     public IReadOnlyList<CommandSyntax> Commands { get; }
+    public IReadOnlyList<CommandLinkSyntax> Links { get; }
 
     public SourceSpan Span => Commands.Count == 0
         ? default

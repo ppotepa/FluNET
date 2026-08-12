@@ -1,4 +1,5 @@
 using FluNET.Syntax.Core;
+using FluNET.Prompt;
 using System.Collections.ObjectModel;
 
 namespace FluNET.Language;
@@ -160,10 +161,12 @@ public sealed class LanguageSnapshot
 
     internal LanguageSnapshot(
         IEnumerable<CommandDescriptor> commands,
-        IEnumerable<KeywordDescriptor> keywords)
+        IEnumerable<KeywordDescriptor> keywords,
+        PromptGrammar grammar)
     {
         Commands = commands.OrderBy(command => command.Name, StringComparer.Ordinal).ToArray();
         Keywords = keywords.OrderBy(keyword => keyword.Text, StringComparer.Ordinal).ToArray();
+        Grammar = grammar ?? throw new ArgumentNullException(nameof(grammar));
 
         Dictionary<string, CommandDescriptor> commandIndex = new(StringComparer.OrdinalIgnoreCase);
         foreach (CommandDescriptor command in Commands)
@@ -199,6 +202,7 @@ public sealed class LanguageSnapshot
 
     public IReadOnlyList<CommandDescriptor> Commands { get; }
     public IReadOnlyList<KeywordDescriptor> Keywords { get; }
+    public PromptGrammar Grammar { get; }
     public IEnumerable<string> CommandNames => _commandsBySurface.Keys.Order(StringComparer.OrdinalIgnoreCase);
 
     public CommandDescriptor? FindCommand(string surfaceForm) =>
@@ -218,6 +222,8 @@ public sealed class LanguageBuilder
 {
     private readonly Dictionary<string, MutableCommand> _commands = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<KeywordDescriptor> _keywords = [];
+    private readonly Dictionary<string, PromptClauseKind> _clauseMarkers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CommandLinkKind> _commandConnectors = new(StringComparer.OrdinalIgnoreCase);
 
     public CommandFrameBuilder Command<TImplementation, TResult>(string name, string usageName)
         where TImplementation : class, IVerb
@@ -259,6 +265,32 @@ public sealed class LanguageBuilder
         return this;
     }
 
+    public LanguageBuilder ClauseMarker(
+        string surface,
+        PromptClauseKind kind = PromptClauseKind.Marked)
+    {
+        string normalized = NormalizeName(surface);
+        if (kind == PromptClauseKind.Subject)
+        {
+            throw new LanguageDefinitionException("Subject is implicit and cannot be registered as a clause marker.");
+        }
+        if (!_clauseMarkers.TryAdd(normalized, kind))
+        {
+            throw new LanguageDefinitionException($"Clause marker '{normalized}' is registered more than once.");
+        }
+        return this;
+    }
+
+    public LanguageBuilder CommandConnector(string surface, CommandLinkKind kind)
+    {
+        string normalized = NormalizeName(surface);
+        if (!_commandConnectors.TryAdd(normalized, kind))
+        {
+            throw new LanguageDefinitionException($"Command connector '{normalized}' is registered more than once.");
+        }
+        return this;
+    }
+
     public LanguageSnapshot Build()
     {
         CommandDescriptor[] commands = _commands.Values.Select(command =>
@@ -275,7 +307,10 @@ public sealed class LanguageBuilder
                     frame.Slots))))
             .ToArray();
 
-        return new LanguageSnapshot(commands, _keywords);
+        return new LanguageSnapshot(
+            commands,
+            _keywords,
+            new PromptGrammar(_clauseMarkers, _commandConnectors));
     }
 
     private static Type FindVerbFamily(Type implementationType)

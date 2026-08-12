@@ -9,6 +9,11 @@ public sealed class StandardLanguageModule : IFluNetModule
 {
     public void Register(LanguageBuilder language)
     {
+        language.ClauseMarker("FROM", Prompt.PromptClauseKind.From)
+            .ClauseMarker("TO", Prompt.PromptClauseKind.To)
+            .ClauseMarker("USING", Prompt.PromptClauseKind.Using)
+            .CommandConnector("THEN", Prompt.CommandLinkKind.Sequence);
+
         language.Keyword<From>("FROM")
             .Keyword<To>("TO")
             .Keyword<Using>("USING")

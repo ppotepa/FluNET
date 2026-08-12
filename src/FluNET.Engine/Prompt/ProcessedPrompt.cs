@@ -11,19 +11,22 @@ public sealed class ProcessedPrompt
 {
     private readonly string _prompt;
 
-    public ProcessedPrompt(string prompt)
+    public ProcessedPrompt(string prompt, PromptGrammar? grammar = null)
     {
         _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
+        Grammar = grammar ?? PromptGrammar.Standard;
 
         var (tokens, diagnostics) = Tokenize(prompt);
         LexicalTokens = tokens.ToArray();
         Tokens = tokens.Select(token => token.Text).ToArray();
-        Syntax = BuildSyntax(tokens, diagnostics);
+        Syntax = BuildSyntax(tokens, diagnostics, Grammar);
         Diagnostics = diagnostics.ToArray();
     }
 
     /// <summary>The exact source text used to create this immutable snapshot.</summary>
     public string SourceText => _prompt;
+
+    public PromptGrammar Grammar { get; }
 
     /// <summary>Compatibility view containing token text only.</summary>
     public string[] Tokens { get; }
@@ -35,6 +38,13 @@ public sealed class ProcessedPrompt
     public PromptSyntax Syntax { get; }
 
     public bool IsValid => Diagnostics.Count == 0;
+
+    /// <summary>Parses the same source using a host-provided language grammar.</summary>
+    public ProcessedPrompt WithGrammar(PromptGrammar grammar)
+    {
+        ArgumentNullException.ThrowIfNull(grammar);
+        return ReferenceEquals(Grammar, grammar) ? this : new ProcessedPrompt(_prompt, grammar);
+    }
 
     private static (IReadOnlyList<PromptToken> Tokens, List<PromptDiagnostic> Diagnostics) Tokenize(string input)
     {
@@ -197,10 +207,14 @@ public sealed class ProcessedPrompt
 
     private static PromptSyntax BuildSyntax(
         IReadOnlyList<PromptToken> tokens,
-        ICollection<PromptDiagnostic> diagnostics)
+        ICollection<PromptDiagnostic> diagnostics,
+        PromptGrammar grammar)
     {
         List<CommandSyntax> commands = [];
+        List<CommandLinkSyntax> links = [];
         List<PromptToken> commandTokens = [];
+        PromptToken? pendingConnector = null;
+        CommandLinkKind pendingLinkKind = default;
 
         foreach (PromptToken token in tokens)
         {
@@ -209,21 +223,34 @@ public sealed class ProcessedPrompt
                 continue;
             }
 
-            if (token.Text.Equals("THEN", StringComparison.OrdinalIgnoreCase))
+            if (token.Kind == PromptTokenKind.Word &&
+                grammar.TryGetLinkKind(token.Text, out CommandLinkKind linkKind))
             {
                 if (commandTokens.Count == 0)
                 {
                     diagnostics.Add(new PromptDiagnostic(
                         "FLN004",
-                        "THEN must separate two non-empty commands.",
+                        $"{token.Text.ToUpperInvariant()} must separate two non-empty commands.",
                         token.Start));
                 }
                 else
                 {
-                    commands.Add(new CommandSyntax(commandTokens.ToArray()));
+                    commands.Add(new CommandSyntax(commandTokens.ToArray(), grammar));
                     commandTokens.Clear();
+                    pendingConnector = token;
+                    pendingLinkKind = linkKind;
                 }
                 continue;
+            }
+
+            if (pendingConnector is not null && commandTokens.Count == 0 && commands.Count > 0)
+            {
+                links.Add(new CommandLinkSyntax(
+                    commands.Count - 1,
+                    commands.Count,
+                    pendingLinkKind,
+                    pendingConnector));
+                pendingConnector = null;
             }
 
             commandTokens.Add(token);
@@ -231,18 +258,17 @@ public sealed class ProcessedPrompt
 
         if (commandTokens.Count > 0)
         {
-            commands.Add(new CommandSyntax(commandTokens.ToArray()));
+            commands.Add(new CommandSyntax(commandTokens.ToArray(), grammar));
         }
-        else if (tokens.Any(token => token.Text.Equals("THEN", StringComparison.OrdinalIgnoreCase)))
+        else if (pendingConnector is not null)
         {
-            PromptToken then = tokens.Last(token => token.Text.Equals("THEN", StringComparison.OrdinalIgnoreCase));
             diagnostics.Add(new PromptDiagnostic(
                 "FLN004",
-                "THEN must be followed by a command.",
-                then.Start));
+                $"{pendingConnector.Text.ToUpperInvariant()} must be followed by a command.",
+                pendingConnector.Start));
         }
 
-        return new PromptSyntax(commands);
+        return new PromptSyntax(commands, links);
     }
 
     public override string ToString()

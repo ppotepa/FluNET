@@ -8,6 +8,7 @@ using FluNET.Variables;
 using FluNET.Words;
 using FluNET.Language.Binding;
 using FluNET.Execution.Planning;
+using FluNET.Language;
 
 namespace FluNET
 {
@@ -26,12 +27,14 @@ namespace FluNET
         private readonly SentenceValidator sentenceValidator;
         private readonly SemanticCommandBinder semanticBinder;
         private readonly ExecutionPlanner executionPlanner;
+        private readonly LanguageSnapshot language;
 
         public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory,
             SentenceValidator sentenceValidator, IVariableResolver variableResolver,
             ExecutionPipelineFactory pipelineFactory,
             SemanticCommandBinder semanticBinder,
-            ExecutionPlanner executionPlanner)
+            ExecutionPlanner executionPlanner,
+            LanguageSnapshot language)
         {
             this.tokenTreeFactory = tokenTreeFactory;
             this.sentenceFactory = sentenceFactory;
@@ -39,6 +42,7 @@ namespace FluNET
             this.variableResolver = variableResolver;
             this.semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
             this.executionPlanner = executionPlanner ?? throw new ArgumentNullException(nameof(executionPlanner));
+            this.language = language ?? throw new ArgumentNullException(nameof(language));
             _pipelineFactory = pipelineFactory ?? throw new ArgumentNullException(nameof(pipelineFactory));
         }
 
@@ -60,6 +64,7 @@ namespace FluNET
         public PromptAnalysis Analyze(ProcessedPrompt prompt)
         {
             ArgumentNullException.ThrowIfNull(prompt);
+            prompt = prompt.WithGrammar(language.Grammar);
 
             if (!prompt.IsValid)
             {
@@ -122,6 +127,7 @@ namespace FluNET
             CancellationToken cancellationToken = default)
         {
             ArgumentNullException.ThrowIfNull(prompt);
+            prompt = prompt.WithGrammar(language.Grammar);
             ExecutionPipeline pipeline = _pipelineFactory.CreateStandardPipeline();
             var context = new Execution.ExecutionContext(prompt);
             return await pipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
