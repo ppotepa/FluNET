@@ -99,7 +99,7 @@ public sealed class FluNetModuleBuilder
 
     /// <summary>
     /// Compatibility route declaration. The implementation type is resolved to
-    /// exactly one frame id during Build and is not used by runtime dispatch.
+    /// exactly one legacy frame id during Build and is not used by runtime dispatch.
     /// </summary>
     public FluNetModuleBuilder Route<TImplementation, TCommand, TResult, TBinder, THandler>()
         where TImplementation : class, IVerb
@@ -138,7 +138,9 @@ public sealed class FluNetModuleBuilder
         {
             Type? implementationType = route.Descriptor.ImplementationType;
             CommandFrameDescriptor[] matches = frames
-                .Where(frame => frame.ImplementationType == implementationType)
+                .Where(frame =>
+                    frame.HasLegacyVerbAdapter &&
+                    frame.ImplementationType == implementationType)
                 .ToArray();
             if (matches.Length != 1)
             {
