@@ -12,7 +12,7 @@ public sealed class PlanningStep(ExecutionPlanner planner) : IExecutionStep
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            context.Plan = planner.Create(context.BoundCommands);
+            context.Plan = planner.Create(context.BoundCommands, context.Prompt.Syntax);
             return next(context, cancellationToken);
         }
         catch (ExecutionPlanException exception)

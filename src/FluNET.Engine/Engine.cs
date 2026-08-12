@@ -79,7 +79,9 @@ namespace FluNET
                 IReadOnlyList<BoundCommand> boundCommands = semanticBinder.BindProgram(prompt.Syntax);
                 ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
                 ISentence? sentence = validation.IsValid ? sentenceFactory.CreateFromTrees(commandTrees) : null;
-                ExecutionPlan? plan = validation.IsValid ? executionPlanner.Create(boundCommands) : null;
+                ExecutionPlan? plan = validation.IsValid
+                    ? executionPlanner.Create(boundCommands, prompt.Syntax)
+                    : null;
 
                 if (validation.IsValid && sentence is null)
                 {

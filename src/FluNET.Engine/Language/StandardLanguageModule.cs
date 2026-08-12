@@ -30,7 +30,8 @@ public sealed class StandardLanguageModule : IFluNetModule
         language.ClauseMarker("FROM", Prompt.PromptClauseKind.From)
             .ClauseMarker("TO", Prompt.PromptClauseKind.To)
             .ClauseMarker("USING", Prompt.PromptClauseKind.Using)
-            .CommandConnector("THEN", Prompt.CommandLinkKind.Sequence);
+            .CommandConnector("THEN", Prompt.CommandLinkKind.Sequence)
+            .CommandConnector("AND", Prompt.CommandLinkKind.Parallel);
 
         language.Keyword<From>("FROM")
             .Keyword<To>("TO")

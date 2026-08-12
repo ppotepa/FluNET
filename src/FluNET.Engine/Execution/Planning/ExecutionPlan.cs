@@ -21,6 +21,7 @@ public sealed record ResultBinding
     public string Reference { get; }
     public IReadOnlyList<string> Targets => _targets;
     public bool IsDestructuring { get; }
+    public TypeSymbol Type { get; internal set; } = null!;
 }
 
 public enum ExecutionDependencyKind
@@ -60,35 +61,60 @@ public sealed class ExecutionPlanStep
 public sealed class ExecutionPlan
 {
     private readonly ReadOnlyCollection<ExecutionPlanStep> _steps;
+    private readonly ReadOnlyCollection<VariableSymbol> _variables;
 
-    internal ExecutionPlan(IEnumerable<ExecutionPlanStep> steps)
+    internal ExecutionPlan(
+        IEnumerable<ExecutionPlanStep> steps,
+        IEnumerable<VariableSymbol>? variables = null)
     {
         _steps = Array.AsReadOnly(steps.ToArray());
+        _variables = Array.AsReadOnly(variables?.ToArray() ?? Array.Empty<VariableSymbol>());
     }
 
     public IReadOnlyList<ExecutionPlanStep> Steps => _steps;
+    public IReadOnlyList<VariableSymbol> Variables => _variables;
 }
 
 public sealed class ExecutionPlanner
 {
-    public ExecutionPlan Create(IReadOnlyList<BoundCommand> commands)
+    public ExecutionPlan Create(
+        IReadOnlyList<BoundCommand> commands,
+        Prompt.PromptSyntax? syntax = null)
     {
         ArgumentNullException.ThrowIfNull(commands);
+        if (syntax is not null && syntax.Commands.Count != commands.Count)
+        {
+            throw new ExecutionPlanException("Syntax and semantic command counts do not match.");
+        }
         List<ExecutionPlanStep> steps = [];
         Dictionary<string, int> producers = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, VariableSymbol> symbols = new(StringComparer.OrdinalIgnoreCase);
+        int[] stages = BuildStages(commands.Count, syntax);
 
         for (int index = 0; index < commands.Count; index++)
         {
             BoundCommand command = commands[index];
             ResultBinding? resultBinding = FindResultBinding(command);
-            List<ExecutionDependency> dependencies = index == 0
+            List<ExecutionDependency> dependencies = stages[index] == 0
                 ? []
-                : [new ExecutionDependency(index - 1, ExecutionDependencyKind.Sequence)];
+                : Enumerable.Range(0, index)
+                    .Where(predecessor => stages[predecessor] == stages[index] - 1)
+                    .Select(predecessor => new ExecutionDependency(
+                        predecessor,
+                        ExecutionDependencyKind.Sequence))
+                    .ToList();
 
-            foreach (string variable in FindInputVariables(command))
+            foreach ((string variable, TypeSymbol expectedType) in FindInputVariables(command))
             {
                 if (producers.TryGetValue(variable, out int producer))
                 {
+                    VariableSymbol symbol = symbols[variable];
+                    if (!expectedType.IsAssignableFrom(symbol.Type))
+                    {
+                        throw new ExecutionPlanException(
+                            $"Variable [{variable}] has type '{symbol.Type}', but " +
+                            $"{command.Command.Name}/{command.Frame.UsageName} expects '{expectedType}'.");
+                    }
                     dependencies.Add(new ExecutionDependency(
                         producer,
                         ExecutionDependencyKind.Variable,
@@ -99,24 +125,61 @@ public sealed class ExecutionPlanner
             steps.Add(new ExecutionPlanStep(index, command, resultBinding, dependencies));
             if (resultBinding is not null)
             {
+                resultBinding.Type = command.Frame.ResultTypeSymbol;
                 foreach (string target in resultBinding.Targets)
                 {
                     producers[target] = index;
+                    symbols[target] = new VariableSymbol(target, resultBinding.Type, index);
                 }
             }
         }
 
-        return new ExecutionPlan(steps);
+        return new ExecutionPlan(steps, symbols.Values.OrderBy(symbol => symbol.Name, StringComparer.OrdinalIgnoreCase));
     }
 
-    private static IEnumerable<string> FindInputVariables(BoundCommand command) =>
+    private static IEnumerable<(string Name, TypeSymbol ExpectedType)> FindInputVariables(BoundCommand command) =>
         command.Arguments.Values
             .Where(argument => argument.Slot.Direction == SlotDirection.Input)
-            .SelectMany(argument => argument.Tokens)
-            .Where(token => token.Kind == Prompt.PromptTokenKind.Variable)
-            .Select(token => token.Text.TrimEnd('.'))
-            .Select(reference => reference.Length >= 2 ? reference[1..^1] : reference)
-            .Where(reference => !reference.StartsWith('{'));
+            .SelectMany(argument => argument.Tokens.Select(token => (argument, token)))
+            .Where(pair => pair.token.Kind == Prompt.PromptTokenKind.Variable)
+            .Select(pair => (
+                Reference: pair.token.Text.TrimEnd('.'),
+                ExpectedType: pair.argument.Slot.ValueTypeSymbol))
+            .Select(pair => (
+                Name: pair.Reference.Length >= 2 ? pair.Reference[1..^1] : pair.Reference,
+                pair.ExpectedType))
+            .Where(pair => !pair.Name.StartsWith('{'));
+
+    private static int[] BuildStages(int commandCount, Prompt.PromptSyntax? syntax)
+    {
+        int[] stages = new int[commandCount];
+        if (commandCount < 2)
+        {
+            return stages;
+        }
+
+        if (syntax is null || syntax.Links.Count == 0)
+        {
+            for (int index = 1; index < commandCount; index++)
+            {
+                stages[index] = index;
+            }
+            return stages;
+        }
+
+        Dictionary<int, Prompt.CommandLinkSyntax> links = syntax.Links
+            .ToDictionary(link => link.SuccessorIndex);
+        for (int index = 1; index < commandCount; index++)
+        {
+            if (!links.TryGetValue(index, out Prompt.CommandLinkSyntax? link))
+            {
+                throw new ExecutionPlanException($"Command {index} has no connector from its predecessor.");
+            }
+            stages[index] = stages[index - 1] +
+                (link.Kind == Prompt.CommandLinkKind.Sequence ? 1 : 0);
+        }
+        return stages;
+    }
 
     private static ResultBinding? FindResultBinding(BoundCommand command)
     {
