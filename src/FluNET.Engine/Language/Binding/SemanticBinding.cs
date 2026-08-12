@@ -58,7 +58,8 @@ public sealed class BoundCommand
 
 /// <summary>
 /// Converts parsed clauses into a lexical frame: command identity, one frame,
-/// and arguments labelled by their semantic participation.
+/// and arguments labelled by their semantic participation. Structural validity
+/// of the assigned slots is checked separately by SemanticProgramValidator.
 /// </summary>
 public sealed class SemanticCommandBinder(LanguageSnapshot language)
 {
@@ -90,7 +91,6 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
                 tokens = tokens.Skip(1).ToArray();
             }
 
-            ValidateCardinality(syntax, slot, tokens);
             arguments.Add(slot.RoleId, new BoundArgument(slot, tokens));
         }
 
@@ -118,11 +118,9 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
             if (token.Kind == PromptTokenKind.Word && acceptedMarkers.Contains(token.Text))
             {
                 currentMarker = token.Text.ToUpperInvariant();
-                if (!segments.TryAdd(currentMarker, []))
+                if (!segments.ContainsKey(currentMarker))
                 {
-                    throw new SemanticBindingException(
-                        $"Clause {currentMarker} is declared more than once.",
-                        token.Span);
+                    segments.Add(currentMarker, []);
                 }
                 continue;
             }
@@ -181,27 +179,6 @@ public sealed class SemanticCommandBinder(LanguageSnapshot language)
         return new FrameSelection(
             command.Frames.Single(frame => frame.IsDefault),
             false);
-    }
-
-    private static void ValidateCardinality(
-        CommandSyntax syntax,
-        CommandSlotDescriptor slot,
-        IReadOnlyList<PromptToken> tokens)
-    {
-        if (slot.Cardinality != SlotCardinality.Optional && tokens.Count == 0)
-        {
-            string position = slot.Marker is null ? "subject" : $"{slot.Marker} clause";
-            throw Error(syntax, $"{syntax.Verb.Text.ToUpperInvariant()} requires a value for its {position}.");
-        }
-
-        if (slot.Cardinality != SlotCardinality.Repeated &&
-            slot.Marker is not null &&
-            tokens.Count > 1)
-        {
-            throw new SemanticBindingException(
-                $"{slot.Marker} accepts one value for semantic role {slot.RoleId}.",
-                SourceSpan.FromBounds(tokens[0].Start, tokens[^1].Span.End));
-        }
     }
 
     private static SemanticBindingException Error(CommandSyntax syntax, string message) =>

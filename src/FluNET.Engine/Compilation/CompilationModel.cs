@@ -41,6 +41,11 @@ public static class CompilationDiagnosticCodes
     public const string ValidationFailure = "FLN115";
     public const string CompatibilitySentenceFailure = "FLN116";
     public const string PlanningFailure = "FLN120";
+    public const string UnknownMarker = "FLN130";
+    public const string DuplicateMarker = "FLN131";
+    public const string MissingRequiredRole = "FLN132";
+    public const string SurplusArgument = "FLN133";
+    public const string FrameMismatch = "FLN134";
 }
 
 /// <summary>
@@ -60,6 +65,15 @@ public sealed class DiagnosticBag : IReadOnlyList<CompilationDiagnostic>
     {
         ArgumentNullException.ThrowIfNull(diagnostic);
         _diagnostics.Add(diagnostic);
+    }
+
+    public void AddRange(IEnumerable<CompilationDiagnostic> diagnostics)
+    {
+        ArgumentNullException.ThrowIfNull(diagnostics);
+        foreach (CompilationDiagnostic diagnostic in diagnostics)
+        {
+            Add(diagnostic);
+        }
     }
 
     public void Add(
@@ -147,8 +161,9 @@ public sealed record BoundProgram
 }
 
 /// <summary>
-/// Full, side-effect-free output of FluNET compilation. PromptAnalysis derives
-/// from this type for source compatibility with the existing Analyze API.
+/// Full, side-effect-free output of FluNET compilation. It derives from the
+/// compatibility PromptAnalysis view so existing Analyze consumers can keep
+/// reading ValidationResult, Sentence, BoundCommands, and Plan.
 /// </summary>
 public record CompilationResult : PromptAnalysis
 {

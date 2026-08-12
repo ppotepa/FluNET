@@ -28,6 +28,7 @@ namespace FluNET
         private readonly SentenceFactory sentenceFactory;
         private readonly SentenceValidator sentenceValidator;
         private readonly SemanticCommandBinder semanticBinder;
+        private readonly SemanticProgramValidator semanticValidator;
         private readonly ExecutionPlanner executionPlanner;
         private readonly LanguageSnapshot language;
 
@@ -45,6 +46,7 @@ namespace FluNET
             this.semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
             this.executionPlanner = executionPlanner ?? throw new ArgumentNullException(nameof(executionPlanner));
             this.language = language ?? throw new ArgumentNullException(nameof(language));
+            semanticValidator = new SemanticProgramValidator(this.language);
             _pipelineFactory = pipelineFactory ?? throw new ArgumentNullException(nameof(pipelineFactory));
         }
 
@@ -142,11 +144,29 @@ namespace FluNET
                     CompilationPhase.Bind);
             }
 
-            // Validate
+            // Validate using only the language snapshot, frame, and slots.
+            DiagnosticBag semanticDiagnostics = semanticValidator.Validate(boundProgram);
+            diagnostics.AddRange(semanticDiagnostics);
+            if (semanticDiagnostics.HasErrors)
+            {
+                string reason = string.Join(" ", semanticDiagnostics.Select(diagnostic =>
+                    $"{diagnostic.Code}: {diagnostic.Message}"));
+                return new CompilationResult(
+                    program,
+                    ValidationResult.Failure(reason),
+                    null,
+                    diagnostics,
+                    boundProgram,
+                    null,
+                    CompilationPhase.Validate);
+            }
+
+            // Compatibility validation remains until Batch 5 removes the legacy
+            // sentence path from standard execution.
             ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
             if (!validation.IsValid)
             {
-                string reason = validation.FailureReason ?? "Semantic validation failed.";
+                string reason = validation.FailureReason ?? "Legacy compatibility validation failed.";
                 diagnostics.Add(
                     CompilationDiagnosticCodes.ValidationFailure,
                     CompilationPhase.Validate,
