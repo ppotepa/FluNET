@@ -7,6 +7,42 @@ namespace FluNET.Sentences
 {
     public class SentenceFactory(WordFactory wordFactory)
     {
+        /// <summary>
+        /// Creates a sentence sequence from parser-established command trees.
+        /// No command boundary is inferred from token text on this path.
+        /// </summary>
+        public ISentence? CreateFromTrees(IReadOnlyList<TokenTree> commandTrees)
+        {
+            ArgumentNullException.ThrowIfNull(commandTrees);
+            if (commandTrees.Count == 0)
+            {
+                return null;
+            }
+
+            ISentence? mainSentence = CreateSentenceFromTokens(commandTrees[0].GetTokens().ToList());
+            if (mainSentence is null)
+            {
+                return null;
+            }
+
+            for (int index = 1; index < commandTrees.Count; index++)
+            {
+                ISentence? subSentence = CreateSentenceFromTokens(commandTrees[index].GetTokens().ToList());
+                if (subSentence is null)
+                {
+                    return null;
+                }
+
+                mainSentence.SubSentences.Add(subSentence);
+            }
+
+            return mainSentence;
+        }
+
+        /// <summary>
+        /// Compatibility entry point for legacy flattened token trees. New code
+        /// should use <see cref="CreateFromTrees"/>.
+        /// </summary>
         public ISentence? CreateFromTree(TokenTree tree)
         {
             // Debug: Print all tokens in the tree (only if console output is available)

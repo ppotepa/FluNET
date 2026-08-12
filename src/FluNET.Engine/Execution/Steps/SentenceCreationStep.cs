@@ -9,17 +9,17 @@ public sealed class SentenceCreationStep(SentenceFactory sentenceFactory) : IExe
         Func<ExecutionContext, CancellationToken, ValueTask<ExecutionResult>> next,
         CancellationToken cancellationToken)
     {
-        if (context.TokenTree is null)
+        if (context.CommandTrees.Count == 0)
         {
             return ValueTask.FromResult(ExecutionResult.Failed(
                 ExecutionFailureKind.Internal,
                 "FLN202",
-                "No token tree is available for sentence creation."));
+                "No parsed commands are available for sentence creation."));
         }
 
         try
         {
-            context.Sentence = sentenceFactory.CreateFromTree(context.TokenTree);
+            context.Sentence = sentenceFactory.CreateFromTrees(context.CommandTrees);
             return context.Sentence is null
                 ? ValueTask.FromResult(ExecutionResult.Failed(
                     ExecutionFailureKind.Internal,

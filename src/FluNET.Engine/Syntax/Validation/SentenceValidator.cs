@@ -9,6 +9,34 @@ namespace FluNET.Syntax.Validation;
 /// <summary>Validates every command in a prompt before execution.</summary>
 public sealed class SentenceValidator(Lexicon.Lexicon lexicon, WordFactory wordFactory)
 {
+    /// <summary>
+    /// Validates command trees whose boundaries were established by the parser.
+    /// This is the canonical program-validation path.
+    /// </summary>
+    public ValidationResult ValidateCommands(IReadOnlyList<TokenTree> commandTrees)
+    {
+        ArgumentNullException.ThrowIfNull(commandTrees);
+        if (commandTrees.Count == 0)
+        {
+            return ValidationResult.Failure("Empty sentence.");
+        }
+
+        foreach (TokenTree tree in commandTrees)
+        {
+            ValidationResult result = ValidateCommand(tree.GetTokens().ToArray());
+            if (!result.IsValid)
+            {
+                return result;
+            }
+        }
+
+        return ValidationResult.Success();
+    }
+
+    /// <summary>
+    /// Compatibility entry point for callers that still provide one flattened
+    /// token tree. The engine pipeline uses <see cref="ValidateCommands"/>.
+    /// </summary>
     public ValidationResult ValidateSentence(TokenTree tokenTree)
     {
         if (tokenTree.Count == 0)

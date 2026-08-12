@@ -9,15 +9,15 @@ public sealed class ValidationStep(SentenceValidator sentenceValidator) : IExecu
         Func<ExecutionContext, CancellationToken, ValueTask<ExecutionResult>> next,
         CancellationToken cancellationToken)
     {
-        if (context.TokenTree is null)
+        if (context.CommandTrees.Count == 0)
         {
             return ValueTask.FromResult(ExecutionResult.Failed(
                 ExecutionFailureKind.Internal,
                 "FLN202",
-                "No token tree is available for validation."));
+                "No parsed commands are available for validation."));
         }
 
-        context.ValidationResult = sentenceValidator.ValidateSentence(context.TokenTree);
+        context.ValidationResult = sentenceValidator.ValidateCommands(context.CommandTrees);
         return context.ValidationResult.IsValid
             ? next(context, cancellationToken)
             : ValueTask.FromResult(ExecutionResult.Failed(context.ValidationResult));

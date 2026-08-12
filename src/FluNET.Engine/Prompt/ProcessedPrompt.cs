@@ -16,11 +16,14 @@ public sealed class ProcessedPrompt
         _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
 
         var (tokens, diagnostics) = Tokenize(prompt);
-        LexicalTokens = tokens;
-        Diagnostics = diagnostics;
+        LexicalTokens = tokens.ToArray();
         Tokens = tokens.Select(token => token.Text).ToArray();
         Syntax = BuildSyntax(tokens, diagnostics);
+        Diagnostics = diagnostics.ToArray();
     }
+
+    /// <summary>The exact source text used to create this immutable snapshot.</summary>
+    public string SourceText => _prompt;
 
     /// <summary>Compatibility view containing token text only.</summary>
     public string[] Tokens { get; }

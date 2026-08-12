@@ -14,6 +14,7 @@ namespace FluNET.Tokens.Tree
 
         public TokenTree Process(ProcessedPrompt prompt)
         {
+            ArgumentNullException.ThrowIfNull(prompt);
             if (!prompt.IsValid)
             {
                 string message = string.Join(" ", prompt.Diagnostics.Select(diagnostic => diagnostic.Message));
@@ -35,6 +36,41 @@ namespace FluNET.Tokens.Tree
             }
 
             return tokenTree;
+        }
+
+        /// <summary>
+        /// Creates one compatibility token tree for one already parsed command.
+        /// Command boundaries are owned by <see cref="PromptSyntax"/> and are not
+        /// rediscovered from token text.
+        /// </summary>
+        public TokenTree Process(CommandSyntax command)
+        {
+            ArgumentNullException.ThrowIfNull(command);
+            TokenTree tokenTree = new();
+
+            foreach (PromptToken syntaxToken in command.Tokens)
+            {
+                TokenClass token = factory.CreateToken(RawToken.Create(syntaxToken.Text));
+                if (token.Type != TokenType.Terminal)
+                {
+                    tokenTree.AddToken(token);
+                }
+            }
+
+            return tokenTree;
+        }
+
+        /// <summary>Adapts the canonical syntax tree to one legacy tree per command.</summary>
+        public IReadOnlyList<TokenTree> ProcessCommands(ProcessedPrompt prompt)
+        {
+            ArgumentNullException.ThrowIfNull(prompt);
+            if (!prompt.IsValid)
+            {
+                string message = string.Join(" ", prompt.Diagnostics.Select(diagnostic => diagnostic.Message));
+                throw new PromptSyntaxException(message, prompt.Diagnostics);
+            }
+
+            return prompt.Syntax.Commands.Select(Process).ToArray();
         }
     }
 }

@@ -69,9 +69,9 @@ namespace FluNET
 
             try
             {
-                TokenTree tree = tokenTreeFactory.Process(prompt);
-                ValidationResult validation = sentenceValidator.ValidateSentence(tree);
-                ISentence? sentence = validation.IsValid ? sentenceFactory.CreateFromTree(tree) : null;
+                IReadOnlyList<TokenTree> commandTrees = tokenTreeFactory.ProcessCommands(prompt);
+                ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
+                ISentence? sentence = validation.IsValid ? sentenceFactory.CreateFromTrees(commandTrees) : null;
 
                 if (validation.IsValid && sentence is null)
                 {

@@ -14,7 +14,8 @@ public sealed class TokenizationStep(TokenTreeFactory tokenTreeFactory) : IExecu
         {
             cancellationToken.ThrowIfCancellationRequested();
             context.CancellationToken = cancellationToken;
-            context.TokenTree = tokenTreeFactory.Process(context.Prompt);
+            context.CommandTrees = tokenTreeFactory.ProcessCommands(context.Prompt);
+            context.TokenTree = context.CommandTrees.FirstOrDefault();
             return next(context, cancellationToken);
         }
         catch (PromptSyntaxException exception)

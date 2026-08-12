@@ -12,6 +12,12 @@ namespace FluNET.Execution
     public class ExecutionContext
     {
         public ProcessedPrompt Prompt { get; }
+        public IReadOnlyList<TokenTree> CommandTrees { get; internal set; } = Array.Empty<TokenTree>();
+
+        /// <summary>
+        /// Compatibility view of the first command. New pipeline stages should use
+        /// <see cref="CommandTrees"/> so command boundaries are never reparsed.
+        /// </summary>
         public TokenTree? TokenTree { get; set; }
         public ValidationResult? ValidationResult { get; set; }
         public ISentence? Sentence { get; set; }
