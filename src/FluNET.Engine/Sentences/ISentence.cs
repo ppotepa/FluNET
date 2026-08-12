@@ -1,27 +1,21 @@
-﻿using FluNET.Syntax.Core;
+using FluNET.Syntax.Core;
 
 namespace FluNET.Sentences
 {
     /// <summary>
-    /// Represents a validated sentence composed of a chain of words.
-    /// Can contain sub-sentences connected by THEN keyword.
+    /// Legacy compatibility representation of a validated word chain. Canonical
+    /// compilation and execution use BoundProgram and ExecutionPlan instead.
     /// </summary>
+    [Obsolete("ISentence is a legacy compatibility view. Use CompilationResult/BoundProgram/ExecutionPlan and Engine.ExecuteAsync instead.")]
     public interface ISentence
     {
-        /// <summary>
-        /// The first word in the sentence (typically a verb)
-        /// </summary>
+        /// <summary>The first legacy word in the sentence.</summary>
         IWord? Root { get; }
 
-        /// <summary>
-        /// Sub-sentences chained with THEN keyword.
-        /// These are executed sequentially in the same variable context.
-        /// </summary>
+        /// <summary>Legacy sequential sub-sentences.</summary>
         IList<ISentence> SubSentences { get; }
 
-        /// <summary>
-        /// Indicates if this sentence has chained sub-sentences.
-        /// </summary>
+        /// <summary>Indicates whether the compatibility view contains sub-sentences.</summary>
         bool HasSubSentences { get; }
     }
 }

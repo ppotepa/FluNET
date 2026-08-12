@@ -1,7 +1,7 @@
+using FluNET.Execution.Planning;
+using FluNET.Language.Binding;
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Language.Binding;
-using FluNET.Execution.Planning;
 
 namespace FluNET.Prompt;
 
@@ -15,7 +15,12 @@ public record PromptAnalysis(
     ValidationResult ValidationResult,
     ISentence? Sentence)
 {
-    public bool IsValid => ValidationResult.IsValid && Sentence is not null;
+    /// <summary>
+    /// True for a valid canonical plan. A legacy ISentence is optional because
+    /// native typed modules intentionally have no sentence representation.
+    /// </summary>
+    public bool IsValid => ValidationResult.IsValid && (Plan is not null || Sentence is not null);
+
     public IReadOnlyList<PromptDiagnostic> Diagnostics => Prompt.Diagnostics;
     public IReadOnlyList<BoundCommand> BoundCommands { get; init; } = Array.Empty<BoundCommand>();
     public ExecutionPlan? Plan { get; init; }

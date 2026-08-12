@@ -5,9 +5,9 @@ using FluNET.Syntax.Core;
 namespace FluNET.Syntax.Registry;
 
 /// <summary>
-/// Compatibility registry projected from one immutable language snapshot.
-/// Parsing, validation, discovery, and execution therefore observe exactly the
-/// same command names, aliases, implementations, and families.
+/// Compatibility registry projected only from frames that still expose an
+/// IVerb adapter. Native typed-command frames remain exclusively in the
+/// canonical LanguageSnapshot and are never materialized as legacy words.
 /// </summary>
 public sealed class LanguageRegistry
 {
@@ -34,16 +34,20 @@ public sealed class LanguageRegistry
     public IReadOnlyList<Type> Words => _words;
     public IReadOnlyList<Type> Verbs => _verbs;
     public IReadOnlyList<Type> Nouns => _nouns;
-    public IEnumerable<string> VerbNames => _snapshot.CommandNames;
+    public IEnumerable<string> VerbNames => _verbTypes.Keys.Order(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// Rebuilds compatibility indexes from the same immutable snapshot. It does
-    /// not scan newly loaded assemblies or mutate the language definition.
+    /// Rebuilds the legacy word indexes from the immutable snapshot without
+    /// assembly scanning or mutation of the canonical language definition.
     /// </summary>
     public void Refresh()
     {
-        Type[] verbs = _snapshot.Commands
+        CommandFrameDescriptor[] legacyFrames = _snapshot.Commands
             .SelectMany(command => command.Frames)
+            .Where(frame => frame.HasLegacyVerbAdapter)
+            .ToArray();
+
+        Type[] verbs = legacyFrames
             .Select(frame => frame.ImplementationType)
             .Distinct()
             .OrderBy(type => type.AssemblyQualifiedName, StringComparer.Ordinal)
@@ -66,13 +70,18 @@ public sealed class LanguageRegistry
 
         foreach (CommandDescriptor command in _snapshot.Commands)
         {
-            // The legacy word-chain can materialize only one concrete root.
-            // Preserve its former deterministic discovery order while the
-            // executor selects the actual frame from the complete snapshot.
-            CommandFrameDescriptor primaryFrame = command.Frames
+            CommandFrameDescriptor[] commandLegacyFrames = command.Frames
+                .Where(frame => frame.HasLegacyVerbAdapter)
+                .ToArray();
+            if (commandLegacyFrames.Length == 0)
+            {
+                continue;
+            }
+
+            CommandFrameDescriptor primaryFrame = commandLegacyFrames
                 .OrderBy(frame => frame.ImplementationType.AssemblyQualifiedName, StringComparer.Ordinal)
                 .First();
-            foreach (CommandFrameDescriptor frame in command.Frames)
+            foreach (CommandFrameDescriptor frame in commandLegacyFrames)
             {
                 if (!concreteToBase.TryAdd(frame.ImplementationType, frame.FamilyType) &&
                     concreteToBase[frame.ImplementationType] != frame.FamilyType)

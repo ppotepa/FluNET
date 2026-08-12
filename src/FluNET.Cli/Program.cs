@@ -3,8 +3,8 @@ using FluNET;
 using FluNET.Capabilities;
 using FluNET.Context;
 using FluNET.Execution;
+using FluNET.Language;
 using FluNET.Prompt;
-using FluNET.Syntax.Verbs;
 using Microsoft.Extensions.DependencyInjection;
 
 return await FluNetCli.RunAsync(args);
@@ -90,7 +90,9 @@ internal static class FluNetCli
                 };
             }
 
-            if (execution.Result is not null && execution.Sentence?.Root is not SayText)
+            bool lastStepWritesItsOwnText = execution.Plan?.Steps.LastOrDefault()?.Command.Frame.Id ==
+                new FrameId("core.say.text");
+            if (execution.Result is not null && !lastStepWritesItsOwnText)
             {
                 Console.WriteLine(FormatResult(execution.Result));
             }

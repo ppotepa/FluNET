@@ -1,3 +1,4 @@
+using FluNET.Compatibility;
 using FluNET.Compilation;
 using FluNET.Execution;
 using FluNET.Execution.Planning;
@@ -10,53 +11,69 @@ using FluNET.Syntax.Core;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
-using FluNET.Words;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET
 {
-    /// <summary>
-    /// Main execution engine for FluNET natural language commands.
-    /// Now uses a pipeline architecture for better modularity and extensibility.
-    /// </summary>
+    /// <summary>Main compilation and execution entry point for FluNET programs.</summary>
     public class Engine
     {
         private readonly ExecutionPipelineFactory _pipelineFactory;
         private readonly IVariableResolver variableResolver;
-
-        // Keep old dependencies for backward compatibility
-        private readonly TokenTreeFactory tokenTreeFactory;
-        private readonly SentenceFactory sentenceFactory;
-        private readonly SentenceValidator sentenceValidator;
         private readonly SemanticCommandBinder semanticBinder;
         private readonly SemanticProgramValidator semanticValidator;
         private readonly ExecutionPlanner executionPlanner;
         private readonly LanguageSnapshot language;
+        private readonly LegacySentenceAdapter legacySentenceAdapter;
 
-        public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory,
-            SentenceValidator sentenceValidator, IVariableResolver variableResolver,
+        /// <summary>Creates the canonical engine with an isolated legacy compatibility adapter.</summary>
+        [ActivatorUtilitiesConstructor]
+        public Engine(
+            IVariableResolver variableResolver,
+            ExecutionPipelineFactory pipelineFactory,
+            SemanticCommandBinder semanticBinder,
+            ExecutionPlanner executionPlanner,
+            LanguageSnapshot language,
+            LegacySentenceAdapter legacySentenceAdapter)
+        {
+            this.variableResolver = variableResolver ?? throw new ArgumentNullException(nameof(variableResolver));
+            _pipelineFactory = pipelineFactory ?? throw new ArgumentNullException(nameof(pipelineFactory));
+            this.semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
+            this.executionPlanner = executionPlanner ?? throw new ArgumentNullException(nameof(executionPlanner));
+            this.language = language ?? throw new ArgumentNullException(nameof(language));
+            this.legacySentenceAdapter = legacySentenceAdapter ?? throw new ArgumentNullException(nameof(legacySentenceAdapter));
+            semanticValidator = new SemanticProgramValidator(this.language);
+        }
+
+        /// <summary>Compatibility constructor for hosts that still assemble the pre-0.3 sentence services manually.</summary>
+        [Obsolete("Use the canonical Engine constructor or FluNETContext. Legacy sentence services are isolated behind LegacySentenceAdapter.")]
+        public Engine(
+            TokenTreeFactory tokenTreeFactory,
+            SentenceFactory sentenceFactory,
+            SentenceValidator sentenceValidator,
+            IVariableResolver variableResolver,
             ExecutionPipelineFactory pipelineFactory,
             SemanticCommandBinder semanticBinder,
             ExecutionPlanner executionPlanner,
             LanguageSnapshot language)
+            : this(
+                variableResolver,
+                pipelineFactory,
+                semanticBinder,
+                executionPlanner,
+                language,
+                new LegacySentenceAdapter(
+                    tokenTreeFactory,
+                    sentenceValidator,
+                    sentenceFactory,
+                    language))
         {
-            this.tokenTreeFactory = tokenTreeFactory;
-            this.sentenceFactory = sentenceFactory;
-            this.sentenceValidator = sentenceValidator;
-            this.variableResolver = variableResolver;
-            this.semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
-            this.executionPlanner = executionPlanner ?? throw new ArgumentNullException(nameof(executionPlanner));
-            this.language = language ?? throw new ArgumentNullException(nameof(language));
-            semanticValidator = new SemanticProgramValidator(this.language);
-            _pipelineFactory = pipelineFactory ?? throw new ArgumentNullException(nameof(pipelineFactory));
         }
 
         /// <summary>
         /// Register a variable that can be used in sentences.
         /// Variables can be referenced using [VariableName] syntax.
         /// </summary>
-        /// <typeparam name="T">The type of the variable</typeparam>
-        /// <param name="name">The name of the variable (case-insensitive)</param>
-        /// <param name="value">The value of the variable</param>
         public void RegisterVariable<T>(string name, T value)
         {
             variableResolver.Register(name, value);
@@ -64,8 +81,8 @@ namespace FluNET
 
         /// <summary>
         /// Parses, binds, validates, and plans a prompt without executing it or
-        /// performing external effects. The result exposes the canonical parsed
-        /// and bound program together with source-aware compiler diagnostics.
+        /// performing external effects. Legacy sentence projection is optional
+        /// compatibility metadata and never determines compilation success.
         /// </summary>
         public CompilationResult Analyze(ProcessedPrompt prompt)
         {
@@ -76,7 +93,6 @@ namespace FluNET
             DiagnosticBag diagnostics = new();
             AddPromptDiagnostics(diagnostics, prompt, prompt.Diagnostics);
 
-            // Parse
             if (!prompt.IsValid)
             {
                 string reason = string.Join(" ", prompt.Diagnostics.Select(diagnostic =>
@@ -91,28 +107,17 @@ namespace FluNET
                     CompilationPhase.Parse);
             }
 
-            IReadOnlyList<TokenTree> commandTrees;
-            try
+            if (prompt.Syntax.Commands.Count == 0)
             {
-                // Compatibility token trees are retained only for Analyze/Run
-                // until the dedicated legacy adapter is introduced.
-                commandTrees = tokenTreeFactory.ProcessCommands(prompt);
-            }
-            catch (PromptSyntaxException exception)
-            {
-                AddPromptDiagnostics(diagnostics, prompt, exception.Diagnostics);
-                if (exception.Diagnostics.Count == 0)
-                {
-                    diagnostics.Add(
-                        CompilationDiagnosticCodes.ParseFailure,
-                        CompilationPhase.Parse,
-                        exception.Message,
-                        prompt.Syntax.Span);
-                }
-
+                const string reason = "Prompt does not contain a command.";
+                diagnostics.Add(
+                    CompilationDiagnosticCodes.EmptyProgram,
+                    CompilationPhase.Parse,
+                    reason,
+                    prompt.Syntax.Span);
                 return new CompilationResult(
                     program,
-                    ValidationResult.Failure(exception.Message),
+                    ValidationResult.Failure(reason),
                     null,
                     diagnostics,
                     null,
@@ -120,7 +125,6 @@ namespace FluNET
                     CompilationPhase.Parse);
             }
 
-            // Bind
             BoundProgram boundProgram;
             try
             {
@@ -160,53 +164,20 @@ namespace FluNET
                     CompilationPhase.Validate);
             }
 
-            // Legacy validation/sentence creation is compatibility metadata only;
-            // ExecuteAsync no longer uses either component.
-            ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
-            if (!validation.IsValid)
-            {
-                string reason = validation.FailureReason ?? "Legacy compatibility validation failed.";
-                diagnostics.Add(
-                    CompilationDiagnosticCodes.ValidationFailure,
-                    CompilationPhase.Validate,
-                    reason,
-                    prompt.Syntax.Span);
-                return new CompilationResult(
-                    program,
-                    validation,
-                    null,
-                    diagnostics,
-                    boundProgram,
-                    null,
-                    CompilationPhase.Validate);
-            }
-
-            ISentence? sentence = sentenceFactory.CreateFromTrees(commandTrees);
-            if (sentence is null)
-            {
-                const string reason = "Could not create a compatibility sentence from the prompt.";
-                diagnostics.Add(
-                    CompilationDiagnosticCodes.CompatibilitySentenceFailure,
-                    CompilationPhase.Validate,
-                    reason,
-                    prompt.Syntax.Span);
-                return new CompilationResult(
-                    program,
-                    ValidationResult.Failure(reason),
-                    null,
-                    diagnostics,
-                    boundProgram,
-                    null,
-                    CompilationPhase.Validate);
-            }
-
             try
             {
                 ExecutionPlan plan = executionPlanner.Create(boundProgram.Commands, prompt.Syntax);
+                ISentence? compatibilitySentence = null;
+                if (boundProgram.Commands.All(command => command.Frame.HasLegacyVerbAdapter))
+                {
+                    LegacySentenceAdaptation adaptation = legacySentenceAdapter.Adapt(prompt);
+                    compatibilitySentence = adaptation.IsValid ? adaptation.Sentence : null;
+                }
+
                 return new CompilationResult(
                     program,
-                    validation,
-                    sentence,
+                    ValidationResult.Success(),
+                    compatibilitySentence,
                     diagnostics,
                     boundProgram,
                     plan,
@@ -222,7 +193,7 @@ namespace FluNET
                 return new CompilationResult(
                     program,
                     ValidationResult.Failure(exception.Message),
-                    sentence,
+                    null,
                     diagnostics,
                     boundProgram,
                     null,
@@ -231,22 +202,27 @@ namespace FluNET
         }
 
         /// <summary>
-        /// Executes through the canonical pipeline and projects a legacy
-        /// ISentence view for callers of the original synchronous API.
+        /// Legacy synchronous API. It first validates/projects ISentence through
+        /// LegacySentenceAdapter and then executes the same canonical pipeline as ExecuteAsync.
         /// </summary>
+        [Obsolete("Use Analyze plus Execute/ExecuteAsync. ISentence is a compatibility projection and is not part of canonical execution.")]
         public (ValidationResult ValidationResult, ISentence? Sentence, object? Result) Run(ProcessedPrompt prompt)
         {
-            ExecutionResult result = Execute(prompt);
-            ISentence? compatibilitySentence = result.Sentence;
-            if (result.IsSuccess && compatibilitySentence is null)
+            ArgumentNullException.ThrowIfNull(prompt);
+            LegacySentenceAdaptation compatibility = legacySentenceAdapter.Adapt(prompt);
+            if (!compatibility.IsValid)
             {
-                compatibilitySentence = CreateCompatibilitySentence(prompt);
+                return (compatibility.ValidationResult, null, null);
             }
 
+            ExecutionResult result = Execute(prompt);
             ValidationResult compatibilityValidation = result.IsSuccess
-                ? result.ValidationResult
-                : ValidationResult.Failure(result.Error?.Message ?? result.ValidationResult.FailureReason ?? "Execution failed.");
-            return (compatibilityValidation, compatibilitySentence, result.Result);
+                ? compatibility.ValidationResult
+                : ValidationResult.Failure(
+                    result.Error?.Message ??
+                    result.ValidationResult.FailureReason ??
+                    "Execution failed.");
+            return (compatibilityValidation, compatibility.Sentence, result.Result);
         }
 
         /// <summary>Runs a prompt and returns structured validation or execution errors.</summary>
@@ -256,8 +232,8 @@ namespace FluNET
         }
 
         /// <summary>
-        /// Asynchronously executes the canonical parsed/bound plan. Standard
-        /// execution does not construct ISentence.
+        /// Asynchronously executes the canonical Parse, Bind, Validate, Plan,
+        /// Execute pipeline. Standard execution never constructs ISentence.
         /// </summary>
         public async Task<ExecutionResult> ExecuteAsync(
             ProcessedPrompt prompt,
@@ -281,10 +257,8 @@ namespace FluNET
             return await pipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
         }
 
-        /// <summary>
-        /// Execute with a custom pipeline configuration.
-        /// Allows advanced scenarios with custom execution steps.
-        /// </summary>
+        /// <summary>Legacy custom pipeline entry point retained for source compatibility.</summary>
+        [Obsolete("Use ExecutionPipeline/ExecuteAsync with canonical compilation stages instead.")]
         public (ValidationResult ValidationResult, ISentence? Sentence, object? Result) RunWithCustomPipeline(
             ProcessedPrompt prompt,
             Action<ExecutionPipeline> configurePipeline)
@@ -296,28 +270,11 @@ namespace FluNET
             var result = pipeline.Execute(context);
             ValidationResult compatibilityValidation = result.IsSuccess
                 ? result.ValidationResult
-                : ValidationResult.Failure(result.Error?.Message ?? result.ValidationResult.FailureReason ?? "Execution failed.");
+                : ValidationResult.Failure(
+                    result.Error?.Message ??
+                    result.ValidationResult.FailureReason ??
+                    "Execution failed.");
             return (compatibilityValidation, result.Sentence, result.Result);
-        }
-
-        private ISentence? CreateCompatibilitySentence(ProcessedPrompt prompt)
-        {
-            prompt = prompt.WithGrammar(language.Grammar);
-            if (!prompt.IsValid)
-            {
-                return null;
-            }
-
-            try
-            {
-                IReadOnlyList<TokenTree> commandTrees = tokenTreeFactory.ProcessCommands(prompt);
-                ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
-                return validation.IsValid ? sentenceFactory.CreateFromTrees(commandTrees) : null;
-            }
-            catch (PromptSyntaxException)
-            {
-                return null;
-            }
         }
 
         private static void AddPromptDiagnostics(
