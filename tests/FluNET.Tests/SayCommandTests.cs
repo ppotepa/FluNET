@@ -57,7 +57,7 @@ namespace FluNET.Tests
         public void Say_EmptyMessage_ShouldBeValid()
         {
             // Arrange
-            ProcessedPrompt prompt = new("SAY .");
+            ProcessedPrompt prompt = new("SAY \"\".");
 
             // Act
             (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);

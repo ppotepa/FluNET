@@ -5,6 +5,7 @@ using FluNET.Words;
 using FluNET.Syntax.Validation;
 using FluNET.Sentences;
 using System.Text;
+using System.Text.Json;
 
 namespace FluNET.Tests
 {
@@ -53,7 +54,6 @@ namespace FluNET.Tests
         #region SAVE Command Tests
 
         [Test]
-        [Ignore("SaveText.CanHandle() returns false - needs engine fix")]
         public void Save_ToFile_ShouldCreateFile()
         {
             // Arrange
@@ -69,6 +69,7 @@ namespace FluNET.Tests
             {
                 Assert.That(validation.IsValid, Is.True);
                 Assert.That(sentence, Is.Not.Null);
+                Assert.That(File.ReadAllText(outputFile), Is.EqualTo("Test content to save"));
             });
         }
 
@@ -528,7 +529,8 @@ namespace FluNET.Tests
             {
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result, Is.InstanceOf<Dictionary<string, object>>());
-                Assert.That(result.ContainsKey("loaded"), Is.True);
+                Assert.That(result.Keys, Is.EquivalentTo(new[] { "key" }));
+                Assert.That(((JsonElement)result["key"]).GetString(), Is.EqualTo("value"));
             });
         }
 
@@ -1019,7 +1021,7 @@ namespace FluNET.Tests
             DeleteFile deleteFileInstance = new("file.txt", expectedFrom);
 
             // Act
-            DirectoryInfo from = deleteFileInstance.From;
+            DirectoryInfo? from = deleteFileInstance.From;
 
             // Assert
             Assert.That(from, Is.EqualTo(expectedFrom));

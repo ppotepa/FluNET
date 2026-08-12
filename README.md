@@ -1,53 +1,131 @@
 # FluNET
 
+[![CI](https://github.com/ppotepa/FluNET/actions/workflows/ci.yml/badge.svg)](https://github.com/ppotepa/FluNET/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 
-**Author:** Paweł Potępa
-
-FluNET is an experimental C#/.NET engine for expressing small programs as English‑like commands instead of method calls. It focuses on language design, internal DSLs, and metaprogramming rather than being a full general‑purpose language.
-
-## Example
+FluNET is an experimental external DSL and execution engine for small,
+English-like automation commands. It is a proof of concept, not a sandbox or a
+general-purpose language. The current focus is predictable parsing, typed verb
+activation, explicit capabilities, and useful diagnostics.
 
 ```text
-GET [text] FROM file.txt
-SAVE [content] TO output.txt
-DOWNLOAD [data] FROM https://api.example.com
+GET [text] FROM {input.txt} THEN SAVE [text] TO {copy.txt}.
+SAY "Hello from FluNET!"
+DOWNLOAD [file] FROM {https://example.com/file.txt} TO {file.txt}.
 ```
 
-Roughly equivalent to:
+## Quick start
+
+Requirements: .NET 8 SDK.
+
+```bash
+git clone https://github.com/ppotepa/FluNET.git
+cd FluNET
+dotnet build FluNET.sln
+dotnet run --project src/FluNET.Cli -- -- "SAY 'Hello from FluNET'."
+```
+
+Validate without executing:
+
+```bash
+dotnet run --project src/FluNET.Cli -- --analyze -- "GET [text] FROM {input.txt}"
+```
+
+The CLI restricts file access to the current directory by default and denies
+network access by default. Grant only the capabilities a command needs:
+
+```bash
+dotnet run --project src/FluNET.Cli -- \
+  --root ./downloads \
+  --host example.com \
+  -- "DOWNLOAD [file] FROM {https://example.com/file.txt} TO {./downloads/file.txt}."
+```
+
+Use `--root` and `--host` more than once to allow multiple roots or hosts.
+
+## Language surface
+
+| Form | Meaning |
+| --- | --- |
+| `[name]` | A named variable. Retrieval verbs write results to it; other verbs read it. |
+| `{value}` | An inline reference such as a path, URL, or JSON object. Spaces are preserved. |
+| `"text"` or `'text'` | A quoted literal. Spaces, newlines, and escaped quotes are preserved. |
+| `THEN` | Runs another command with the same variable context. |
+| `.`, `?`, `!` | Optional terminators. Attached terminators are tokenized separately. |
+
+Implemented verb families include `GET`, `SAVE`, `LOAD`, `DELETE`, `DOWNLOAD`,
+`POST`, `SAY`, `SEND`, and `TRANSFORM`. Some have synonyms such as `FETCH`,
+`PULL`, and `ECHO`.
+
+## Embedding
 
 ```csharp
-var text = File.ReadAllText("file.txt");
-File.WriteAllText("output.txt", content);
-var data = await httpClient.GetAsync("https://api.example.com");
+using FluNET.Context;
+using FluNET.Execution;
+using FluNET.Prompt;
+
+using FluNETContext context = FluNETContext.Create();
+Engine engine = context.GetEngine();
+
+PromptAnalysis analysis = engine.Analyze(
+    new ProcessedPrompt("GET [text] FROM {input.txt}."));
+
+ExecutionResult execution = await engine.ExecuteAsync(
+    new ProcessedPrompt("SAY 'Hello'."),
+    cancellationToken);
+
+if (!execution.IsSuccess)
+{
+    Console.Error.WriteLine($"{execution.Error!.Code}: {execution.Error.Message}");
+}
 ```
+
+`Analyze` is side-effect free. `ExecuteAsync` returns structured syntax,
+validation, activation, capability, cancellation, or execution errors; an
+operation failure is never represented as a successful validation plus an
+unexplained `null`.
+
+Hosts can replace `IFluNetFileSystem`, `IHttpTransport`, `ITextOutput`, and
+`IExecutionPolicy` through `FluNETContext.Create(services => ...)`. The CLI uses
+`RestrictedExecutionPolicy`; the embedding API keeps `AllowAllExecutionPolicy`
+as a backward-compatible default, so production hosts should replace it.
 
 ## Architecture
 
-Pipeline:
+1. `ProcessedPrompt` performs quote-aware lexical analysis and emits stable
+   diagnostics (`FLN001` and later) with source positions.
+2. `PromptSyntax` represents the top-level command sequence; the older linked
+   token/word chain remains an execution compatibility layer.
+3. `LanguageRegistry` performs one deterministic, sorted discovery pass and
+   rejects ambiguous names or synonyms.
+4. `SentenceValidator` validates every command, including commands after
+   `THEN`, before execution starts.
+5. The asynchronous execution pipeline activates typed verbs through one
+   registry and passes cancellation into injected effect capabilities.
 
-1. **Tokenization** – raw input is split into `RawToken` and `Token` objects (`TokenFactory`).
-2. **TokenTree** – tokens are arranged into a small AST‑like structure.
-3. **Sentence building** – `SentenceFactory` + `DiscoveryService` resolve verbs and arguments.
-4. **Validation** – `SentenceValidator` checks that the sentence is syntactically valid.
-5. **Execution** – `SentenceExecutor` runs a strongly‑typed verb instance.
+To add a verb, implement the appropriate `IVerb`/noun interfaces and ensure its
+assembly is loaded before creating `FluNETContext`. Add executable examples and
+tests for its grammar, activation, success path, and failure path. Name and
+synonym collisions fail registry construction with a clear error.
 
-All of this is orchestrated by the `Engine` using an `ExecutionPipeline` composed of small `IExecutionStep` processors (parse, validate, execute, error handling, etc.).
+## Tests
 
-## Keywords
+```bash
+dotnet test FluNET.sln --configuration Release
+```
 
-Keywords are first‑class types implementing `IKeyword`/`IWord` (for example `Get`, `Save`, `Post`, `Delete`, `Load`, `Send`, `Transform`). They define the textual surface of verbs (e.g. `"GET"`) and participate in validation. `DiscoveryService` scans assemblies to discover available keywords and verbs.
+HTTP behavior is tested with an injected in-memory transport; no manual test
+server or public network connection is required. CI builds and tests on Linux,
+Windows, and macOS.
 
-## Evolving the language
+## Status and limitations
 
-To grow the language, you extend the vocabulary and verbs rather than touching the core engine:
+- The grammar is intentionally small and still evolving.
+- The typed syntax model currently covers command boundaries; verb arguments
+  still flow through the compatibility word chain.
+- `SEND` is a simulated implementation rather than a real mail transport.
+- This project does not make untrusted prompts safe by itself. Configure a
+  restrictive execution policy and isolate the host process where appropriate.
 
-1. **Add keywords** – create `IKeyword`/`IWord` types for new verbs or prepositions (e.g. `Compress`, `Using`).
-2. **Implement verbs** – add `IVerb<,>` implementations that model real actions in your domain, plus `IWhat<T>`, `IFrom<T>`, `ITo<T>` etc. as needed.
-3. **Load assemblies** – ensure assemblies with your keywords/verbs are loaded so `DiscoveryService` can discover them.
-4. **Document usage** – add example sentences and tests so the new constructs stay stable as the engine evolves.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE).
+Author: Paweł Potępa. Licensed under the [MIT License](LICENSE).

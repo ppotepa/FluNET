@@ -59,7 +59,7 @@ namespace FluNET.Tests
             string outputFile = Path.Combine(testDirectory!, "output.txt");
             string text = "Hello, World!";
 
-            ProcessedPrompt prompt = new($"SAVE {text} TO {outputFile}.");
+            ProcessedPrompt prompt = new($"SAVE \"{text}\" TO {{{outputFile}}}.");
 
             // Act
             (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
@@ -83,7 +83,7 @@ namespace FluNET.Tests
             string outputFile = Path.Combine(testDirectory!, "multiline.txt");
             string text = "Line 1\nLine 2\nLine 3";
 
-            ProcessedPrompt prompt = new($"SAVE {text} TO {outputFile}.");
+            ProcessedPrompt prompt = new($"SAVE \"{text}\" TO {{{outputFile}}}.");
 
             // Act
             (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);

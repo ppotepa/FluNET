@@ -175,16 +175,14 @@ namespace FluNET.Tests
         }
 
         [Test]
-        public void SentenceExecutor_Execute_WithNullSentence_ReturnsNull()
+        public void SentenceExecutor_Execute_WithNullSentence_ThrowsClearError()
         {
             // Arrange
             SentenceExecutor executor = _context.GetService<SentenceExecutor>();
 
-            // Act
-            object? result = executor.Execute(null!);
-
-            // Assert
-            Assert.That(result, Is.Null);
+            Assert.That(
+                () => executor.Execute(null!),
+                Throws.ArgumentException.With.Message.Contains("root verb"));
         }
 
         [Test]

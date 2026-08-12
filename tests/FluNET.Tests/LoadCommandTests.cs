@@ -6,6 +6,7 @@ using FluNET.Syntax.Validation;
 using FluNET.Syntax.Verbs;
 using FluNET.Tokens.Tree;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 
 namespace FluNET.Tests
 {
@@ -75,8 +76,8 @@ namespace FluNET.Tests
 
                 var config = result as Dictionary<string, object>;
                 Assert.That(config, Is.Not.Null);
-                Assert.That(config!["loaded"], Is.EqualTo(true));
-                Assert.That(config["source"], Is.EqualTo("config.json"));
+                Assert.That(((JsonElement)config!["setting1"]).GetString(), Is.EqualTo("value1"));
+                Assert.That(((JsonElement)config["setting2"]).GetInt32(), Is.EqualTo(42));
             });
         }
 
