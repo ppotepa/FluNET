@@ -9,6 +9,7 @@ using FluNET.Syntax.Registry;
 using FluNET.Capabilities;
 using FluNET.Language;
 using FluNET.Execution.Commands;
+using FluNET.Language.Binding;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context
@@ -66,6 +67,7 @@ namespace FluNET.Context
             services.AddSingleton(_ => StandardLanguage.CreateSnapshot());
             services.AddSingleton<LanguageRegistry>();
             services.AddSingleton<DiscoveryService>();
+            services.AddSingleton<SemanticCommandBinder>();
 
             // External effects are explicit capabilities and can be replaced by hosts/tests
             services.AddSingleton<IExecutionPolicy, AllowAllExecutionPolicy>();

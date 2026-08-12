@@ -27,6 +27,7 @@ public sealed class StandardLanguageModule : IFluNetModule
             .Marked<FileInfo>(SemanticRole.Goal, "TO");
 
         language.Command<LoadText, string[]>("LOAD", "Text")
+            .Default()
             .Qualifiers("TEXT")
             .Positional<string[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<FileInfo>(SemanticRole.Source, "FROM");

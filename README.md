@@ -100,9 +100,12 @@ as a backward-compatible default, so production hosts should replace it.
 3. An immutable `LanguageSnapshot` is the single definition of commands,
    aliases, typed frames, semantic roles, and keywords. `LanguageRegistry`
    projects the legacy word-chain view from that snapshot.
-4. `SentenceValidator` validates every command, including commands after
+4. `SemanticCommandBinder` selects one lexical frame and labels its arguments
+   by role. Prepositions are frame-sensitive, so `FROM` is a marker in `GET`
+   but remains message text in `SEND Hello from FluNET TO ...`.
+5. `SentenceValidator` validates every command, including commands after
    `THEN`, before execution starts.
-5. The asynchronous execution pipeline first dispatches syntax through generic
+6. The asynchronous execution pipeline first dispatches syntax through generic
    `ICommandHandler<TCommand, TResult>` routes, then uses the legacy verb
    adapter for commands not yet migrated. Cancellation flows through both paths
    into injected effect capabilities.

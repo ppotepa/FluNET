@@ -67,6 +67,7 @@ public sealed record CommandFrameDescriptor
         Type implementationType,
         Type familyType,
         Type resultType,
+        bool isDefault,
         IEnumerable<string> qualifiers,
         IEnumerable<CommandSlotDescriptor> slots)
     {
@@ -74,6 +75,7 @@ public sealed record CommandFrameDescriptor
         ImplementationType = implementationType;
         FamilyType = familyType;
         ResultType = resultType;
+        IsDefault = isDefault;
         Qualifiers = qualifiers.Select(NormalizeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         Slots = slots.ToArray();
     }
@@ -82,6 +84,7 @@ public sealed record CommandFrameDescriptor
     public Type ImplementationType { get; }
     public Type FamilyType { get; }
     public Type ResultType { get; }
+    public bool IsDefault { get; }
     public IReadOnlyList<string> Qualifiers { get; }
     public IReadOnlyList<CommandSlotDescriptor> Slots { get; }
 
@@ -114,6 +117,13 @@ public sealed record CommandDescriptor
         {
             throw new LanguageDefinitionException(
                 $"All frames of command '{Name}' must belong to the same verb family.");
+        }
+
+        int defaultFrames = Frames.Count(frame => frame.IsDefault);
+        if (defaultFrames > 1 || (Frames.Count > 1 && defaultFrames != 1))
+        {
+            throw new LanguageDefinitionException(
+                $"Multi-frame command '{Name}' must declare exactly one default frame.");
         }
     }
 
@@ -260,6 +270,7 @@ public sealed class LanguageBuilder
                     frame.ImplementationType,
                     frame.FamilyType,
                     frame.ResultType,
+                    frame.IsDefault,
                     frame.Qualifiers,
                     frame.Slots))))
             .ToArray();
@@ -306,6 +317,7 @@ public sealed class LanguageBuilder
         public Type ImplementationType { get; } = implementationType;
         public Type FamilyType { get; } = familyType;
         public Type ResultType { get; } = resultType;
+        public bool IsDefault { get; set; }
         public HashSet<string> Qualifiers { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<CommandSlotDescriptor> Slots { get; } = [];
     }
@@ -336,6 +348,18 @@ public sealed class LanguageBuilder
             {
                 _frame.Qualifiers.Add(NormalizeName(qualifier));
             }
+            return this;
+        }
+
+        public CommandFrameBuilder Default()
+        {
+            if (_command.Frames.Any(frame => frame != _frame && frame.IsDefault))
+            {
+                throw new LanguageDefinitionException(
+                    $"Command '{_command.Name}' already has a default frame.");
+            }
+
+            _frame.IsDefault = true;
             return this;
         }
 

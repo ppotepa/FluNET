@@ -4,6 +4,7 @@ using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
 using FluNET.Variables;
+using FluNET.Language.Binding;
 
 namespace FluNET.Execution
 {
@@ -19,6 +20,7 @@ namespace FluNET.Execution
         private readonly SentenceExecutor _sentenceExecutor;
         private readonly IVariableResolver _variableResolver;
         private readonly MatcherResolver _matcherResolver;
+        private readonly SemanticCommandBinder _semanticBinder;
 
         public ExecutionPipelineFactory(
             TokenTreeFactory tokenTreeFactory,
@@ -26,7 +28,8 @@ namespace FluNET.Execution
             SentenceFactory sentenceFactory,
             SentenceExecutor sentenceExecutor,
             IVariableResolver variableResolver,
-            MatcherResolver matcherResolver)
+            MatcherResolver matcherResolver,
+            SemanticCommandBinder semanticBinder)
         {
             _tokenTreeFactory = tokenTreeFactory ?? throw new ArgumentNullException(nameof(tokenTreeFactory));
             _sentenceValidator = sentenceValidator ?? throw new ArgumentNullException(nameof(sentenceValidator));
@@ -34,6 +37,7 @@ namespace FluNET.Execution
             _sentenceExecutor = sentenceExecutor ?? throw new ArgumentNullException(nameof(sentenceExecutor));
             _variableResolver = variableResolver ?? throw new ArgumentNullException(nameof(variableResolver));
             _matcherResolver = matcherResolver ?? throw new ArgumentNullException(nameof(matcherResolver));
+            _semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
         }
 
         /// <summary>
@@ -45,6 +49,7 @@ namespace FluNET.Execution
 
             return new ExecutionPipeline()
                 .AddStep(new TokenizationStep(_tokenTreeFactory))
+                .AddStep(new SemanticBindingStep(_semanticBinder))
                 .AddStep(new ValidationStep(_sentenceValidator))
                 .AddStep(new SentenceCreationStep(_sentenceFactory))
                 .AddStep(new SentenceExecutionStep(_sentenceExecutor))

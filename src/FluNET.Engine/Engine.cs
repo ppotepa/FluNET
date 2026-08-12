@@ -8,6 +8,7 @@ using FluNET.Tokens.Tree;
 using FluNET.Variables;
 using FluNET.Words;
 using System.Text.Json;
+using FluNET.Language.Binding;
 
 namespace FluNET
 {
@@ -26,11 +27,13 @@ namespace FluNET
         private readonly SentenceValidator sentenceValidator;
         private readonly SentenceExecutor sentenceExecutor;
         private readonly MatcherResolver matcherResolver;
+        private readonly SemanticCommandBinder semanticBinder;
 
         public Engine(TokenTreeFactory tokenTreeFactory, SentenceFactory sentenceFactory,
             SentenceValidator sentenceValidator, IVariableResolver variableResolver,
             SentenceExecutor sentenceExecutor, MatcherResolver matcherResolver,
-            ExecutionPipelineFactory pipelineFactory)
+            ExecutionPipelineFactory pipelineFactory,
+            SemanticCommandBinder semanticBinder)
         {
             this.tokenTreeFactory = tokenTreeFactory;
             this.sentenceFactory = sentenceFactory;
@@ -38,6 +41,7 @@ namespace FluNET
             this.variableResolver = variableResolver;
             this.sentenceExecutor = sentenceExecutor;
             this.matcherResolver = matcherResolver;
+            this.semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
             _pipelineFactory = pipelineFactory ?? throw new ArgumentNullException(nameof(pipelineFactory));
         }
 
@@ -70,6 +74,7 @@ namespace FluNET
             try
             {
                 IReadOnlyList<TokenTree> commandTrees = tokenTreeFactory.ProcessCommands(prompt);
+                IReadOnlyList<BoundCommand> boundCommands = semanticBinder.BindProgram(prompt.Syntax);
                 ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
                 ISentence? sentence = validation.IsValid ? sentenceFactory.CreateFromTrees(commandTrees) : null;
 
@@ -78,9 +83,12 @@ namespace FluNET
                     validation = ValidationResult.Failure("Could not create a sentence from the prompt.");
                 }
 
-                return new PromptAnalysis(prompt, validation, sentence);
+                return new PromptAnalysis(prompt, validation, sentence)
+                {
+                    BoundCommands = boundCommands
+                };
             }
-            catch (PromptSyntaxException exception)
+            catch (Exception exception) when (exception is PromptSyntaxException or SemanticBindingException)
             {
                 return new PromptAnalysis(prompt, ValidationResult.Failure(exception.Message), null);
             }
