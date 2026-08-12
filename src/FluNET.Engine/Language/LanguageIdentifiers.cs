@@ -39,6 +39,15 @@ public readonly record struct FrameId
     public override string ToString() => Value ?? string.Empty;
 }
 
+/// <summary>Stable identity of a language type, independent of its CLR runtime representation.</summary>
+public readonly record struct TypeId
+{
+    public TypeId(string value) => Value = LanguageIdentifier.Normalize(value, nameof(value));
+    public string Value { get; }
+    public bool IsEmpty => string.IsNullOrEmpty(Value);
+    public override string ToString() => Value ?? string.Empty;
+}
+
 /// <summary>Stable identity of the module that owns a language declaration.</summary>
 public readonly record struct ModuleId
 {

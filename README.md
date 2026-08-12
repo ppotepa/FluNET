@@ -73,6 +73,42 @@ SAY primary WITH RETRY {2} WITH TIMEOUT {5s} ON ERROR CONTINUE THEN SAY finished
 GET [left] FROM {a.txt} AND GET [right] FROM {b.txt} THEN SAY [left] [right].
 ```
 
+## Type system
+
+`TypeSymbol` is a FluNET language type, not a CLR type alias. Every symbol has a
+stable `TypeId`, `TypeKind`, and nullability. CLR types are runtime mappings only;
+multiple CLR representations can map to the same language type. For example,
+numeric CLR types map to `Number`, and `string[]` and `List<string>` both map to
+the same canonical `List<Text>` symbol.
+
+Built-in language types include `Unit`, `Text`, `Boolean`, `Number`, `File`,
+`Directory`, `Uri`, `Json`, and `Object`. `LanguageTypeSystem` also interns
+structural `List<T>`, `Map<K,V>`, `Optional<T>`, union, and object-field types:
+
+```csharp
+LanguageTypeSystem types = StandardLanguage.CreateSnapshot().Types;
+TypeSymbol files = types.List(types.File);
+TypeSymbol metadata = types.Map(types.Text, types.Json);
+TypeSymbol maybeFile = types.Optional(types.File);
+TypeSymbol scalar = types.Union(types.Text, types.Number, types.Boolean);
+TypeSymbol person = types.ObjectType(
+    new TypeId("example.person"),
+    "Person",
+    [
+        new TypeFieldSymbol("name", types.Text),
+        new TypeFieldSymbol("age", types.Number, isRequired: false)
+    ]);
+```
+
+A module can continue to register a domain CLR mapping with
+`LanguageBuilder.Type<T>("LanguageName")`; its `TypeId` is derived from the
+language name rather than the CLR class name. Undeclared custom CLR types remain
+supported through a `legacy.clr.*` compatibility identity, but published module
+APIs should declare their domain types explicitly. Assignability is evaluated
+from language structure. The historical conversion of arbitrary values to
+`Text` remains temporarily compatible and will move to the explicit conversion
+registry in the next compiler batch.
+
 ## Embedding
 
 ```csharp
@@ -137,8 +173,8 @@ as a backward-compatible default, so production hosts should replace it.
 2. `PromptSyntax` is the canonical syntax tree for commands, language-defined
    clause markers, connectors, and execution modifiers.
 3. An immutable `LanguageSnapshot` is the single definition of constructions,
-   stable `CommandId`/`FrameId` values, aliases, typed frames, extensible frame
-   roles, type symbols, and keywords.
+   stable `CommandId`/`FrameId`/`TypeId` values, aliases, typed frames,
+   extensible frame roles, structural language types, and keywords.
 4. `SemanticCommandBinder` selects one frame and labels its arguments by role.
    Prepositions are frame-sensitive, so `FROM` is a marker in `GET` but remains
    message text in `SEND Hello from FluNET TO ...`.
