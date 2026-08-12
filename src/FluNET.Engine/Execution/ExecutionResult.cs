@@ -54,8 +54,12 @@ public sealed class ExecutionResult
         Workflow = workflow;
     }
 
+    /// <summary>
+    /// Creates a successful canonical execution result. Sentence is optional and
+    /// is populated only by compatibility/custom pipelines.
+    /// </summary>
     public static ExecutionResult Success(
-        ISentence sentence,
+        ISentence? sentence,
         object? result,
         ExecutionPlan? plan = null,
         IEnumerable<ExecutionStepResult>? steps = null,

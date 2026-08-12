@@ -37,6 +37,7 @@ public sealed record CompilationDiagnostic(
 public static class CompilationDiagnosticCodes
 {
     public const string ParseFailure = "FLN005";
+    public const string EmptyProgram = "FLN006";
     public const string BindingFailure = "FLN110";
     public const string ValidationFailure = "FLN115";
     public const string CompatibilitySentenceFailure = "FLN116";

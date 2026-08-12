@@ -1,22 +1,22 @@
+using FluNET.Execution.Planning;
 using FluNET.Execution.Steps;
+using FluNET.Language.Binding;
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
-using FluNET.Language.Binding;
-using FluNET.Execution.Planning;
 
 namespace FluNET.Execution
 {
     /// <summary>
-    /// Factory for creating the standard execution pipeline.
-    /// Allows customization and extension of the pipeline.
+    /// Creates standard and custom execution pipelines. The standard pipeline
+    /// uses parsed syntax, semantic binding, frame validation, planning, and
+    /// typed command execution. Legacy token/sentence services are retained in
+    /// the constructor only for public API compatibility.
     /// </summary>
     public class ExecutionPipelineFactory
     {
-        private readonly TokenTreeFactory _tokenTreeFactory;
-        private readonly SentenceValidator _sentenceValidator;
-        private readonly SentenceFactory _sentenceFactory;
         private readonly SemanticCommandBinder _semanticBinder;
+        private readonly SemanticProgramValidator _semanticValidator;
         private readonly ExecutionPlanner _planner;
         private readonly ExecutionPlanExecutor _planExecutor;
 
@@ -28,33 +28,33 @@ namespace FluNET.Execution
             ExecutionPlanner planner,
             ExecutionPlanExecutor planExecutor)
         {
-            _tokenTreeFactory = tokenTreeFactory ?? throw new ArgumentNullException(nameof(tokenTreeFactory));
-            _sentenceValidator = sentenceValidator ?? throw new ArgumentNullException(nameof(sentenceValidator));
-            _sentenceFactory = sentenceFactory ?? throw new ArgumentNullException(nameof(sentenceFactory));
+            ArgumentNullException.ThrowIfNull(tokenTreeFactory);
+            ArgumentNullException.ThrowIfNull(sentenceValidator);
+            ArgumentNullException.ThrowIfNull(sentenceFactory);
             _semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
+            _semanticValidator = new SemanticProgramValidator(_semanticBinder.Language);
             _planner = planner ?? throw new ArgumentNullException(nameof(planner));
             _planExecutor = planExecutor ?? throw new ArgumentNullException(nameof(planExecutor));
         }
 
         /// <summary>
-        /// Creates the standard execution pipeline with all default steps
+        /// Creates the canonical Parse, Bind, Validate, Plan, Execute pipeline.
+        /// It does not instantiate legacy words, token trees, or sentences.
         /// </summary>
         public ExecutionPipeline CreateStandardPipeline()
         {
             return new ExecutionPipeline()
-                .AddStep(new TokenizationStep(_tokenTreeFactory))
+                .AddStep(new ParsingStep())
                 .AddStep(new SemanticBindingStep(_semanticBinder))
-                .AddStep(new ValidationStep(_sentenceValidator))
-                .AddStep(new SentenceCreationStep(_sentenceFactory))
+                .AddStep(new SemanticValidationStep(_semanticValidator))
                 .AddStep(new PlanningStep(_planner))
                 .AddStep(new PlanExecutionStep(_planExecutor));
         }
 
-        /// <summary>
-        /// Creates a custom pipeline with specified steps
-        /// </summary>
+        /// <summary>Creates an empty pipeline and applies custom steps to it.</summary>
         public ExecutionPipeline CreateCustomPipeline(Action<ExecutionPipeline> configurePipeline)
         {
+            ArgumentNullException.ThrowIfNull(configurePipeline);
             var pipeline = new ExecutionPipeline();
             configurePipeline(pipeline);
             return pipeline;

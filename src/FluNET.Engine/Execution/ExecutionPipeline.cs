@@ -62,12 +62,12 @@ public sealed class ExecutionPipeline
                 context.Sentence));
         }
 
-        if (context.Sentence is null)
+        if (context.Plan is null && context.Sentence is null)
         {
             return ValueTask.FromResult(ExecutionResult.Failed(
                 ExecutionFailureKind.Internal,
                 "FLN202",
-                "The pipeline completed without producing a sentence."));
+                "The pipeline completed without producing an execution plan or compatibility sentence."));
         }
 
         return ValueTask.FromResult(ExecutionResult.Success(

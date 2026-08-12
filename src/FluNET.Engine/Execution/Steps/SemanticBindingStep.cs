@@ -1,3 +1,4 @@
+using FluNET.Compilation;
 using FluNET.Language.Binding;
 
 namespace FluNET.Execution.Steps;
@@ -12,14 +13,24 @@ public sealed class SemanticBindingStep(SemanticCommandBinder binder) : IExecuti
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
-            context.BoundCommands = binder.BindProgram(context.Prompt.Syntax);
+            if (context.Program is null)
+            {
+                return ValueTask.FromResult(ExecutionResult.Failed(
+                    ExecutionFailureKind.Internal,
+                    "FLN202",
+                    "No parsed program is available for semantic binding."));
+            }
+
+            IReadOnlyList<BoundCommand> commands = binder.BindProgram(context.Program.Syntax);
+            context.BoundProgram = BoundProgram.FromCommands(context.Program, commands);
+            context.BoundCommands = context.BoundProgram.Commands;
             return next(context, cancellationToken);
         }
         catch (SemanticBindingException exception)
         {
             return ValueTask.FromResult(ExecutionResult.Failed(
                 ExecutionFailureKind.Binding,
-                "FLN110",
+                CompilationDiagnosticCodes.BindingFailure,
                 exception.Message,
                 exception));
         }

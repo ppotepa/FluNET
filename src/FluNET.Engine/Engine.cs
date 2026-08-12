@@ -94,8 +94,8 @@ namespace FluNET
             IReadOnlyList<TokenTree> commandTrees;
             try
             {
-                // Compatibility token trees are still required by the legacy
-                // validator until Batch 5 removes them from the canonical path.
+                // Compatibility token trees are retained only for Analyze/Run
+                // until the dedicated legacy adapter is introduced.
                 commandTrees = tokenTreeFactory.ProcessCommands(prompt);
             }
             catch (PromptSyntaxException exception)
@@ -144,7 +144,6 @@ namespace FluNET
                     CompilationPhase.Bind);
             }
 
-            // Validate using only the language snapshot, frame, and slots.
             DiagnosticBag semanticDiagnostics = semanticValidator.Validate(boundProgram);
             diagnostics.AddRange(semanticDiagnostics);
             if (semanticDiagnostics.HasErrors)
@@ -161,8 +160,8 @@ namespace FluNET
                     CompilationPhase.Validate);
             }
 
-            // Compatibility validation remains until Batch 5 removes the legacy
-            // sentence path from standard execution.
+            // Legacy validation/sentence creation is compatibility metadata only;
+            // ExecuteAsync no longer uses either component.
             ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
             if (!validation.IsValid)
             {
@@ -201,7 +200,6 @@ namespace FluNET
                     CompilationPhase.Validate);
             }
 
-            // Plan
             try
             {
                 ExecutionPlan plan = executionPlanner.Create(boundProgram.Commands, prompt.Syntax);
@@ -233,19 +231,22 @@ namespace FluNET
         }
 
         /// <summary>
-        /// Parse, validate, and execute a sentence using the execution pipeline.
-        /// Supports THEN clause for chaining multiple commands with shared variable context.
-        /// Example: DOWNLOAD [file] FROM http://example.com TO {file.txt} THEN SAY [file].
+        /// Executes through the canonical pipeline and projects a legacy
+        /// ISentence view for callers of the original synchronous API.
         /// </summary>
-        /// <param name="prompt">The prompt to process</param>
-        /// <returns>A tuple containing validation result, the sentence, and execution result</returns>
         public (ValidationResult ValidationResult, ISentence? Sentence, object? Result) Run(ProcessedPrompt prompt)
         {
             ExecutionResult result = Execute(prompt);
+            ISentence? compatibilitySentence = result.Sentence;
+            if (result.IsSuccess && compatibilitySentence is null)
+            {
+                compatibilitySentence = CreateCompatibilitySentence(prompt);
+            }
+
             ValidationResult compatibilityValidation = result.IsSuccess
                 ? result.ValidationResult
                 : ValidationResult.Failure(result.Error?.Message ?? result.ValidationResult.FailureReason ?? "Execution failed.");
-            return (compatibilityValidation, result.Sentence, result.Result);
+            return (compatibilityValidation, compatibilitySentence, result.Result);
         }
 
         /// <summary>Runs a prompt and returns structured validation or execution errors.</summary>
@@ -254,7 +255,10 @@ namespace FluNET
             return ExecuteAsync(prompt).GetAwaiter().GetResult();
         }
 
-        /// <summary>Asynchronously runs a prompt with cancellation support.</summary>
+        /// <summary>
+        /// Asynchronously executes the canonical parsed/bound plan. Standard
+        /// execution does not construct ISentence.
+        /// </summary>
         public async Task<ExecutionResult> ExecuteAsync(
             ProcessedPrompt prompt,
             CancellationToken cancellationToken = default)
@@ -294,6 +298,26 @@ namespace FluNET
                 ? result.ValidationResult
                 : ValidationResult.Failure(result.Error?.Message ?? result.ValidationResult.FailureReason ?? "Execution failed.");
             return (compatibilityValidation, result.Sentence, result.Result);
+        }
+
+        private ISentence? CreateCompatibilitySentence(ProcessedPrompt prompt)
+        {
+            prompt = prompt.WithGrammar(language.Grammar);
+            if (!prompt.IsValid)
+            {
+                return null;
+            }
+
+            try
+            {
+                IReadOnlyList<TokenTree> commandTrees = tokenTreeFactory.ProcessCommands(prompt);
+                ValidationResult validation = sentenceValidator.ValidateCommands(commandTrees);
+                return validation.IsValid ? sentenceFactory.CreateFromTrees(commandTrees) : null;
+            }
+            catch (PromptSyntaxException)
+            {
+                return null;
+            }
         }
 
         private static void AddPromptDiagnostics(

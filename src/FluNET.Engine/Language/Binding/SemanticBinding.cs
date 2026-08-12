@@ -61,8 +61,18 @@ public sealed class BoundCommand
 /// and arguments labelled by their semantic participation. Structural validity
 /// of the assigned slots is checked separately by SemanticProgramValidator.
 /// </summary>
-public sealed class SemanticCommandBinder(LanguageSnapshot language)
+public sealed class SemanticCommandBinder
 {
+    private readonly LanguageSnapshot language;
+
+    public SemanticCommandBinder(LanguageSnapshot language)
+    {
+        this.language = language ?? throw new ArgumentNullException(nameof(language));
+    }
+
+    /// <summary>The immutable language snapshot used by this binder.</summary>
+    public LanguageSnapshot Language => language;
+
     public IReadOnlyList<BoundCommand> BindProgram(PromptSyntax syntax)
     {
         ArgumentNullException.ThrowIfNull(syntax);

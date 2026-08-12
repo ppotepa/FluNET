@@ -1,3 +1,4 @@
+using FluNET.Compilation;
 using FluNET.Prompt;
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
@@ -15,16 +16,19 @@ namespace FluNET.Execution
     public class ExecutionContext
     {
         public ProcessedPrompt Prompt { get; }
-        public IReadOnlyList<TokenTree> CommandTrees { get; internal set; } = Array.Empty<TokenTree>();
+        public FluNetProgram? Program { get; internal set; }
+        public BoundProgram? BoundProgram { get; internal set; }
+        public DiagnosticBag CompilationDiagnostics { get; } = new();
         public IReadOnlyList<BoundCommand> BoundCommands { get; internal set; } = Array.Empty<BoundCommand>();
         public ExecutionPlan? Plan { get; internal set; }
         internal List<ExecutionStepResult> CompletedSteps { get; } = [];
         public IReadOnlyList<ExecutionStepResult> StepResults => CompletedSteps;
 
         /// <summary>
-        /// Compatibility view of the first command. New pipeline stages should use
-        /// <see cref="CommandTrees"/> so command boundaries are never reparsed.
+        /// Legacy token-tree compatibility state. The standard execution path no
+        /// longer populates these members.
         /// </summary>
+        public IReadOnlyList<TokenTree> CommandTrees { get; internal set; } = Array.Empty<TokenTree>();
         public TokenTree? TokenTree { get; set; }
         public ValidationResult? ValidationResult { get; set; }
         public ISentence? Sentence { get; set; }
