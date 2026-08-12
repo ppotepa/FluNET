@@ -6,6 +6,8 @@ using FluNET.Syntax.Registry;
 using FluNET.Syntax.Verbs;
 using FluNET.Variables;
 using FluNET.Words;
+using FluNET.Execution.Commands;
+using FluNET.Prompt;
 using System.Reflection;
 
 namespace FluNET.Sentences
@@ -20,13 +22,20 @@ namespace FluNET.Sentences
         private readonly Lexicon.Lexicon _lexicon;
         private readonly VerbRegistry _verbRegistry;
         private readonly DiscoveryService _discoveryService;
+        private readonly CommandDispatcher _commandDispatcher;
 
-        public SentenceExecutor(IVariableResolver variableResolver, Lexicon.Lexicon lexicon, VerbRegistry verbRegistry, DiscoveryService discoveryService)
+        public SentenceExecutor(
+            IVariableResolver variableResolver,
+            Lexicon.Lexicon lexicon,
+            VerbRegistry verbRegistry,
+            DiscoveryService discoveryService,
+            CommandDispatcher commandDispatcher)
         {
             _variableResolver = variableResolver;
             _lexicon = lexicon;
             _verbRegistry = verbRegistry;
             _discoveryService = discoveryService;
+            _commandDispatcher = commandDispatcher;
         }
 
         /// <summary>
@@ -36,8 +45,14 @@ namespace FluNET.Sentences
         public object? Execute(ISentence sentence) =>
             ExecuteAsync(sentence).AsTask().GetAwaiter().GetResult();
 
+        public ValueTask<object?> ExecuteAsync(
+            ISentence sentence,
+            CancellationToken cancellationToken = default) =>
+            ExecuteAsync(sentence, null, cancellationToken);
+
         public async ValueTask<object?> ExecuteAsync(
             ISentence sentence,
+            CommandSyntax? commandSyntax,
             CancellationToken cancellationToken = default)
         {
             if (sentence?.Root == null)
@@ -46,6 +61,17 @@ namespace FluNET.Sentences
             }
 
             cancellationToken.ThrowIfCancellationRequested();
+
+            if (commandSyntax is not null)
+            {
+                CommandDispatchResult dispatch = await _commandDispatcher
+                    .TryExecuteAsync(commandSyntax, cancellationToken)
+                    .ConfigureAwait(false);
+                if (dispatch.IsHandled)
+                {
+                    return dispatch.Result;
+                }
+            }
 
             // Debug: Print the sentence structure
             System.Diagnostics.Debug.WriteLine("  Sentence structure:");

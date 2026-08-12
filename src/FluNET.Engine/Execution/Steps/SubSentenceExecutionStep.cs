@@ -20,9 +20,17 @@ public sealed class SubSentenceExecutionStep(
 
         try
         {
-            foreach (ISentence subSentence in context.Sentence.SubSentences)
+            for (int index = 0; index < context.Sentence.SubSentences.Count; index++)
             {
-                object? subResult = await sentenceExecutor.ExecuteAsync(subSentence, cancellationToken)
+                ISentence subSentence = context.Sentence.SubSentences[index];
+                int syntaxIndex = index + 1;
+                var commandSyntax = syntaxIndex < context.Prompt.Syntax.Commands.Count
+                    ? context.Prompt.Syntax.Commands[syntaxIndex]
+                    : null;
+                object? subResult = await sentenceExecutor.ExecuteAsync(
+                        subSentence,
+                        commandSyntax,
+                        cancellationToken)
                     .ConfigureAwait(false);
                 context.Result = subResult;
 

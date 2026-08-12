@@ -21,7 +21,10 @@ public sealed class SentenceExecutionStep(SentenceExecutor sentenceExecutor) : I
 
         try
         {
-            context.Result = await sentenceExecutor.ExecuteAsync(context.Sentence, cancellationToken)
+            context.Result = await sentenceExecutor.ExecuteAsync(
+                    context.Sentence,
+                    context.Prompt.Syntax.Commands[0],
+                    cancellationToken)
                 .ConfigureAwait(false);
             if (context.Result is { } mainResult)
             {

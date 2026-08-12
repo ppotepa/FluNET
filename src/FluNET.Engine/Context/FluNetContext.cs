@@ -8,6 +8,7 @@ using FluNET.Words;
 using FluNET.Syntax.Registry;
 using FluNET.Capabilities;
 using FluNET.Language;
+using FluNET.Execution.Commands;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context
@@ -90,6 +91,10 @@ namespace FluNET.Context
             // Sentence processing
             services.AddTransient<SentenceFactory>();
             services.AddTransient<SentenceExecutor>();
+
+            // Typed command routes; unmatched commands use the legacy verb adapter
+            services.AddTypedCommand<SayCommand, string, SayCommandBinder, SayCommandHandler>();
+            services.AddTransient<CommandDispatcher>();
 
             // Pattern matchers (regex and string-based implementations)
             services.AddPatternMatchers();

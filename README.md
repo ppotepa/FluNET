@@ -102,8 +102,10 @@ as a backward-compatible default, so production hosts should replace it.
    projects the legacy word-chain view from that snapshot.
 4. `SentenceValidator` validates every command, including commands after
    `THEN`, before execution starts.
-5. The asynchronous execution pipeline activates typed verbs through one
-   registry and passes cancellation into injected effect capabilities.
+5. The asynchronous execution pipeline first dispatches syntax through generic
+   `ICommandHandler<TCommand, TResult>` routes, then uses the legacy verb
+   adapter for commands not yet migrated. Cancellation flows through both paths
+   into injected effect capabilities.
 
 Language extensions are explicit modules rather than an ambient scan of all
 loaded assemblies. Implement `IFluNetModule`, declare each command frame, and
@@ -126,7 +128,11 @@ LanguageSnapshot language = new LanguageBuilder()
     .Build();
 
 using FluNETContext context = FluNETContext.Create(services =>
-    services.AddSingleton(language));
+{
+    services.AddSingleton(language);
+    services.AddTypedCommand<GenerateReportCommand, FileInfo,
+        GenerateReportBinder, GenerateReportHandler>();
+});
 ```
 
 The snapshot validates command, synonym, and keyword collisions atomically.
@@ -146,8 +152,8 @@ Windows, and macOS.
 ## Status and limitations
 
 - The grammar is intentionally small and still evolving.
-- The typed syntax model currently covers command boundaries; verb arguments
-  still flow through the compatibility word chain.
+- `SAY` is the first end-to-end typed command. Other built-in verbs still flow
+  through the compatibility word chain while they are migrated incrementally.
 - `SEND` is a simulated implementation rather than a real mail transport.
 - This project does not make untrusted prompts safe by itself. Configure a
   restrictive execution policy and isolate the host process where appropriate.
