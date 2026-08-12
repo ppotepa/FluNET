@@ -51,7 +51,19 @@ namespace FluNET.Context
         public static FluNETContext Create(Action<IServiceCollection>? configureServices = null)
         {
             var services = new ServiceCollection();
-            ConfigureDefaultServices(services);
+            ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
+            configureServices?.Invoke(services);
+            return new FluNETContext(services.BuildServiceProvider());
+        }
+
+        /// <summary>Creates a host from an atomically validated language/runtime definition.</summary>
+        public static FluNETContext CreateWithRuntime(
+            FluNetRuntimeDefinition runtime,
+            Action<IServiceCollection>? configureServices = null)
+        {
+            ArgumentNullException.ThrowIfNull(runtime);
+            var services = new ServiceCollection();
+            ConfigureDefaultServices(services, runtime);
             configureServices?.Invoke(services);
             return new FluNETContext(services.BuildServiceProvider());
         }
@@ -62,10 +74,17 @@ namespace FluNET.Context
         /// Any changes to dependencies should be made here.
         /// </summary>
         /// <param name="services">The service collection to configure</param>
-        public static void ConfigureDefaultServices(IServiceCollection services)
+        public static void ConfigureDefaultServices(IServiceCollection services) =>
+            ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
+
+        public static void ConfigureDefaultServices(
+            IServiceCollection services,
+            FluNetRuntimeDefinition runtime)
         {
+            ArgumentNullException.ThrowIfNull(services);
+            ArgumentNullException.ThrowIfNull(runtime);
             // One immutable language definition shared by discovery, parsing, and execution
-            services.AddSingleton(_ => StandardLanguage.CreateSnapshot());
+            services.AddSingleton(runtime.Language);
             services.AddSingleton<LanguageRegistry>();
             services.AddSingleton<DiscoveryService>();
             services.AddSingleton<SemanticCommandBinder>();
@@ -96,17 +115,8 @@ namespace FluNET.Context
             services.AddTransient<SentenceFactory>();
             services.AddTransient<SentenceExecutor>();
 
-            // Typed command routes used by the standard execution plan
-            services.AddTypedCommand<SayCommand, string, SayCommandBinder, SayCommandHandler>();
-            services.AddTypedCommand<GetTextCommand, string[], GetTextCommandBinder, GetTextCommandHandler>();
-            services.AddTypedCommand<LoadTextCommand, string[], LoadTextCommandBinder, LoadTextCommandHandler>();
-            services.AddTypedCommand<LoadConfigCommand, Dictionary<string, object>, LoadConfigCommandBinder, LoadConfigCommandHandler>();
-            services.AddTypedCommand<SaveTextCommand, string, SaveTextCommandBinder, SaveTextCommandHandler>();
-            services.AddTypedCommand<DeleteFileCommand, string, DeleteFileCommandBinder, DeleteFileCommandHandler>();
-            services.AddTypedCommand<DownloadFileCommand, FileInfo, DownloadFileCommandBinder, DownloadFileCommandHandler>();
-            services.AddTypedCommand<PostJsonCommand, string, PostJsonCommandBinder, PostJsonCommandHandler>();
-            services.AddTypedCommand<SendEmailCommand, string, SendEmailCommandBinder, SendEmailCommandHandler>();
-            services.AddTypedCommand<TransformEncodingCommand, string, TransformEncodingCommandBinder, TransformEncodingCommandHandler>();
+            // Every language frame was validated against exactly one typed route.
+            runtime.RegisterRoutes(services);
             services.AddTransient<CommandDispatcher>();
             services.AddSingleton<ExecutionPlanner>();
             services.AddTransient<ExecutionPlanExecutor>();

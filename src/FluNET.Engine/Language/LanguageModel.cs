@@ -269,6 +269,8 @@ public sealed class LanguageSnapshot
 public interface IFluNetModule
 {
     void Register(LanguageBuilder language);
+
+    void Register(FluNetModuleBuilder module) => Register(module.Language);
 }
 
 /// <summary>Collects module declarations and freezes them into a snapshot.</summary>

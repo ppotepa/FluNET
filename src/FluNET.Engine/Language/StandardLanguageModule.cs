@@ -1,12 +1,30 @@
 using FluNET.Keywords;
 using FluNET.Syntax.Verbs;
 using System.Text;
+using FluNET.Execution.Commands;
 
 namespace FluNET.Language;
 
 /// <summary>Declarative definition of the language shipped with FluNET.</summary>
 public sealed class StandardLanguageModule : IFluNetModule
 {
+    public void Register(FluNetModuleBuilder module)
+    {
+        ArgumentNullException.ThrowIfNull(module);
+        Register(module.Language);
+        module
+            .Route<SayText, SayCommand, string, SayCommandBinder, SayCommandHandler>()
+            .Route<GetText, GetTextCommand, string[], GetTextCommandBinder, GetTextCommandHandler>()
+            .Route<LoadText, LoadTextCommand, string[], LoadTextCommandBinder, LoadTextCommandHandler>()
+            .Route<LoadConfig, LoadConfigCommand, Dictionary<string, object>, LoadConfigCommandBinder, LoadConfigCommandHandler>()
+            .Route<SaveText, SaveTextCommand, string, SaveTextCommandBinder, SaveTextCommandHandler>()
+            .Route<DeleteFile, DeleteFileCommand, string, DeleteFileCommandBinder, DeleteFileCommandHandler>()
+            .Route<DownloadFile, DownloadFileCommand, FileInfo, DownloadFileCommandBinder, DownloadFileCommandHandler>()
+            .Route<PostJson, PostJsonCommand, string, PostJsonCommandBinder, PostJsonCommandHandler>()
+            .Route<SendEmail, SendEmailCommand, string, SendEmailCommandBinder, SendEmailCommandHandler>()
+            .Route<TransformEncoding, TransformEncodingCommand, string, TransformEncodingCommandBinder, TransformEncodingCommandHandler>();
+    }
+
     public void Register(LanguageBuilder language)
     {
         language.ClauseMarker("FROM", Prompt.PromptClauseKind.From)
@@ -75,4 +93,7 @@ public static class StandardLanguage
 {
     public static LanguageSnapshot CreateSnapshot() =>
         new LanguageBuilder().AddModule(new StandardLanguageModule()).Build();
+
+    public static FluNetRuntimeDefinition CreateRuntime() =>
+        new FluNetModuleBuilder().AddModule(new StandardLanguageModule()).Build();
 }
