@@ -16,11 +16,11 @@ public sealed partial class ExpressionSyntaxParser
 
     private ExpressionSyntax ParseAnd()
     {
-        ExpressionSyntax left = ParsePrimary();
+        ExpressionSyntax left = ParseUnary();
         while (MatchWord("AND"))
         {
             ExpressionToken operation = Previous;
-            ExpressionSyntax right = ParsePrimary();
+            ExpressionSyntax right = ParseUnary();
             left = Binary(left, operation, right);
         }
         return left;
