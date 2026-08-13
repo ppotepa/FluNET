@@ -4,6 +4,16 @@ public sealed partial class ExpressionSyntaxParser
 {
     private ExpressionSyntax ParsePrimary()
     {
+        if (MatchPunctuation("("))
+        {
+            ExpressionToken opening = Previous;
+            ExpressionSyntax expression = ParseOr();
+            ExpressionToken closing = ConsumePunctuation(")", "Expected ')' after expression.");
+            return new ParenthesizedExpressionSyntax(
+                expression,
+                SourceSpan.FromBounds(opening.Span.Start, closing.Span.End));
+        }
+
         ExpressionToken token = Advance();
         if (token.Kind == ExpressionTokenKind.Variable)
         {
