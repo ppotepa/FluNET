@@ -14,6 +14,10 @@ public sealed partial class ConditionExpressionCompiler
         {
             return context => ToBoolean(left(context)) && ToBoolean(right(context));
         }
+        if (binary.Operator.Equals("OR", StringComparison.OrdinalIgnoreCase))
+        {
+            return context => ToBoolean(left(context)) || ToBoolean(right(context));
+        }
         throw new NotSupportedException($"Binary condition '{binary.Operator}' is not available in this build.");
     }
 }
