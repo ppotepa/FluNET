@@ -2,7 +2,7 @@ using FluNET.Language;
 
 namespace FluNET.Variables;
 
-public sealed partial class VariableStore : IVariableStore
+public sealed partial class VariableStore
 {
     private readonly LanguageSnapshot _language;
 
