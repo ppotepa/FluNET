@@ -61,7 +61,9 @@ namespace FluNET.Execution
 
             if (_compiler is not null)
             {
-                pipeline.AddStep(new CommandCompilationStep(_compiler));
+                pipeline
+                    .AddStep(new CommandCompilationStep(_compiler))
+                    .AddStep(new TypeValidationStep());
             }
 
             return pipeline
