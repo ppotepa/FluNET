@@ -1,0 +1,40 @@
+using FluNET.Context;
+using FluNET.Prompt;
+
+namespace FluNET.Tests.Compilation;
+
+[TestFixture]
+public sealed class TypedAnalysisTests
+{
+    [Test]
+    public void TypedAnalysisRejectsInvalidLiteralWithoutExecutingCommand()
+    {
+        using FluNETContext context = FluNETContext.Create();
+
+        TypedAnalysisResult result = context.AnalyzeTyped(
+            new ProcessedPrompt("SET NUMBER [value] TO banana."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.TypedProgram, Is.Null);
+            Assert.That(result.CompilationError?.Code, Is.EqualTo("FLN140"));
+        });
+    }
+
+    [Test]
+    public void TypedAnalysisReturnsCompiledProgramForValidPrompt()
+    {
+        using FluNETContext context = FluNETContext.Create();
+
+        TypedAnalysisResult result = context.AnalyzeTyped(
+            new ProcessedPrompt("SET NUMBER [value] TO 42."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsValid, Is.True, result.CompilationError?.Message);
+            Assert.That(result.TypedProgram, Is.Not.Null);
+            Assert.That(result.TypedProgram!.Commands, Has.Count.EqualTo(1));
+        });
+    }
+}
