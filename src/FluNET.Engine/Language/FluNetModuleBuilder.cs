@@ -1,4 +1,5 @@
 using FluNET.Execution.Commands;
+using FluNET.Language.Values;
 using FluNET.Syntax.Core;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.ObjectModel;
@@ -22,7 +23,6 @@ public sealed record CommandRouteDescriptor
         HandlerType = handlerType ?? throw new ArgumentNullException(nameof(handlerType));
     }
 
-    /// <summary>Compatibility constructor for routes declared through a legacy verb adapter.</summary>
     public CommandRouteDescriptor(
         Type implementationType,
         Type commandType,
@@ -35,10 +35,7 @@ public sealed record CommandRouteDescriptor
     }
 
     public FrameId FrameId { get; internal set; }
-
-    /// <summary>Legacy adapter type used only to resolve a FrameId during Build.</summary>
     public Type? ImplementationType { get; }
-
     public Type CommandType { get; }
     public Type ResultType { get; }
     public Type BinderType { get; }
@@ -50,12 +47,14 @@ internal sealed record PendingCommandRoute(
     Action<IServiceCollection, FrameId> Register);
 
 /// <summary>
-/// Collects language declarations and executable routes as one validated unit.
-/// Canonical routes are identified by FrameId rather than CLR verb types.
+/// Collects language declarations, value-system extensions, and executable routes
+/// as one atomically validated runtime definition.
 /// </summary>
 public sealed class FluNetModuleBuilder
 {
     private readonly List<PendingCommandRoute> _routes = [];
+    private readonly List<ValueCodecRegistration> _codecs = [];
+    private readonly List<ValueConversionRegistration> _conversions = [];
 
     public LanguageBuilder Language { get; } = new();
 
@@ -66,7 +65,42 @@ public sealed class FluNetModuleBuilder
         return this;
     }
 
-    /// <summary>Registers a typed route directly against a stable frame id.</summary>
+    public FluNetModuleBuilder Codec<TValue, TCodec>()
+        where TCodec : class, FluNET.Language.Values.IValueCodec<TValue>
+    {
+        _codecs.Add(new ValueCodecRegistration(
+            typeof(TValue),
+            typeof(TCodec),
+            (services, typeId) => new RuntimeValueCodec<TValue>(
+                typeId,
+                ActivatorUtilities.CreateInstance<TCodec>(services))));
+        return this;
+    }
+
+    public FluNetModuleBuilder Conversion<TSource, TTarget, TConversion>(
+        ConversionKind kind = ConversionKind.Implicit,
+        int cost = 1)
+        where TConversion : class, IValueConversion<TSource, TTarget>
+    {
+        if (cost <= 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(cost),
+                "Conversion cost must be positive.");
+        }
+
+        _conversions.Add(new ValueConversionRegistration(
+            typeof(TSource),
+            typeof(TTarget),
+            typeof(TConversion),
+            kind,
+            cost,
+            (services, descriptor) => new RuntimeValueConversion<TSource, TTarget>(
+                descriptor,
+                ActivatorUtilities.CreateInstance<TConversion>(services))));
+        return this;
+    }
+
     public FluNetModuleBuilder Route<TCommand, TResult, TBinder, THandler>(FrameId frameId)
         where TCommand : class, ICommand<TResult>
         where TBinder : class, ICommandBinder<TCommand, TResult>
@@ -90,17 +124,12 @@ public sealed class FluNetModuleBuilder
         return this;
     }
 
-    /// <summary>Registers a typed route directly against a stable frame id.</summary>
     public FluNetModuleBuilder Route<TCommand, TResult, TBinder, THandler>(string frameId)
         where TCommand : class, ICommand<TResult>
         where TBinder : class, ICommandBinder<TCommand, TResult>
         where THandler : class, ICommandHandler<TCommand, TResult> =>
         Route<TCommand, TResult, TBinder, THandler>(new FrameId(frameId));
 
-    /// <summary>
-    /// Compatibility route declaration. The implementation type is resolved to
-    /// exactly one legacy frame id during Build and is not used by runtime dispatch.
-    /// </summary>
     public FluNetModuleBuilder Route<TImplementation, TCommand, TResult, TBinder, THandler>()
         where TImplementation : class, IVerb
         where TCommand : class, ICommand<TResult>
@@ -124,8 +153,9 @@ public sealed class FluNetModuleBuilder
     {
         LanguageSnapshot language = Language.Build();
         ResolveLegacyFrameIds(language);
-        Validate(language);
-        return new FluNetRuntimeDefinition(language, _routes);
+        ValidateRoutes(language);
+        ValidateValues(language);
+        return new FluNetRuntimeDefinition(language, _routes, _codecs, _conversions);
     }
 
     private void ResolveLegacyFrameIds(LanguageSnapshot language)
@@ -133,7 +163,6 @@ public sealed class FluNetModuleBuilder
         CommandFrameDescriptor[] frames = language.Commands
             .SelectMany(command => command.Frames)
             .ToArray();
-
         foreach (PendingCommandRoute route in _routes.Where(route => route.Descriptor.FrameId.IsEmpty))
         {
             Type? implementationType = route.Descriptor.ImplementationType;
@@ -145,20 +174,18 @@ public sealed class FluNetModuleBuilder
             if (matches.Length != 1)
             {
                 throw new LanguageDefinitionException(
-                    $"Legacy route implementation '{implementationType?.FullName}' must resolve to exactly one frame; " +
-                    $"found {matches.Length}.");
+                    $"Legacy route implementation '{implementationType?.FullName}' must resolve " +
+                    $"to exactly one frame; found {matches.Length}.");
             }
-
             route.Descriptor.FrameId = matches[0].Id;
         }
     }
 
-    private void Validate(LanguageSnapshot language)
+    private void ValidateRoutes(LanguageSnapshot language)
     {
         CommandFrameDescriptor[] frames = language.Commands
             .SelectMany(command => command.Frames)
             .ToArray();
-
         foreach (CommandFrameDescriptor frame in frames)
         {
             PendingCommandRoute[] matches = _routes
@@ -187,19 +214,50 @@ public sealed class FluNetModuleBuilder
             }
         }
     }
+
+    private void ValidateValues(LanguageSnapshot language)
+    {
+        HashSet<TypeId> codecTypes = [];
+        foreach (ValueCodecRegistration registration in _codecs)
+        {
+            TypeSymbol type = language.Types.Get(registration.ValueType);
+            if (!codecTypes.Add(type.Id))
+            {
+                throw new LanguageDefinitionException(
+                    $"A custom value codec for '{type.Id}' is registered more than once.");
+            }
+        }
+
+        foreach (ValueConversionRegistration registration in _conversions)
+        {
+            TypeSymbol source = language.Types.Get(registration.SourceType);
+            TypeSymbol target = language.Types.Get(registration.TargetType);
+            if (source.Id == target.Id)
+            {
+                throw new LanguageDefinitionException(
+                    $"Conversion '{registration.ConversionType.FullName}' maps '{source.Id}' to itself.");
+            }
+        }
+    }
 }
 
-/// <summary>An immutable language plus all DI registrations needed to execute it.</summary>
+/// <summary>An immutable language plus registrations needed to compile and execute it.</summary>
 public sealed class FluNetRuntimeDefinition
 {
     private readonly ReadOnlyCollection<PendingCommandRoute> _routes;
+    private readonly ReadOnlyCollection<ValueCodecRegistration> _codecs;
+    private readonly ReadOnlyCollection<ValueConversionRegistration> _conversions;
 
     internal FluNetRuntimeDefinition(
         LanguageSnapshot language,
-        IEnumerable<PendingCommandRoute> routes)
+        IEnumerable<PendingCommandRoute> routes,
+        IEnumerable<ValueCodecRegistration>? codecs = null,
+        IEnumerable<ValueConversionRegistration>? conversions = null)
     {
         Language = language ?? throw new ArgumentNullException(nameof(language));
         _routes = Array.AsReadOnly(routes.ToArray());
+        _codecs = Array.AsReadOnly(codecs?.ToArray() ?? []);
+        _conversions = Array.AsReadOnly(conversions?.ToArray() ?? []);
         Routes = Array.AsReadOnly(_routes.Select(route => route.Descriptor).ToArray());
     }
 
@@ -213,5 +271,7 @@ public sealed class FluNetRuntimeDefinition
         {
             route.Register(services, route.Descriptor.FrameId);
         }
+        services.AddSingleton<IValueCodecRegistry>(provider =>
+            new ValueCodecRegistry(Language, provider, _codecs, _conversions));
     }
 }
