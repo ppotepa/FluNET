@@ -19,27 +19,67 @@ public sealed partial class TypedProgramTypeValidator
             foreach (BoundArgument argument in command.Arguments.Values.Where(argument =>
                 argument.Slot.Direction == SlotDirection.Input && argument.IsPresent))
             {
-                foreach (PromptToken token in argument.Tokens.Where(token => token.Kind == PromptTokenKind.Variable))
+                foreach (PromptToken token in argument.Tokens.Where(token =>
+                    token.Kind == PromptTokenKind.Variable))
                 {
                     string name = VariableName(token);
-                    if (!producers.TryGetValue(name, out Producer? producer))
+                    if (producers.TryGetValue(name, out Producer? producer))
                     {
-                        continue; // may be a host-provided variable
+                        if (producer.Stage >= stages[index])
+                        {
+                            throw new CommandCompilationException(
+                                "FLN150",
+                                $"Variable '[{name}]' is produced in the same parallel stage.",
+                                token.Span);
+                        }
+                        ValidateType(
+                            name,
+                            producer.Type,
+                            argument.Slot.ValueTypeSymbol,
+                            token.Span);
+                        continue;
                     }
-                    if (producer.Stage >= stages[index])
+
+                    if (_variables is null || _language is null)
+                    {
+                        continue;
+                    }
+                    if (!_variables.IsRegistered(token.Text))
                     {
                         throw new CommandCompilationException(
                             "FLN150",
-                            $"Variable '[{name}]' is produced in the same parallel stage.",
+                            $"Variable '[{name}]' has no producer and is not registered by the host.",
                             token.Span);
                     }
-                    if (!argument.Slot.ValueTypeSymbol.IsAssignableFrom(producer.Type))
+
+                    object? hostValue = _variables.Resolve<object>(token.Text);
+                    if (hostValue is null)
+                    {
+                        throw new CommandCompilationException(
+                            "FLN150",
+                            $"Host variable '[{name}]' has no runtime value.",
+                            token.Span);
+                    }
+
+                    TypeSymbol hostType;
+                    try
+                    {
+                        hostType = _language.Types.Get(hostValue.GetType());
+                    }
+                    catch (LanguageDefinitionException exception)
                     {
                         throw new CommandCompilationException(
                             "FLN151",
-                            $"Variable '[{name}]' has type '{producer.Type}', but '{argument.Slot.ValueTypeSymbol}' is required.",
-                            token.Span);
+                            $"Host variable '[{name}]' uses undeclared CLR type " +
+                            $"'{hostValue.GetType()}'.",
+                            token.Span,
+                            exception);
                     }
+                    ValidateType(
+                        name,
+                        hostType,
+                        argument.Slot.ValueTypeSymbol,
+                        token.Span);
                 }
             }
 
@@ -57,12 +97,14 @@ public sealed partial class TypedProgramTypeValidator
         }
     }
 
-    private static IEnumerable<(string Name, TypeSymbol Type, SourceSpan Span)> OutputVariables(BoundCommand command)
+    private static IEnumerable<(string Name, TypeSymbol Type, SourceSpan Span)> OutputVariables(
+        BoundCommand command)
     {
         foreach (BoundArgument argument in command.Arguments.Values.Where(argument =>
             argument.Slot.Direction == SlotDirection.Output && argument.IsPresent))
         {
-            foreach (PromptToken token in argument.Tokens.Where(token => token.Kind == PromptTokenKind.Variable))
+            foreach (PromptToken token in argument.Tokens.Where(token =>
+                token.Kind == PromptTokenKind.Variable))
             {
                 yield return (VariableName(token), argument.Slot.ValueTypeSymbol, token.Span);
             }
