@@ -24,10 +24,21 @@ public sealed class TypedProgramCompiler
     private readonly IValueCodecRegistry _values;
 
     public TypedProgramCompiler(CommandDispatcher dispatcher, LanguageSnapshot language)
+        : this(
+            dispatcher,
+            language,
+            ValueCodecRegistryFactory.CreateDefault(language))
+    {
+    }
+
+    public TypedProgramCompiler(
+        CommandDispatcher dispatcher,
+        LanguageSnapshot language,
+        IValueCodecRegistry values)
     {
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         ArgumentNullException.ThrowIfNull(language);
-        _values = new ValueCodecRegistry(language, EmptyServiceProvider.Instance, [], []);
+        _values = values ?? throw new ArgumentNullException(nameof(values));
     }
 
     public TypedProgram Compile(BoundProgram program)
@@ -86,8 +97,6 @@ public sealed class TypedProgramCompiler
             ValueCodecDescriptor? codec = _values.Codecs.FirstOrDefault(item => item.TypeId == expected.Id);
             if (codec is null)
             {
-                // Extension-specific binders remain authoritative until a custom
-                // codec is registered through the module value API.
                 continue;
             }
 
@@ -143,11 +152,5 @@ public sealed class TypedProgramCompiler
         PromptToken first = argument.Tokens[0];
         PromptToken last = argument.Tokens[^1];
         return SourceSpan.FromBounds(first.Span.Start, last.Span.End);
-    }
-
-    private sealed class EmptyServiceProvider : IServiceProvider
-    {
-        public static EmptyServiceProvider Instance { get; } = new();
-        public object? GetService(Type serviceType) => null;
     }
 }
