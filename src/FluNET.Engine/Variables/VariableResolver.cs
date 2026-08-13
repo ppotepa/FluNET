@@ -23,6 +23,16 @@ namespace FluNET.Variables
 
         public VariableResolver(
             MatcherResolver matcherResolver,
+            LanguageSnapshot language)
+            : this(
+                matcherResolver,
+                new VariableStore(language ?? throw new ArgumentNullException(nameof(language))),
+                language)
+        {
+        }
+
+        public VariableResolver(
+            MatcherResolver matcherResolver,
             IVariableStore store,
             LanguageSnapshot language)
         {
@@ -30,6 +40,8 @@ namespace FluNET.Variables
             _store = store ?? throw new ArgumentNullException(nameof(store));
             _language = language ?? throw new ArgumentNullException(nameof(language));
         }
+
+        public IVariableStore Store => _store;
 
         public void Register<T>(string name, T value)
         {
