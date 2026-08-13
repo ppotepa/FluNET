@@ -1,0 +1,61 @@
+{
+  "status": "preview",
+  "publicLanguageVersion": "0.3",
+  "targetLanguageVersion": "0.4",
+  "pipeline": [
+    "parse",
+    "bind",
+    "semantic-validate",
+    "compile-typed-command",
+    "type-validate",
+    "plan",
+    "execute"
+  ],
+  "typeIds": [
+    "flunet.unit",
+    "flunet.text",
+    "flunet.boolean",
+    "flunet.number",
+    "flunet.file",
+    "flunet.directory",
+    "flunet.uri",
+    "flunet.json",
+    "flunet.object",
+    "flunet.encoding"
+  ],
+  "expressionDiagnostics": [
+    "FLN140",
+    "FLN141",
+    "FLN142",
+    "FLN143"
+  ],
+  "typedProgramDiagnostics": [
+    "FLN150",
+    "FLN151",
+    "FLN152",
+    "FLN153",
+    "FLN154"
+  ],
+  "expressionNodes": [
+    "literal",
+    "variable",
+    "unary",
+    "binary",
+    "parenthesized",
+    "property",
+    "index",
+    "list",
+    "object"
+  ],
+  "variableScopes": [
+    "host",
+    "workflow",
+    "block",
+    "iteration"
+  ],
+  "unfrozenIntegrations": [
+    "standard-module-route-cache",
+    "typed-condition-plan-executor-boundary",
+    "analyze-typed-program-surface"
+  ]
+}
