@@ -1,5 +1,6 @@
 using FluNET.Capabilities;
 using FluNET.Compatibility;
+using FluNET.Compilation;
 using FluNET.Execution.Commands;
 using FluNET.Execution.Planning;
 using FluNET.Execution.Workflow;
@@ -17,18 +18,12 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context
 {
-    /// <summary>
-    /// Centralized service configuration and resolution for FluNET applications.
-    /// Provides a single source of truth for dependency injection setup across
-    /// CLI applications, web applications, and tests.
-    /// </summary>
     public class FluNETContext : IDisposable
     {
         private static FluNETContext? _defaultContext;
         private readonly ServiceProvider _serviceProvider;
         private readonly IServiceScope? _scope;
 
-        /// <summary>Gets the global default context with standard configuration.</summary>
         public static FluNETContext Default => _defaultContext ??= Create();
 
         private FluNETContext(ServiceProvider serviceProvider, bool createScope = true)
@@ -40,7 +35,6 @@ namespace FluNET.Context
             }
         }
 
-        /// <summary>Creates a new FluNETContext with standard configuration.</summary>
         public static FluNETContext Create(Action<IServiceCollection>? configureServices = null)
         {
             var services = new ServiceCollection();
@@ -49,7 +43,6 @@ namespace FluNET.Context
             return new FluNETContext(services.BuildServiceProvider());
         }
 
-        /// <summary>Creates a host from an atomically validated language/runtime definition.</summary>
         public static FluNETContext CreateWithRuntime(
             FluNetRuntimeDefinition runtime,
             Action<IServiceCollection>? configureServices = null)
@@ -61,7 +54,6 @@ namespace FluNET.Context
             return new FluNETContext(services.BuildServiceProvider());
         }
 
-        /// <summary>Configures all default FluNET services.</summary>
         public static void ConfigureDefaultServices(IServiceCollection services) =>
             ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
 
@@ -86,7 +78,6 @@ namespace FluNET.Context
             services.AddSingleton<IWorkflowStateStore, InMemoryWorkflowStateStore>();
             services.AddSingleton<IWorkflowValueSerializer, JsonWorkflowValueSerializer>();
 
-            // Compatibility services are isolated behind LegacySentenceAdapter.
             services.AddTransient<TokenFactory>();
             services.AddTransient<TokenTreeFactory>();
             services.AddTransient<WordFactory>();
@@ -99,6 +90,7 @@ namespace FluNET.Context
 
             runtime.RegisterRoutes(services);
             services.AddTransient<CommandDispatcher>();
+            services.AddTransient<TypedProgramCompiler>();
             services.AddSingleton<ExecutionPlanner>();
             services.AddTransient<ExecutionPlanExecutor>();
 
@@ -106,8 +98,6 @@ namespace FluNET.Context
             services.AddScoped<IVariableResolver, VariableResolver>();
             services.AddTransient<Execution.ExecutionPipelineFactory>();
 
-            // Select the canonical constructor explicitly. The obsolete public
-            // constructor remains only for source/binary migration scenarios.
             services.AddTransient<Engine>(provider => new Engine(
                 provider.GetRequiredService<IVariableResolver>(),
                 provider.GetRequiredService<Execution.ExecutionPipelineFactory>(),
@@ -117,10 +107,8 @@ namespace FluNET.Context
                 provider.GetRequiredService<LegacySentenceAdapter>()));
         }
 
-        /// <summary>Gets the FluNET engine instance from the context.</summary>
         public Engine GetEngine() => GetService<Engine>();
 
-        /// <summary>Resolves a service from the context.</summary>
         public T GetService<T>() where T : notnull
         {
             return _scope != null
@@ -128,7 +116,6 @@ namespace FluNET.Context
                 : _serviceProvider.GetRequiredService<T>();
         }
 
-        /// <summary>Resolves a service from the context by type.</summary>
         public object GetService(Type serviceType)
         {
             return _scope != null
@@ -136,23 +123,18 @@ namespace FluNET.Context
                 : _serviceProvider.GetRequiredService(serviceType);
         }
 
-        /// <summary>Gets the underlying service provider.</summary>
         public IServiceProvider ServiceProvider => _scope?.ServiceProvider ?? _serviceProvider;
 
-        /// <summary>Disposes the context and all managed resources.</summary>
         public void Dispose()
         {
             _scope?.Dispose();
-
             if (this == _defaultContext)
             {
                 _defaultContext = null;
             }
-
             _serviceProvider.Dispose();
         }
 
-        /// <summary>Resets the default context. Useful for testing scenarios.</summary>
         public static void ResetDefault()
         {
             _defaultContext?.Dispose();
