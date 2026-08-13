@@ -1,3 +1,4 @@
+using FluNET.Compilation;
 using FluNET.Execution.Planning;
 using FluNET.Execution.Steps;
 using FluNET.Language.Binding;
@@ -7,16 +8,11 @@ using FluNET.Tokens.Tree;
 
 namespace FluNET.Execution
 {
-    /// <summary>
-    /// Creates standard and custom execution pipelines. The standard pipeline
-    /// uses parsed syntax, semantic binding, frame validation, planning, and
-    /// typed command execution. Legacy token/sentence services are retained in
-    /// the constructor only for public API compatibility.
-    /// </summary>
     public class ExecutionPipelineFactory
     {
         private readonly SemanticCommandBinder _semanticBinder;
         private readonly SemanticProgramValidator _semanticValidator;
+        private readonly TypedProgramCompiler? _compiler;
         private readonly ExecutionPlanner _planner;
         private readonly ExecutionPlanExecutor _planExecutor;
 
@@ -37,21 +33,42 @@ namespace FluNET.Execution
             _planExecutor = planExecutor ?? throw new ArgumentNullException(nameof(planExecutor));
         }
 
-        /// <summary>
-        /// Creates the canonical Parse, Bind, Validate, Plan, Execute pipeline.
-        /// It does not instantiate legacy words, token trees, or sentences.
-        /// </summary>
+        public ExecutionPipelineFactory(
+            TokenTreeFactory tokenTreeFactory,
+            SentenceValidator sentenceValidator,
+            SentenceFactory sentenceFactory,
+            SemanticCommandBinder semanticBinder,
+            TypedProgramCompiler compiler,
+            ExecutionPlanner planner,
+            ExecutionPlanExecutor planExecutor)
+            : this(
+                tokenTreeFactory,
+                sentenceValidator,
+                sentenceFactory,
+                semanticBinder,
+                planner,
+                planExecutor)
+        {
+            _compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
+        }
+
         public ExecutionPipeline CreateStandardPipeline()
         {
-            return new ExecutionPipeline()
+            ExecutionPipeline pipeline = new ExecutionPipeline()
                 .AddStep(new ParsingStep())
                 .AddStep(new SemanticBindingStep(_semanticBinder))
-                .AddStep(new SemanticValidationStep(_semanticValidator))
+                .AddStep(new SemanticValidationStep(_semanticValidator));
+
+            if (_compiler is not null)
+            {
+                pipeline.AddStep(new CommandCompilationStep(_compiler));
+            }
+
+            return pipeline
                 .AddStep(new PlanningStep(_planner))
                 .AddStep(new PlanExecutionStep(_planExecutor));
         }
 
-        /// <summary>Creates an empty pipeline and applies custom steps to it.</summary>
         public ExecutionPipeline CreateCustomPipeline(Action<ExecutionPipeline> configurePipeline)
         {
             ArgumentNullException.ThrowIfNull(configurePipeline);
