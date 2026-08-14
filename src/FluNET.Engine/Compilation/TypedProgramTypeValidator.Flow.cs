@@ -33,11 +33,14 @@ public sealed partial class TypedProgramTypeValidator
                                 $"Variable '[{name}]' is produced in the same parallel stage.",
                                 token.Span);
                         }
-                        ValidateType(
-                            name,
-                            producer.Type,
-                            argument.Slot.ValueTypeSymbol,
-                            token.Span);
+                        if (!producer.IsRuntimeTyped)
+                        {
+                            ValidateType(
+                                name,
+                                producer.Type,
+                                argument.Slot.ValueTypeSymbol,
+                                token.Span);
+                        }
                         continue;
                     }
 
@@ -51,16 +54,22 @@ public sealed partial class TypedProgramTypeValidator
 
             ValidateConditionVariables(command, stages[index], producers);
 
-            foreach ((string name, TypeSymbol type, SourceSpan span) in OutputVariables(command))
+            foreach (OutputProducer output in OutputVariables(command))
             {
-                if (producers.TryGetValue(name, out Producer? existing) && existing.Type.Id != type.Id)
+                if (producers.TryGetValue(output.Name, out Producer? existing) &&
+                    !existing.IsRuntimeTyped &&
+                    !output.IsRuntimeTyped &&
+                    existing.Type.Id != output.Type.Id)
                 {
                     throw new CommandCompilationException(
                         "FLN151",
-                        $"Variable '[{name}]' cannot change type from '{existing.Type}' to '{type}'.",
-                        span);
+                        $"Variable '[{output.Name}]' cannot change type from '{existing.Type}' to '{output.Type}'.",
+                        output.Span);
                 }
-                producers[name] = new Producer(type, stages[index]);
+                producers[output.Name] = new Producer(
+                    output.Type,
+                    stages[index],
+                    output.IsRuntimeTyped);
             }
         }
     }
@@ -172,8 +181,7 @@ public sealed partial class TypedProgramTypeValidator
         }
     }
 
-    private static IEnumerable<(string Name, TypeSymbol Type, SourceSpan Span)> OutputVariables(
-        BoundCommand command)
+    private static IEnumerable<OutputProducer> OutputVariables(BoundCommand command)
     {
         foreach (BoundArgument argument in command.Arguments.Values.Where(argument =>
             argument.Slot.Direction == SlotDirection.Output && argument.IsPresent))
@@ -181,9 +189,43 @@ public sealed partial class TypedProgramTypeValidator
             foreach (PromptToken token in argument.Tokens.Where(token =>
                 token.Kind == PromptTokenKind.Variable))
             {
-                yield return (VariableName(token), argument.Slot.ValueTypeSymbol, token.Span);
+                string[] destructured = DestructuredNames(token.Text);
+                if (destructured.Length > 0)
+                {
+                    foreach (string name in destructured)
+                    {
+                        yield return new OutputProducer(
+                            name,
+                            argument.Slot.ValueTypeSymbol,
+                            token.Span,
+                            IsRuntimeTyped: true);
+                    }
+                    continue;
+                }
+
+                yield return new OutputProducer(
+                    VariableName(token),
+                    argument.Slot.ValueTypeSymbol,
+                    token.Span,
+                    IsRuntimeTyped: false);
             }
         }
+    }
+
+    private static string[] DestructuredNames(string reference)
+    {
+        string normalized = reference.TrimEnd('.').Trim();
+        if (normalized.Length < 4 ||
+            !normalized.StartsWith("[{", StringComparison.Ordinal) ||
+            !normalized.EndsWith("}]", StringComparison.Ordinal))
+        {
+            return Array.Empty<string>();
+        }
+
+        return normalized[2..^2]
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(name => !string.IsNullOrWhiteSpace(name))
+            .ToArray();
     }
 
     private static string VariableName(PromptToken token) =>
@@ -191,5 +233,14 @@ public sealed partial class TypedProgramTypeValidator
             ? token.Text[1..^1]
             : token.Text;
 
-    private sealed record Producer(TypeSymbol Type, int Stage);
+    private sealed record OutputProducer(
+        string Name,
+        TypeSymbol Type,
+        SourceSpan Span,
+        bool IsRuntimeTyped);
+
+    private sealed record Producer(
+        TypeSymbol Type,
+        int Stage,
+        bool IsRuntimeTyped = false);
 }
