@@ -10,7 +10,7 @@ Status: **PLANNED / IMPLEMENTED / VERIFIED / FROZEN**. Public language identity 
 | 53 | resource payload + decoder/encoder registry | IMPLEMENTED |
 | 54 | CSV/XML decoders | IMPLEMENTED |
 | 55 | Binary/Image language values | IMPLEMENTED |
-| 56 | generic HTTP response/media model | PLANNED |
+| 56 | generic HTTP response/media model | IMPLEMENTED |
 | 57 | SQL provider | PLANNED |
 | 58 | authentication profiles and secret binding | PLANNED |
 | 59 | compiled nested action model | PLANNED |
@@ -21,18 +21,8 @@ Status: **PLANNED / IMPLEMENTED / VERIFIED / FROZEN**. Public language identity 
 | 64 | automation/ENSURE CLI | PLANNED |
 | 65 | 0.8 tooling/freeze candidate | PLANNED |
 
-## 0.9 — Declarative Reconciliation
+## 0.9 — Batches 66–75
+Desired/Observed State, observation, SYNC, diff IR, reconciliation, WATCH bridge, compensation, saga, history, freeze.
 
-Batches 66–75: Desired/Observed State, observation, SYNC, diff IR, reconciliation, WATCH bridge, compensation, saga, history, freeze.
-
-## 1.0 — Stable Platform
-
-Batches 76–83: language/API/security/persistence contracts, compatibility cleanup, module boundaries, complete CLI, cross-platform verification.
-
-## Release gate
-
-```bash
-dotnet restore FluNET.sln
-dotnet build FluNET.sln --configuration Release --no-restore
-dotnet test FluNET.sln --configuration Release --no-build
-```
+## 1.0 — Batches 76–83
+Language/API/security/persistence contracts, compatibility cleanup, module boundaries, complete CLI, cross-platform verification.
