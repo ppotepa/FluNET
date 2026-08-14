@@ -1,62 +1,71 @@
 using FluNET.Language;
 using FluNET.Language.Binding;
+using FluNET.Language.Values;
 using FluNET.Syntax.Verbs;
 using FluNET.Variables;
 using System.Text.Json;
 
 namespace FluNET.Execution.Commands;
 
-public sealed record SetTextCommand(TextExpression Value) : ICommand<string>;
-public sealed record SetJsonCommand(JsonExpression Value) : ICommand<JsonElement>;
+public sealed record SetTextCommand(IExpression<string> Value) : ICommand<string>;
+public sealed record SetJsonCommand(IExpression<JsonElement> Value) : ICommand<JsonElement>;
 public sealed record SetNumberCommand(IExpression<decimal> Value) : ICommand<decimal>;
 public sealed record SetBooleanCommand(IExpression<bool> Value) : ICommand<bool>;
-public sealed record ParseJsonCommand(JsonExpression Source) : ICommand<JsonElement>;
-public sealed record FormatJsonCommand(JsonExpression Source) : ICommand<string>;
+public sealed record ParseJsonCommand(IExpression<JsonElement> Source) : ICommand<JsonElement>;
+public sealed record FormatJsonCommand(IExpression<JsonElement> Source) : ICommand<string>;
 
-public sealed class SetTextCommandBinder(LanguageSnapshot language) :
-    FrameCommandBinder<SetTextCommand, string, SetText>
+public sealed class SetTextCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<SetTextCommand, string, SetText>(language, values)
 {
     protected override SetTextCommand Bind(BoundCommand command) =>
-        new(TextExpression.Bind(command[SemanticRole.Theme], language));
+        new(Context(command).RequireText(SemanticRole.Theme));
 }
 
-public sealed class SetJsonCommandBinder :
-    FrameCommandBinder<SetJsonCommand, JsonElement, SetJson>
+public sealed class SetJsonCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<SetJsonCommand, JsonElement, SetJson>(language, values)
 {
     protected override SetJsonCommand Bind(BoundCommand command) =>
-        new(new JsonExpression(command[SemanticRole.Theme]));
+        new(Context(command).Require<JsonElement>(SemanticRole.Theme));
 }
 
-public sealed class SetNumberCommandBinder :
-    FrameCommandBinder<SetNumberCommand, decimal, SetNumber>
+public sealed class SetNumberCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<SetNumberCommand, decimal, SetNumber>(language, values)
 {
     protected override SetNumberCommand Bind(BoundCommand command) =>
-        new(new ScalarExpression<decimal>(
-            command[SemanticRole.Theme],
-            new DecimalValueConverter()));
+        new(Context(command).Require<decimal>(SemanticRole.Theme));
 }
 
-public sealed class SetBooleanCommandBinder :
-    FrameCommandBinder<SetBooleanCommand, bool, SetBoolean>
+public sealed class SetBooleanCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<SetBooleanCommand, bool, SetBoolean>(language, values)
 {
     protected override SetBooleanCommand Bind(BoundCommand command) =>
-        new(new ScalarExpression<bool>(
-            command[SemanticRole.Theme],
-            new BooleanValueConverter()));
+        new(Context(command).Require<bool>(SemanticRole.Theme));
 }
 
-public sealed class ParseJsonCommandBinder :
-    FrameCommandBinder<ParseJsonCommand, JsonElement, ParseJson>
+public sealed class ParseJsonCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<ParseJsonCommand, JsonElement, ParseJson>(language, values)
 {
     protected override ParseJsonCommand Bind(BoundCommand command) =>
-        new(new JsonExpression(command[SemanticRole.Source]));
+        new(Context(command).Require<JsonElement>(SemanticRole.Source));
 }
 
-public sealed class FormatJsonCommandBinder :
-    FrameCommandBinder<FormatJsonCommand, string, FormatJson>
+public sealed class FormatJsonCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<FormatJsonCommand, string, FormatJson>(language, values)
 {
     protected override FormatJsonCommand Bind(BoundCommand command) =>
-        new(new JsonExpression(command[SemanticRole.Source]));
+        new(Context(command).Require<JsonElement>(SemanticRole.Source));
 }
 
 public sealed class SetTextCommandHandler(IVariableResolver variables)
