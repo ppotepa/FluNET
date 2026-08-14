@@ -13,16 +13,16 @@ public sealed class ExpressionLanguageContractTests
         ExpressionSyntax syntax = ExpressionSyntaxParser.Parse(
             "1 + 2 * 3 == 7 AND NOT false");
 
-        BinaryExpressionSyntax conjunction =
-            Assert.IsInstanceOf<BinaryExpressionSyntax>(syntax);
-        BinaryExpressionSyntax equality =
-            Assert.IsInstanceOf<BinaryExpressionSyntax>(conjunction.Left);
-        BinaryExpressionSyntax addition =
-            Assert.IsInstanceOf<BinaryExpressionSyntax>(equality.Left);
-        BinaryExpressionSyntax multiplication =
-            Assert.IsInstanceOf<BinaryExpressionSyntax>(addition.Right);
-        UnaryExpressionSyntax negation =
-            Assert.IsInstanceOf<UnaryExpressionSyntax>(conjunction.Right);
+        Assert.That(syntax, Is.TypeOf<BinaryExpressionSyntax>());
+        BinaryExpressionSyntax conjunction = (BinaryExpressionSyntax)syntax;
+        Assert.That(conjunction.Left, Is.TypeOf<BinaryExpressionSyntax>());
+        BinaryExpressionSyntax equality = (BinaryExpressionSyntax)conjunction.Left;
+        Assert.That(equality.Left, Is.TypeOf<BinaryExpressionSyntax>());
+        BinaryExpressionSyntax addition = (BinaryExpressionSyntax)equality.Left;
+        Assert.That(addition.Right, Is.TypeOf<BinaryExpressionSyntax>());
+        BinaryExpressionSyntax multiplication = (BinaryExpressionSyntax)addition.Right;
+        Assert.That(conjunction.Right, Is.TypeOf<UnaryExpressionSyntax>());
+        UnaryExpressionSyntax negation = (UnaryExpressionSyntax)conjunction.Right;
 
         Assert.Multiple(() =>
         {
@@ -37,11 +37,14 @@ public sealed class ExpressionLanguageContractTests
     [Test]
     public void ParserBuildsCollectionPropertyAndIndexNodes()
     {
-        ObjectExpressionSyntax value = Assert.IsInstanceOf<ObjectExpressionSyntax>(
-            ExpressionSyntaxParser.Parse(
-                "OBJECT(name: 'Ada', flags: LIST(true, false))"));
-        IndexExpressionSyntax access = Assert.IsInstanceOf<IndexExpressionSyntax>(
-            ExpressionSyntaxParser.Parse("[user].roles[0]"));
+        ExpressionSyntax objectSyntax = ExpressionSyntaxParser.Parse(
+            "OBJECT(name: 'Ada', flags: LIST(true, false))");
+        ExpressionSyntax accessSyntax = ExpressionSyntaxParser.Parse("[user].roles[0]");
+
+        Assert.That(objectSyntax, Is.TypeOf<ObjectExpressionSyntax>());
+        Assert.That(accessSyntax, Is.TypeOf<IndexExpressionSyntax>());
+        ObjectExpressionSyntax value = (ObjectExpressionSyntax)objectSyntax;
+        IndexExpressionSyntax access = (IndexExpressionSyntax)accessSyntax;
 
         Assert.Multiple(() =>
         {
