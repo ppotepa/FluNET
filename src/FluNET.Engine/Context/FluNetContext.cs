@@ -91,6 +91,7 @@ namespace FluNET.Context
             runtime.RegisterRoutes(services);
             services.AddTransient<CommandDispatcher>();
             services.AddTransient<TypedProgramCompiler>();
+            services.AddTransient<TypedProgramTypeValidator>();
             services.AddSingleton<ExecutionPlanner>();
             services.AddTransient<ExecutionPlanExecutor>();
 
