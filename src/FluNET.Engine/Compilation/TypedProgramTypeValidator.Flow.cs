@@ -20,35 +20,20 @@ public sealed partial class TypedProgramTypeValidator
             foreach (BoundArgument argument in command.Arguments.Values.Where(argument =>
                 argument.Slot.Direction == SlotDirection.Input && argument.IsPresent))
             {
-                foreach (PromptToken token in argument.Tokens.Where(token =>
-                    token.Kind == PromptTokenKind.Variable))
+                foreach (PromptToken token in argument.Tokens)
                 {
-                    string name = VariableName(token);
-                    if (producers.TryGetValue(name, out Producer? producer))
+                    if (token.Kind == PromptTokenKind.Variable)
                     {
-                        if (producer.Stage > stages[index])
-                        {
-                            throw new CommandCompilationException(
-                                "FLN150",
-                                $"Variable '[{name}]' is produced in the same parallel stage.",
-                                token.Span);
-                        }
-                        if (!producer.IsRuntimeTyped)
-                        {
-                            ValidateType(
-                                name,
-                                producer.Type,
-                                argument.Slot.ValueTypeSymbol,
-                                token.Span);
-                        }
+                        string name = VariableName(token);
+                        ValidateInputVariable(name, token.Text, argument.Slot.ValueTypeSymbol,
+                            token.Span, stages[index], producers);
                         continue;
                     }
 
-                    ValidateHostVariable(
-                        name,
-                        token.Text,
-                        argument.Slot.ValueTypeSymbol,
-                        token.Span);
+                    foreach (string name in InterpolationVariableNames(token.Text))
+                    {
+                        ValidateInterpolationVariable(name, token.Span, stages[index], producers);
+                    }
                 }
             }
 
@@ -56,13 +41,68 @@ public sealed partial class TypedProgramTypeValidator
 
             foreach (OutputProducer output in OutputVariables(command))
             {
-                // A host-bound output may intentionally shadow a prior value
-                // (for example LOAD [config] after a text host binding).
                 producers[output.Name] = new Producer(
                     output.Type,
                     stages[index],
                     output.IsRuntimeTyped);
             }
+        }
+    }
+
+    private void ValidateInputVariable(
+        string name,
+        string reference,
+        TypeSymbol expectedType,
+        SourceSpan span,
+        int stage,
+        IReadOnlyDictionary<string, Producer> producers)
+    {
+        if (producers.TryGetValue(name, out Producer? producer))
+        {
+            if (producer.Stage > stage)
+            {
+                throw new CommandCompilationException(
+                    "FLN150",
+                    $"Variable '[{name}]' is produced in a later dependency stage.",
+                    span);
+            }
+            if (!producer.IsRuntimeTyped)
+            {
+                ValidateType(name, producer.Type, expectedType, span);
+            }
+            return;
+        }
+        ValidateHostVariable(name, reference, expectedType, span);
+    }
+
+    private void ValidateInterpolationVariable(
+        string name,
+        SourceSpan span,
+        int stage,
+        IReadOnlyDictionary<string, Producer> producers)
+    {
+        if (producers.TryGetValue(name, out Producer? producer))
+        {
+            if (producer.Stage > stage)
+            {
+                throw new CommandCompilationException(
+                    "FLN150",
+                    $"Interpolation variable '[{name}]' is produced in a later dependency stage.",
+                    span);
+            }
+            return;
+        }
+        if (_variables is null)
+        {
+            return;
+        }
+        string reference = $"[{name}]";
+        if (!_variables.IsRegistered(reference) || _variables.Resolve<object>(reference) is null)
+        {
+            throw new CommandCompilationException(
+                "FLN150",
+                $"Interpolation variable '[{name}]' has no producer and is not registered by the host.",
+                span);
         }
     }
 
@@ -78,19 +118,12 @@ public sealed partial class TypedProgramTypeValidator
         }
         if (!_variables.IsRegistered(reference))
         {
-            throw new CommandCompilationException(
-                "FLN150",
-                $"Variable [{name}] not found.",
-                span);
+            throw new CommandCompilationException("FLN150", $"Variable [{name}] not found.", span);
         }
-
         object? hostValue = _variables.Resolve<object>(reference);
         if (hostValue is null)
         {
-            throw new CommandCompilationException(
-                "FLN150",
-                $"Host variable '[{name}]' has no runtime value.",
-                span);
+            throw new CommandCompilationException("FLN150", $"Host variable '[{name}]' has no runtime value.", span);
         }
 
         TypeSymbol hostType;
@@ -119,10 +152,8 @@ public sealed partial class TypedProgramTypeValidator
         {
             if (modifier.Values.Count == 0)
             {
-                throw new CommandCompilationException(
-                    "FLN154",
-                    "IF must be followed by a condition expression.",
-                    modifier.Introducer.Span);
+                throw new CommandCompilationException("FLN154",
+                    "IF must be followed by a condition expression.", modifier.Introducer.Span);
             }
 
             string source = string.Join(" ", modifier.Values.Select(token => token.Text));
@@ -134,11 +165,8 @@ public sealed partial class TypedProgramTypeValidator
             catch (Exception exception) when (
                 exception is FormatException or NotSupportedException or InvalidOperationException)
             {
-                throw new CommandCompilationException(
-                    "FLN154",
-                    $"Invalid condition expression: {exception.Message}",
-                    modifier.Values[0].Span,
-                    exception);
+                throw new CommandCompilationException("FLN154",
+                    $"Invalid condition expression: {exception.Message}", modifier.Values[0].Span, exception);
             }
 
             foreach (string name in condition.VariableReferences)
@@ -148,28 +176,45 @@ public sealed partial class TypedProgramTypeValidator
                 {
                     if (producer.Stage > stage)
                     {
-                        throw new CommandCompilationException(
-                            "FLN150",
-                            $"Condition variable '[{name}]' is produced in the same parallel stage.",
-                            span);
+                        throw new CommandCompilationException("FLN150",
+                            $"Condition variable '[{name}]' is produced in a later dependency stage.", span);
                     }
                     continue;
                 }
-
-                if (_variables is null)
-                {
-                    continue;
-                }
+                if (_variables is null) continue;
                 string reference = $"[{name}]";
-                if (!_variables.IsRegistered(reference) ||
-                    _variables.Resolve<object>(reference) is null)
+                if (!_variables.IsRegistered(reference) || _variables.Resolve<object>(reference) is null)
                 {
-                    throw new CommandCompilationException(
-                        "FLN150",
-                        $"Condition variable '[{name}]' has no producer and is not registered by the host.",
-                        span);
+                    throw new CommandCompilationException("FLN150",
+                        $"Condition variable '[{name}]' has no producer and is not registered by the host.", span);
                 }
             }
+        }
+    }
+
+    private static IEnumerable<string> InterpolationVariableNames(string text)
+    {
+        int cursor = 0;
+        while (cursor < text.Length)
+        {
+            int open = text.IndexOf('{', cursor);
+            if (open < 0) yield break;
+            if (open + 1 < text.Length && text[open + 1] == '{')
+            {
+                cursor = open + 2;
+                continue;
+            }
+            int close = text.IndexOf('}', open + 1);
+            if (close < 0) yield break;
+            string expression = text[(open + 1)..close].Trim();
+            int end = expression.IndexOfAny(['.', '[']);
+            string root = (end < 0 ? expression : expression[..end]).Trim();
+            if (root.Length > 0 && (char.IsLetter(root[0]) || root[0] == '_') &&
+                root.Skip(1).All(character => char.IsLetterOrDigit(character) || character == '_'))
+            {
+                yield return root;
+            }
+            cursor = close + 1;
         }
     }
 
@@ -178,28 +223,18 @@ public sealed partial class TypedProgramTypeValidator
         foreach (BoundArgument argument in command.Arguments.Values.Where(argument =>
             argument.Slot.Direction == SlotDirection.Output && argument.IsPresent))
         {
-            foreach (PromptToken token in argument.Tokens.Where(token =>
-                token.Kind == PromptTokenKind.Variable))
+            foreach (PromptToken token in argument.Tokens.Where(token => token.Kind == PromptTokenKind.Variable))
             {
                 string[] destructured = DestructuredNames(token.Text);
                 if (destructured.Length > 0)
                 {
                     foreach (string name in destructured)
                     {
-                        yield return new OutputProducer(
-                            name,
-                            argument.Slot.ValueTypeSymbol,
-                            token.Span,
-                            IsRuntimeTyped: true);
+                        yield return new OutputProducer(name, argument.Slot.ValueTypeSymbol, token.Span, true);
                     }
                     continue;
                 }
-
-                yield return new OutputProducer(
-                    VariableName(token),
-                    argument.Slot.ValueTypeSymbol,
-                    token.Span,
-                    IsRuntimeTyped: false);
+                yield return new OutputProducer(VariableName(token), argument.Slot.ValueTypeSymbol, token.Span, false);
             }
         }
     }
@@ -211,9 +246,8 @@ public sealed partial class TypedProgramTypeValidator
             !normalized.StartsWith("[{", StringComparison.Ordinal) ||
             !normalized.EndsWith("}]", StringComparison.Ordinal))
         {
-            return Array.Empty<string>();
+            return [];
         }
-
         return normalized[2..^2]
             .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Where(name => !string.IsNullOrWhiteSpace(name))
@@ -225,14 +259,6 @@ public sealed partial class TypedProgramTypeValidator
             ? token.Text[1..^1]
             : token.Text;
 
-    private sealed record OutputProducer(
-        string Name,
-        TypeSymbol Type,
-        SourceSpan Span,
-        bool IsRuntimeTyped);
-
-    private sealed record Producer(
-        TypeSymbol Type,
-        int Stage,
-        bool IsRuntimeTyped = false);
+    private sealed record OutputProducer(string Name, TypeSymbol Type, SourceSpan Span, bool IsRuntimeTyped);
+    private sealed record Producer(TypeSymbol Type, int Stage, bool IsRuntimeTyped = false);
 }

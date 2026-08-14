@@ -7,8 +7,9 @@ using FluNET.Prompt;
 namespace FluNET.Compilation.Dependencies;
 
 /// <summary>
-/// Derives orchestration dependencies from typed semantic inputs, explicit
-/// connectors, conditions, and conservative effect metadata.
+/// Derives orchestration dependencies from semantic inputs, explicit connectors,
+/// conditions and conservative effect metadata. It rejects ambiguous automatic
+/// multi-writer programs before an execution plan can be created.
 /// </summary>
 public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
 {
@@ -66,8 +67,7 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
             DependencyNode node = nodes[index];
             if (node.Metadata.Concurrency != ConcurrencyPolicy.ParallelSafe)
             {
-                if (lastOrderedEffect is int previous &&
-                    !explicitParallel.Contains((previous, index)))
+                if (lastOrderedEffect is int previous && !explicitParallel.Contains((previous, index)))
                 {
                     Add(edges, new DependencyEdge(previous, index, DependencyKind.Effect));
                     trace?.Add(new InferenceDecision(InferenceKind.Scheduling,
@@ -79,11 +79,38 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
 
             foreach (string output in OutputVariables(command))
             {
+                if (producers.TryGetValue(output, out int previousProducer) &&
+                    !HasPath(edges, previousProducer, index))
+                {
+                    throw new CommandCompilationException(
+                        "FLN153",
+                        $"Variable '[{output}]' has multiple producers that may execute concurrently. " +
+                        "Add an explicit dependency or use distinct output names.",
+                        command.Syntax.Span);
+                }
                 producers[output] = index;
             }
         }
 
         return new DependencyGraph(program, syntax, nodes, edges);
+    }
+
+    private static bool HasPath(IReadOnlyCollection<DependencyEdge> edges, int from, int to)
+    {
+        if (from == to) return true;
+        HashSet<int> visited = [from];
+        Queue<int> pending = new();
+        pending.Enqueue(from);
+        while (pending.Count > 0)
+        {
+            int current = pending.Dequeue();
+            foreach (int next in edges.Where(edge => edge.From == current).Select(edge => edge.To))
+            {
+                if (next == to) return true;
+                if (visited.Add(next)) pending.Enqueue(next);
+            }
+        }
+        return false;
     }
 
     private static IEnumerable<string> InputVariables(BoundCommand command)

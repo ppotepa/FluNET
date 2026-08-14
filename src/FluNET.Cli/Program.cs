@@ -2,10 +2,12 @@ using System.Text.Json;
 using System.Runtime.InteropServices;
 using FluNET;
 using FluNET.Capabilities;
+using FluNET.Compilation;
 using FluNET.Context;
 using FluNET.Execution;
 using FluNET.Language;
 using FluNET.Prompt;
+using FluNET.Tooling;
 using Microsoft.Extensions.DependencyInjection;
 
 return await FluNetCli.RunAsync(args);
@@ -14,6 +16,11 @@ internal static class FluNetCli
 {
     public static async Task<int> RunAsync(string[] args)
     {
+        if (args.Length > 0 && IsSurfaceTool(args[0]))
+        {
+            return await RunSurfaceToolAsync(args);
+        }
+
         CliOptions options;
         try
         {
@@ -108,6 +115,137 @@ internal static class FluNetCli
         }
     }
 
+    private static bool IsSurfaceTool(string command) =>
+        command.Equals("check", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("fmt", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("explain", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("graph", StringComparison.OrdinalIgnoreCase) ||
+        command.Equals("run", StringComparison.OrdinalIgnoreCase);
+
+    private static async Task<int> RunSurfaceToolAsync(IReadOnlyList<string> args)
+    {
+        string command = args[0].ToLowerInvariant();
+        string source;
+        try
+        {
+            source = await ReadSurfaceSourceAsync(args.Count > 1 ? args[1] : null);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            Console.Error.WriteLine(exception.Message);
+            return 66;
+        }
+
+        if (command == "fmt")
+        {
+            try
+            {
+                Console.WriteLine(new SurfaceFormatter().Format(source));
+                return 0;
+            }
+            catch (FormatException exception)
+            {
+                Console.Error.WriteLine(exception.Message);
+                return 2;
+            }
+        }
+
+        string[] roots = [Directory.GetCurrentDirectory()];
+        using FluNETContext context = SurfaceCompilationExtensions.CreateSurfaceContext(services =>
+            services.AddSingleton<IExecutionPolicy>(new NetworkOpenFileRestrictedPolicy(roots)));
+        SurfaceCompiler compiler = context.GetSurfaceCompiler();
+
+        if (command == "check")
+        {
+            SurfaceCompilationResult result = new SurfaceCheckService(compiler).Check(source);
+            if (result.IsValid)
+            {
+                Console.WriteLine($"Valid ({result.Plan!.Steps.Count} step(s), " +
+                    $"{result.Lowering.InferenceTrace.Items.Count} inference decision(s)).");
+                return 0;
+            }
+            PrintSurfaceDiagnostics(result);
+            return 3;
+        }
+
+        if (command == "explain")
+        {
+            SurfaceExplanation explanation = new SurfaceExplainService(compiler).Explain(source);
+            Console.WriteLine(explanation.Text);
+            return explanation.Compilation.IsValid ? 0 : 3;
+        }
+
+        if (command == "graph")
+        {
+            SurfaceCompilationResult result = compiler.Compile(new FluNET.Prompt.Surface.SourceDocument(source));
+            if (!result.IsValid)
+            {
+                PrintSurfaceDiagnostics(result);
+                return 3;
+            }
+            Console.WriteLine(new SurfaceGraphExporter().ToDot(result));
+            return 0;
+        }
+
+        using CancellationTokenSource cancellation = new();
+        ConsoleCancelEventHandler handler = (_, eventArgs) =>
+        {
+            eventArgs.Cancel = true;
+            cancellation.Cancel();
+        };
+        Console.CancelKeyPress += handler;
+        try
+        {
+            SurfaceExecutionResult execution = await context.ExecuteSurfaceAsync(source, cancellation.Token);
+            if (!execution.Compilation.IsValid)
+            {
+                PrintSurfaceDiagnostics(execution.Compilation);
+                return 3;
+            }
+            if (execution.Error is not null)
+            {
+                Console.Error.WriteLine(execution.Error.Message);
+                return execution.Error is OperationCanceledException ? 130 : 5;
+            }
+            bool lastStepWritesItsOwnText = execution.Compilation.Plan?.Steps.LastOrDefault()?.Command.Frame.Id ==
+                new FrameId("core.say.text");
+            if (execution.Result is not null && !lastStepWritesItsOwnText)
+            {
+                Console.WriteLine(FormatResult(execution.Result));
+            }
+            return 0;
+        }
+        finally
+        {
+            Console.CancelKeyPress -= handler;
+        }
+    }
+
+    private static async Task<string> ReadSurfaceSourceAsync(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || path == "-")
+        {
+            if (!Console.IsInputRedirected)
+            {
+                throw new ArgumentException("A source file or redirected stdin is required.");
+            }
+            return await Console.In.ReadToEndAsync();
+        }
+        return await File.ReadAllTextAsync(path);
+    }
+
+    private static void PrintSurfaceDiagnostics(SurfaceCompilationResult result)
+    {
+        foreach (var diagnostic in result.Lowering.Diagnostics)
+        {
+            Console.Error.WriteLine($"{diagnostic.Code}: {diagnostic.Message}");
+        }
+        foreach (CompilationDiagnostic diagnostic in result.Diagnostics)
+        {
+            Console.Error.WriteLine($"{diagnostic.Code} [{diagnostic.Phase}]: {diagnostic.Message}");
+        }
+    }
+
     private static async Task<int> RunInteractiveAsync(CliOptions options)
     {
         string[] roots = options.Roots.Count == 0
@@ -191,9 +329,9 @@ internal static class FluNetCli
                 Console.WriteLine("Enter a FluNET prompt to execute it.");
                 Console.WriteLine(":begin            Start a multiline prompt block.");
                 Console.WriteLine(":end              Execute the current block.");
-                Console.WriteLine(":cancel            Discard the current block.");
+                Console.WriteLine(":cancel           Discard the current block.");
                 Console.WriteLine("Multiline clipboard pastes are detected automatically.");
-                Console.WriteLine(":analyze PROMPT  Validate without executing.");
+                Console.WriteLine(":analyze PROMPT   Validate without executing.");
                 Console.WriteLine(":quit             Exit the session.");
                 continue;
             }
@@ -252,9 +390,14 @@ internal static class FluNetCli
               flunet [options] -- "PROMPT"
               echo "PROMPT" | flunet [options]
               flunet [options]                 Interactive session
+              flunet check FILE                Compile compact source without effects
+              flunet fmt FILE                  Format compact source to stdout
+              flunet explain FILE              Show inference, lowering and plan
+              flunet graph FILE                Emit dependency DAG as Graphviz DOT
+              flunet run FILE                  Run compact source through the canonical executor
 
             Options:
-              --analyze          Parse and validate without executing.
+              --analyze          Parse and validate canonical syntax without executing.
               --root PATH        Allow file access under PATH (repeatable).
                                  Defaults to the current directory.
               --host HOST        Restrict HTTP/HTTPS access to HOST (repeatable).
@@ -266,6 +409,9 @@ internal static class FluNetCli
               flunet --analyze -- "GET [text] FROM {input.txt}"
               flunet --root ./data -- "GET [text] FROM {./data/input.txt}."
               flunet --host example.com -- "DOWNLOAD [file] FROM {https://example.com/a.txt} TO {a.txt}."
+              flunet check program.fln
+              flunet explain program.fln
+              flunet run program.fln
             """);
     }
 

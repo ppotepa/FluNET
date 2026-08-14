@@ -8,7 +8,6 @@ using System.Collections.ObjectModel;
 
 namespace FluNET.Compilation;
 
-/// <summary>The explicit stages of side-effect-free FluNET compilation.</summary>
 public enum CompilationPhase
 {
     Parse = 0,
@@ -19,15 +18,8 @@ public enum CompilationPhase
     TypeCheck = 5
 }
 
-/// <summary>Severity attached to a compiler diagnostic.</summary>
-public enum CompilationDiagnosticSeverity
-{
-    Info,
-    Warning,
-    Error
-}
+public enum CompilationDiagnosticSeverity { Info, Warning, Error }
 
-/// <summary>A stable, source-aware compiler diagnostic.</summary>
 public sealed record CompilationDiagnostic(
     string Code,
     CompilationPhase Phase,
@@ -35,7 +27,6 @@ public sealed record CompilationDiagnostic(
     string Message,
     SourceSpan Span);
 
-/// <summary>Stable diagnostic codes emitted after parsing.</summary>
 public static class CompilationDiagnosticCodes
 {
     public const string ParseFailure = "FLN005";
@@ -52,58 +43,25 @@ public static class CompilationDiagnosticCodes
     public const string FrameMismatch = "FLN134";
 }
 
-/// <summary>
-/// Ordered collection of compiler diagnostics. The bag is append-only from a
-/// compilation consumer's point of view and preserves source/phase order.
-/// </summary>
 public sealed class DiagnosticBag : IReadOnlyList<CompilationDiagnostic>
 {
     private readonly List<CompilationDiagnostic> _diagnostics = [];
-
     public int Count => _diagnostics.Count;
     public CompilationDiagnostic this[int index] => _diagnostics[index];
-    public bool HasErrors => _diagnostics.Any(diagnostic =>
-        diagnostic.Severity == CompilationDiagnosticSeverity.Error);
-
-    public void Add(CompilationDiagnostic diagnostic)
-    {
-        ArgumentNullException.ThrowIfNull(diagnostic);
-        _diagnostics.Add(diagnostic);
-    }
-
+    public bool HasErrors => _diagnostics.Any(diagnostic => diagnostic.Severity == CompilationDiagnosticSeverity.Error);
+    public void Add(CompilationDiagnostic diagnostic) { ArgumentNullException.ThrowIfNull(diagnostic); _diagnostics.Add(diagnostic); }
     public void AddRange(IEnumerable<CompilationDiagnostic> diagnostics)
     {
         ArgumentNullException.ThrowIfNull(diagnostics);
-        foreach (CompilationDiagnostic diagnostic in diagnostics)
-        {
-            Add(diagnostic);
-        }
+        foreach (CompilationDiagnostic diagnostic in diagnostics) Add(diagnostic);
     }
-
-    public void Add(
-        string code,
-        CompilationPhase phase,
-        string message,
-        SourceSpan span,
+    public void Add(string code, CompilationPhase phase, string message, SourceSpan span,
         CompilationDiagnosticSeverity severity = CompilationDiagnosticSeverity.Error)
     {
-        if (string.IsNullOrWhiteSpace(code))
-        {
-            throw new ArgumentException("A diagnostic code is required.", nameof(code));
-        }
-        if (string.IsNullOrWhiteSpace(message))
-        {
-            throw new ArgumentException("A diagnostic message is required.", nameof(message));
-        }
-
-        _diagnostics.Add(new CompilationDiagnostic(
-            code.Trim().ToUpperInvariant(),
-            phase,
-            severity,
-            message,
-            span));
+        if (string.IsNullOrWhiteSpace(code)) throw new ArgumentException("A diagnostic code is required.", nameof(code));
+        if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("A diagnostic message is required.", nameof(message));
+        _diagnostics.Add(new CompilationDiagnostic(code.Trim().ToUpperInvariant(), phase, severity, message, span));
     }
-
     public IEnumerator<CompilationDiagnostic> GetEnumerator() => _diagnostics.GetEnumerator();
     IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }
@@ -112,31 +70,34 @@ public sealed class DiagnosticBag : IReadOnlyList<CompilationDiagnostic>
 public sealed record FluNetProgram
 {
     public FluNetProgram(ProcessedPrompt prompt)
+        : this(prompt, (prompt ?? throw new ArgumentNullException(nameof(prompt))).Syntax)
+    {
+    }
+
+    /// <summary>
+    /// Creates a program whose source carrier and canonical syntax are distinct.
+    /// Surface lowering uses this overload so compiler phases never reparse generated text.
+    /// </summary>
+    public FluNetProgram(ProcessedPrompt prompt, PromptSyntax syntax)
     {
         Prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
+        Syntax = syntax ?? throw new ArgumentNullException(nameof(syntax));
     }
 
     public ProcessedPrompt Prompt { get; }
     public string SourceText => Prompt.SourceText;
-    public PromptSyntax Syntax => Prompt.Syntax;
+    public PromptSyntax Syntax { get; }
 }
 
-/// <summary>Base node for the canonical semantically-bound program.</summary>
 public abstract record BoundStatement(SourceSpan Span);
 
-/// <summary>A bound command statement. Control statements can extend BoundStatement later.</summary>
 public sealed record BoundCommandStatement : BoundStatement
 {
     public BoundCommandStatement(BoundCommand command)
-        : base((command ?? throw new ArgumentNullException(nameof(command))).Syntax.Span)
-    {
-        Command = command;
-    }
-
+        : base((command ?? throw new ArgumentNullException(nameof(command))).Syntax.Span) => Command = command;
     public BoundCommand Command { get; }
 }
 
-/// <summary>The canonical bound representation consumed by validation and typed compilation.</summary>
 public sealed record BoundProgram
 {
     private readonly ReadOnlyCollection<BoundStatement> _statements;
@@ -145,29 +106,19 @@ public sealed record BoundProgram
     public BoundProgram(FluNetProgram program, IEnumerable<BoundStatement> statements)
     {
         Program = program ?? throw new ArgumentNullException(nameof(program));
-        BoundStatement[] snapshot = statements?.ToArray()
-            ?? throw new ArgumentNullException(nameof(statements));
+        BoundStatement[] snapshot = statements?.ToArray() ?? throw new ArgumentNullException(nameof(statements));
         _statements = Array.AsReadOnly(snapshot);
-        _commands = Array.AsReadOnly(snapshot
-            .OfType<BoundCommandStatement>()
-            .Select(statement => statement.Command)
-            .ToArray());
+        _commands = Array.AsReadOnly(snapshot.OfType<BoundCommandStatement>().Select(statement => statement.Command).ToArray());
     }
 
     public FluNetProgram Program { get; }
     public IReadOnlyList<BoundStatement> Statements => _statements;
     public IReadOnlyList<BoundCommand> Commands => _commands;
 
-    internal static BoundProgram FromCommands(
-        FluNetProgram program,
-        IEnumerable<BoundCommand> commands) =>
+    internal static BoundProgram FromCommands(FluNetProgram program, IEnumerable<BoundCommand> commands) =>
         new(program, commands.Select(command => new BoundCommandStatement(command)));
 }
 
-/// <summary>
-/// Source-compatible compilation view used by Engine.Analyze. Typed compilation
-/// is exposed additively through FluNETContext.AnalyzeTyped.
-/// </summary>
 public record CompilationResult : PromptAnalysis
 {
     public CompilationResult(
@@ -178,10 +129,8 @@ public record CompilationResult : PromptAnalysis
         BoundProgram? boundProgram,
         ExecutionPlan? plan,
         CompilationPhase? failedPhase)
-        : base(
-            (program ?? throw new ArgumentNullException(nameof(program))).Prompt,
-            validationResult ?? throw new ArgumentNullException(nameof(validationResult)),
-            sentence)
+        : base((program ?? throw new ArgumentNullException(nameof(program))).Prompt,
+            validationResult ?? throw new ArgumentNullException(nameof(validationResult)), sentence)
     {
         Program = program;
         DiagnosticBag = diagnosticBag ?? throw new ArgumentNullException(nameof(diagnosticBag));
@@ -196,13 +145,6 @@ public record CompilationResult : PromptAnalysis
     public DiagnosticBag DiagnosticBag { get; }
     public CompilationPhase? FailedPhase { get; }
 
-    /// <summary>
-    /// True when the source-compatible Analyze pipeline completed without errors.
-    /// Typed compilation/type-check validity is available from AnalyzeTyped.
-    /// </summary>
     public bool IsCompilationSuccessful =>
-        FailedPhase is null &&
-        !DiagnosticBag.HasErrors &&
-        ValidationResult.IsValid &&
-        Plan is not null;
+        FailedPhase is null && !DiagnosticBag.HasErrors && ValidationResult.IsValid && Plan is not null;
 }
