@@ -33,6 +33,7 @@ namespace FluNET.Context
             services.AddSingleton<IHttpTransport, HttpTransport>(); services.AddSingleton<ITextOutput, ConsoleTextOutput>(); services.AddSingleton<IEmailTransport, DiagnosticEmailTransport>();
             services.AddSingleton<IWorkflowStateStore, InMemoryWorkflowStateStore>(); services.AddSingleton<IWorkflowValueSerializer, JsonWorkflowValueSerializer>();
             services.AddSingleton<IExecutionResultCache, InMemoryExecutionResultCache>(); services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
+            services.AddSingleton<ISecretStore, EmptySecretStore>(); services.AddSingleton<ISecretAccessPolicy, DenyAllSecretAccessPolicy>();
             services.AddTransient<TokenFactory>(); services.AddTransient<TokenTreeFactory>(); services.AddTransient<WordFactory>(); services.AddTransient<Lexicon.Lexicon>(); services.AddTransient<SentenceValidator>(); services.AddSingleton<VerbRegistry>(); services.AddTransient<SentenceFactory>(); services.AddTransient<SentenceExecutor>(); services.AddTransient<LegacySentenceAdapter>();
             runtime.RegisterRoutes(services); services.AddTransient<CommandDispatcher>(); services.AddTransient<TypedProgramCompiler>(); services.AddTransient<TypedProgramTypeValidator>(); services.AddSingleton<ExecutionPlanner>(); services.AddTransient<ExecutionPlanExecutor>();
             services.AddPatternMatchers(); services.AddScoped<IVariableResolver, VariableResolver>(); services.AddTransient<Execution.ExecutionPipelineFactory>();
