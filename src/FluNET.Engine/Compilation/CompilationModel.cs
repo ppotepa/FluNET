@@ -11,12 +11,12 @@ namespace FluNET.Compilation;
 /// <summary>The explicit stages of side-effect-free FluNET compilation.</summary>
 public enum CompilationPhase
 {
-    Parse,
-    Bind,
-    Validate,
-    Compile,
-    TypeCheck,
-    Plan
+    Parse = 0,
+    Bind = 1,
+    Validate = 2,
+    Plan = 3,
+    Compile = 4,
+    TypeCheck = 5
 }
 
 /// <summary>Severity attached to a compiler diagnostic.</summary>
