@@ -19,7 +19,7 @@ public sealed class CommandCompilationStep(TypedProgramCompiler compiler) : IExe
             {
                 return ValueTask.FromResult(ExecutionResult.Failed(
                     ExecutionFailureKind.Binding,
-                    "FLN125",
+                    CompilationDiagnosticCodes.CompilationFailure,
                     "Typed compilation requires a bound program."));
             }
 
@@ -31,7 +31,7 @@ public sealed class CommandCompilationStep(TypedProgramCompiler compiler) : IExe
         {
             context.CompilationDiagnostics.Add(
                 exception.Code,
-                CompilationPhase.Bind,
+                CompilationPhase.Compile,
                 exception.Message,
                 exception.Span);
             return ValueTask.FromResult(ExecutionResult.Failed(
@@ -47,7 +47,7 @@ public sealed class CommandCompilationStep(TypedProgramCompiler compiler) : IExe
             string message = $"Invalid condition expression: {exception.Message}";
             context.CompilationDiagnostics.Add(
                 "FLN154",
-                CompilationPhase.Validate,
+                CompilationPhase.Compile,
                 message,
                 context.Prompt.Syntax.Span);
             return ValueTask.FromResult(ExecutionResult.Failed(
