@@ -9,15 +9,35 @@ using System.Text.Json;
 
 namespace FluNET.Execution.Commands;
 
-public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>(
-    LanguageSnapshot language,
-    IValueCodecRegistry values) : ICommandBinder<TCommand, TResult>
+public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>
+    : ICommandBinder<TCommand, TResult>
     where TCommand : class, ICommand<TResult>
     where TImplementation : class, IVerb
 {
-    private readonly ExpressionBinder _expressions = new(
-        language ?? throw new ArgumentNullException(nameof(language)),
-        values ?? throw new ArgumentNullException(nameof(values)));
+    private readonly ExpressionBinder _expressions;
+
+    /// <summary>Compatibility constructor for pre-0.4 extension binders.</summary>
+    protected FrameCommandBinder()
+        : this(StandardLanguage.CreateSnapshot())
+    {
+    }
+
+    /// <summary>Compatibility constructor using the built-in value registry.</summary>
+    protected FrameCommandBinder(LanguageSnapshot language)
+        : this(
+            language ?? throw new ArgumentNullException(nameof(language)),
+            ValueCodecRegistryFactory.CreateDefault(language))
+    {
+    }
+
+    protected FrameCommandBinder(
+        LanguageSnapshot language,
+        IValueCodecRegistry values)
+    {
+        _expressions = new ExpressionBinder(
+            language ?? throw new ArgumentNullException(nameof(language)),
+            values ?? throw new ArgumentNullException(nameof(values)));
+    }
 
     public TCommand? TryBind(BoundCommand command)
     {
