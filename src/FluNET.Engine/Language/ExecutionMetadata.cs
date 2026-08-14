@@ -2,13 +2,8 @@ namespace FluNET.Language;
 
 public enum ExecutionEffect { Pure, Read, Write, ExternalMutation }
 public enum ConcurrencyPolicy { ParallelSafe, Ordered, Exclusive }
-
 public sealed record FrameExecutionMetadata(FrameId FrameId, ExecutionEffect Effect, ConcurrencyPolicy Concurrency);
-
-public interface IExecutionMetadataProvider
-{
-    FrameExecutionMetadata Get(CommandFrameDescriptor frame);
-}
+public interface IExecutionMetadataProvider { FrameExecutionMetadata Get(CommandFrameDescriptor frame); }
 
 public sealed class DefaultExecutionMetadataProvider : IExecutionMetadataProvider
 {
@@ -26,6 +21,9 @@ public sealed class DefaultExecutionMetadataProvider : IExecutionMetadataProvide
             ["surface.data.take.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
             ["surface.data.project.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
             ["surface.data.default.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
+            ["surface.data.group.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
+            ["surface.data.sum.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
+            ["surface.data.join.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
             ["surface.flow.foreach.json"] = (ExecutionEffect.ExternalMutation, ConcurrencyPolicy.Ordered),
             ["core.set.text"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
             ["core.set.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
