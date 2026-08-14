@@ -15,7 +15,7 @@ public sealed class ExpressionBinder
     public ExpressionBinder(LanguageSnapshot language)
         : this(
             language ?? throw new ArgumentNullException(nameof(language)),
-            new ValueCodecRegistry(language, EmptyServiceProvider.Instance, [], []))
+            ValueCodecRegistryFactory.CreateDefault(language))
     {
     }
 
@@ -164,11 +164,5 @@ public sealed class ExpressionBinder
         PromptToken first = argument.Tokens[0];
         PromptToken last = argument.Tokens[^1];
         return SourceSpan.FromBounds(first.Span.Start, last.Span.End);
-    }
-
-    private sealed class EmptyServiceProvider : IServiceProvider
-    {
-        public static EmptyServiceProvider Instance { get; } = new();
-        public object? GetService(Type serviceType) => null;
     }
 }
