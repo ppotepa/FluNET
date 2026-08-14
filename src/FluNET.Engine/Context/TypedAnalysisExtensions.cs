@@ -5,7 +5,7 @@ namespace FluNET.Context;
 
 /// <summary>
 /// Side-effect-free 0.4 analysis result layered on the source-compatible 0.3
-/// CompilationResult. Typed command compilation is part of validity here.
+/// CompilationResult. Typed command compilation and type checking determine validity.
 /// </summary>
 public sealed record TypedAnalysisResult(
     CompilationResult Analysis,
@@ -38,6 +38,7 @@ public static class TypedAnalysisExtensions
             TypedProgram typed = context
                 .GetService<TypedProgramCompiler>()
                 .Compile(analysis.BoundProgram);
+            context.GetService<TypedProgramTypeValidator>().Validate(typed);
             return new TypedAnalysisResult(analysis, typed, null);
         }
         catch (CommandCompilationException exception)
