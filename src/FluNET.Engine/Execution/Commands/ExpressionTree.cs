@@ -64,6 +64,21 @@ public sealed class VariableExpression<TValue>(string reference, IValueCodec<TVa
         {
             return typed;
         }
+        if (value is IConvertible && typeof(IConvertible).IsAssignableFrom(typeof(TValue)))
+        {
+            try
+            {
+                return (TValue)Convert.ChangeType(
+                    value,
+                    typeof(TValue),
+                    System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (Exception exception) when (
+                exception is InvalidCastException or FormatException or OverflowException)
+            {
+                // Preserve the existing diagnostic below when conversion fails.
+            }
+        }
         return codec is not null
             ? codec.Decode(value)
             : throw new InvalidCastException(

@@ -105,6 +105,7 @@ internal static class ExpressionScanner
             }
 
             while (index < source.Length && !char.IsWhiteSpace(source[index]) &&
+                source[index] is not '[' and not ']' &&
                 source[index] is not '(' and not ')' and not ',' and not '.' and not ':' and
                 not '+' and not '-' and not '*' and not '/' and not '<' and not '>' and not '!' and not '=')
             {

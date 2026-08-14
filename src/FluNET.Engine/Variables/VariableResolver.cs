@@ -50,7 +50,17 @@ namespace FluNET.Variables
                 throw new ArgumentNullException(nameof(value));
             }
 
-            TypeSymbol type = _language.Types.Get(value.GetType());
+            TypeSymbol type;
+            try
+            {
+                type = _language.Types.Get(value.GetType());
+            }
+            catch (LanguageDefinitionException)
+            {
+                // Compatibility hosts may register arbitrary object graphs.
+                // Keep them as the language's structural object value.
+                type = _language.Types.Object;
+            }
             VariableSymbol symbol = new(NormalizeName(name), type, -1);
             _store.Set(symbol, value, VariableScopeKind.Workflow);
         }
@@ -62,10 +72,15 @@ namespace FluNET.Variables
         {
             if (IsSimpleVariable(tokenValue, out string? varName))
             {
-                return _store.TryGet(varName!, out RuntimeValue? runtime) &&
-                    runtime!.Value is T typedValue
+                if (!_store.TryGet(varName!, out RuntimeValue? runtime) || runtime is null)
+                {
+                    return default;
+                }
+                return runtime.Value is T typedValue
                     ? typedValue
-                    : default;
+                    : IsNumericType(typeof(T)) && runtime.Value is IConvertible
+                        ? ConvertValue<T>(runtime.Value)
+                        : default;
             }
 
             if (IsJsonObject(tokenValue, out string? jsonProps) && jsonProps != null)
@@ -94,7 +109,8 @@ namespace FluNET.Variables
             if (variableMatcher.IsMatch(token))
             {
                 string extracted = variableMatcher.Extract(token);
-                if (!extracted.Contains('{') && !extracted.Contains('}'))
+                if (!extracted.Contains('{') && !extracted.Contains('}') &&
+                    extracted == extracted.Trim())
                 {
                     varName = extracted;
                     return true;
@@ -132,5 +148,29 @@ namespace FluNET.Variables
             string.IsNullOrWhiteSpace(name)
                 ? throw new ArgumentException("A variable name is required.", nameof(name))
                 : name.Trim().TrimStart('[').TrimEnd(']');
+
+        private static T? ConvertValue<T>(object value)
+        {
+            try
+            {
+                return (T?)Convert.ChangeType(
+                    value,
+                    typeof(T),
+                    System.Globalization.CultureInfo.InvariantCulture);
+            }
+            catch (Exception exception) when (
+                exception is InvalidCastException or FormatException or OverflowException)
+            {
+                return default;
+            }
+        }
+
+        private static bool IsNumericType(Type type) =>
+            type == typeof(byte) || type == typeof(sbyte) ||
+            type == typeof(short) || type == typeof(ushort) ||
+            type == typeof(int) || type == typeof(uint) ||
+            type == typeof(long) || type == typeof(ulong) ||
+            type == typeof(float) || type == typeof(double) ||
+            type == typeof(decimal);
     }
 }

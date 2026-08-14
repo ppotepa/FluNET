@@ -4,7 +4,7 @@ using FluNET.Tokens.Tree;
 namespace FluNET.Tests
 {
     [TestFixture]
-    public class Prompt
+    public class PromptTests
     {
         [SetUp]
         public void Setup()

@@ -166,6 +166,11 @@ namespace FluNET
 
             try
             {
+                string? parallelConflict = FindParallelWriteConflict(boundProgram, prompt.Syntax);
+                if (parallelConflict is not null)
+                {
+                    return PlanningFailure(program, boundProgram, diagnostics, prompt, parallelConflict);
+                }
                 ExecutionPlan plan = executionPlanner.Create(boundProgram.Commands, prompt.Syntax);
                 ISentence? compatibilitySentence = null;
                 if (boundProgram.Commands.All(command => command.Frame.HasLegacyVerbAdapter))
@@ -221,6 +226,40 @@ namespace FluNET
                 CompilationPhase.Plan);
         }
 
+        private static string? FindParallelWriteConflict(
+            BoundProgram program,
+            PromptSyntax syntax)
+        {
+            foreach (CommandLinkSyntax link in syntax.Links.Where(link =>
+                link.Kind == CommandLinkKind.Parallel))
+            {
+                if (link.PredecessorIndex >= program.Commands.Count ||
+                    link.SuccessorIndex >= program.Commands.Count)
+                {
+                    continue;
+                }
+
+                HashSet<string> left = OutputNames(program.Commands[link.PredecessorIndex]);
+                foreach (string name in OutputNames(program.Commands[link.SuccessorIndex]))
+                {
+                    if (left.Contains(name))
+                    {
+                        return $"Parallel commands {link.PredecessorIndex} and " +
+                            $"{link.SuccessorIndex} both write [{name}].";
+                    }
+                }
+            }
+            return null;
+        }
+
+        private static HashSet<string> OutputNames(BoundCommand command) =>
+            command.Arguments.Values
+                .Where(argument => argument.Slot.Direction == SlotDirection.Output)
+                .SelectMany(argument => argument.Tokens)
+                .Where(token => token.Kind == PromptTokenKind.Variable)
+                .Select(token => token.Text[1..^1].ToLowerInvariant())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
         /// <summary>
         /// Legacy synchronous API. It first validates/projects ISentence through
         /// LegacySentenceAdapter and then executes the same canonical pipeline as ExecuteAsync.
@@ -274,6 +313,11 @@ namespace FluNET
             prompt = prompt.WithGrammar(language.Grammar);
             ExecutionPipeline pipeline = _pipelineFactory.CreateStandardPipeline();
             var context = new Execution.ExecutionContext(prompt, workflowOptions);
+            LegacySentenceAdaptation compatibility = legacySentenceAdapter.Adapt(prompt);
+            if (compatibility.IsValid && RequiresCompatibilitySentence(prompt))
+            {
+                context.Sentence = compatibility.Sentence;
+            }
             return await pipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
         }
 
@@ -313,5 +357,11 @@ namespace FluNET
                     new SourceSpan(start, length));
             }
         }
+
+        private static bool RequiresCompatibilitySentence(ProcessedPrompt prompt) =>
+            prompt.Syntax.Commands.FirstOrDefault()?.Verb.Text.ToUpperInvariant() is
+                "GET" or "FETCH" or "RETRIEVE" or
+                "DOWNLOAD" or "PULL" or "GRAB" or "OBTAIN" or
+                "POST";
     }
 }

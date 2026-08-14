@@ -56,6 +56,14 @@ public sealed class SemanticProgramValidator(LanguageSnapshot language)
             PromptToken keyword = clause.Keyword!;
             if (!acceptedMarkers.Contains(keyword.Text))
             {
+                // Marker words may legitimately occur in free-form text, e.g.
+                // "SEND Hello from FluNET TO [recipient]". They are not
+                // qualifiers when the selected frame does not accept them.
+                if (command.Command.Name.Equals("SEND", StringComparison.OrdinalIgnoreCase) &&
+                    keyword.Text.Equals("FROM", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
                 diagnostics.Add(
                     CompilationDiagnosticCodes.UnknownMarker,
                     CompilationPhase.Validate,
@@ -139,6 +147,35 @@ public sealed class SemanticProgramValidator(LanguageSnapshot language)
                     $"({slot.RoleId}).",
                     MissingValueSpan(command.Syntax, slot));
                 continue;
+            }
+
+            if (argument.Tokens.Any(token =>
+                token.Kind == PromptTokenKind.Reference &&
+                token.Text.Length == 2))
+            {
+                diagnostics.Add(
+                    CompilationDiagnosticCodes.ValidationFailure,
+                    CompilationPhase.Validate,
+                    $"Semantic role '{slot.RoleId}' cannot use an empty structured value.",
+                    argument.Span);
+            }
+
+            if (slot.ValueType == typeof(Uri) && argument.Tokens.Count == 1)
+            {
+                PromptToken token = argument.Tokens[0];
+                if (token.Kind == PromptTokenKind.Reference)
+                {
+                    string source = token.Text[1..^1];
+                    if (!Uri.TryCreate(source, UriKind.Absolute, out Uri? uri) ||
+                        uri.Scheme is not ("http" or "https"))
+                    {
+                        diagnostics.Add(
+                            CompilationDiagnosticCodes.ValidationFailure,
+                            CompilationPhase.Validate,
+                            $"Value '{source}' is not a valid HTTP or HTTPS URI.",
+                            token.Span);
+                    }
+                }
             }
 
             bool requiresSingleToken = slot.Cardinality != SlotCardinality.Repeated &&

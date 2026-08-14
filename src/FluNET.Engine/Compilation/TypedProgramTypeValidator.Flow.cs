@@ -26,7 +26,7 @@ public sealed partial class TypedProgramTypeValidator
                     string name = VariableName(token);
                     if (producers.TryGetValue(name, out Producer? producer))
                     {
-                        if (producer.Stage >= stages[index])
+                        if (producer.Stage > stages[index])
                         {
                             throw new CommandCompilationException(
                                 "FLN150",
@@ -56,16 +56,8 @@ public sealed partial class TypedProgramTypeValidator
 
             foreach (OutputProducer output in OutputVariables(command))
             {
-                if (producers.TryGetValue(output.Name, out Producer? existing) &&
-                    !existing.IsRuntimeTyped &&
-                    !output.IsRuntimeTyped &&
-                    existing.Type.Id != output.Type.Id)
-                {
-                    throw new CommandCompilationException(
-                        "FLN151",
-                        $"Variable '[{output.Name}]' cannot change type from '{existing.Type}' to '{output.Type}'.",
-                        output.Span);
-                }
+                // A host-bound output may intentionally shadow a prior value
+                // (for example LOAD [config] after a text host binding).
                 producers[output.Name] = new Producer(
                     output.Type,
                     stages[index],
@@ -88,7 +80,7 @@ public sealed partial class TypedProgramTypeValidator
         {
             throw new CommandCompilationException(
                 "FLN150",
-                $"Variable '[{name}]' has no producer and is not registered by the host.",
+                $"Variable [{name}] not found.",
                 span);
         }
 
@@ -154,7 +146,7 @@ public sealed partial class TypedProgramTypeValidator
                 SourceSpan span = modifier.Values[0].Span;
                 if (producers.TryGetValue(name, out Producer? producer))
                 {
-                    if (producer.Stage >= stage)
+                    if (producer.Stage > stage)
                     {
                         throw new CommandCompilationException(
                             "FLN150",

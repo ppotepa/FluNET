@@ -65,11 +65,6 @@ public sealed partial class VariableStore
         RuntimeValue runtime = Validate(symbol, value);
         lock (_gate)
         {
-            if (TryGet(symbol.Name, out RuntimeValue? existing) && existing!.Type.Id != symbol.Type.Id)
-            {
-                throw new InvalidOperationException(
-                    $"Variable '{symbol.Name}' cannot change type from '{existing.Type}' to '{symbol.Type}'.");
-            }
             _values[Key(scope, Normalize(symbol.Name))] = runtime;
         }
     }
@@ -121,8 +116,17 @@ public sealed partial class VariableStore
     {
         ArgumentNullException.ThrowIfNull(symbol);
         ArgumentNullException.ThrowIfNull(value);
-        TypeSymbol actual = _language.Types.Get(value.GetType());
-        bool assignable = symbol.Type.Id == actual.Id || symbol.Type.IsAssignableFrom(actual);
+        TypeSymbol actual;
+        try
+        {
+            actual = _language.Types.Get(value.GetType());
+        }
+        catch (LanguageDefinitionException) when (symbol.Type.Id == BuiltInTypeIds.Object)
+        {
+            actual = symbol.Type;
+        }
+        bool assignable = symbol.Type.Id == BuiltInTypeIds.Object ||
+            symbol.Type.Id == actual.Id || symbol.Type.IsAssignableFrom(actual);
         if (!assignable)
         {
             throw new InvalidCastException(

@@ -29,7 +29,7 @@ public sealed record CommandRouteDescriptor
         Type resultType,
         Type binderType,
         Type handlerType)
-        : this(default, commandType, resultType, binderType, handlerType)
+        : this(default(FrameId), commandType, resultType, binderType, handlerType)
     {
         ImplementationType = implementationType ?? throw new ArgumentNullException(nameof(implementationType));
     }
