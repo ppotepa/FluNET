@@ -2,6 +2,7 @@ using FluNET.Capabilities;
 using FluNET.Context;
 using FluNET.Declarative.Reconciliation;
 using Microsoft.Extensions.DependencyInjection;
+using System.Text.Json;
 
 namespace FluNET.Tests.Declarative;
 
@@ -33,8 +34,8 @@ public sealed class ReconciliationObservationTests
     {
         JsonElement[] values =
         [
-            System.Text.Json.JsonSerializer.SerializeToElement(new { id = 1 }),
-            System.Text.Json.JsonSerializer.SerializeToElement(new { id = 1 })
+            JsonSerializer.SerializeToElement(new { id = 1 }),
+            JsonSerializer.SerializeToElement(new { id = 1 })
         ];
 
         Assert.Throws<FormatException>(() =>

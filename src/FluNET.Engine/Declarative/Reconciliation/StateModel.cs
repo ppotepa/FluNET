@@ -19,13 +19,23 @@ public sealed record ResourceIdentity
     public static ResourceIdentity Parse(string source)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(source);
-        string text = source.Trim();
-        if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri)) return new(uri.Scheme, uri.ToString());
+        string text = Unquote(source.Trim());
+        if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) && uri.Scheme is not "file")
+            return new(uri.Scheme, uri.ToString());
         int colon = text.IndexOf(':');
-        return colon > 0 ? new(text[..colon], text[(colon + 1)..]) : new("file", Path.GetFullPath(text));
+        bool windowsDrive = colon == 1 && char.IsLetter(text[0]) && text.Length > 2 && text[2] is '\\' or '/';
+        if (!windowsDrive && colon > 0)
+            return new(text[..colon], Unquote(text[(colon + 1)..].Trim()));
+        return new("file", Path.GetFullPath(text));
     }
 
     public override string ToString() => $"{Scheme}:{Value}";
+
+    private static string Unquote(string value) =>
+        value.Length >= 2 &&
+        ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\''))
+            ? value[1..^1]
+            : value;
 }
 
 public sealed record StateRecord(string Key, JsonElement Value, string Fingerprint)
