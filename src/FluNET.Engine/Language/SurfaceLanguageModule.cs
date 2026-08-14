@@ -11,11 +11,13 @@ public sealed class SurfaceLanguageModule : IFluNetModule
     public void Register(FluNetModuleBuilder module)
     {
         ArgumentNullException.ThrowIfNull(module);
-        module.Language.Module("flunet.surface").Type<SecretValue>("Secret");
-        module.ResourceDecoder<CsvResourceDecoder>().ResourceDecoder<XmlResourceDecoder>();
+        module.Language.Module("flunet.surface").Type<SecretValue>("Secret").Type<BinaryValue>("Binary").Type<ImageValue>("Image");
+        module.ResourceDecoder<CsvResourceDecoder>().ResourceDecoder<XmlResourceDecoder>().ResourceDecoder<BinaryResourceDecoder>().ResourceDecoder<ImageResourceDecoder>().ResourceEncoder<BinaryResourceEncoder>().ResourceEncoder<ImageResourceEncoder>();
         module.Command<LoadJsonGlobCommand, JsonElement[]>("LOADGLOB", "JsonGlob").FrameId("surface.load.glob.json").CommandId("flunet.surface.loadglob").Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output).Marked<string>(SemanticRole.Source, "FROM").BindWith<LoadJsonGlobCommandBinder>().HandleWith<LoadJsonGlobCommandHandler>();
         module.Command<LoadCsvCommand, JsonElement[]>("LOADCSV", "Csv").FrameId("surface.load.csv").CommandId("flunet.surface.loadcsv").Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output).Marked<string>(SemanticRole.Source, "FROM").BindWith<LoadCsvCommandBinder>().HandleWith<LoadCsvCommandHandler>();
         module.Command<LoadXmlCommand, JsonElement>("LOADXML", "Xml").FrameId("surface.load.xml").CommandId("flunet.surface.loadxml").Positional<JsonElement>(SemanticRole.Output, SlotDirection.Output).Marked<string>(SemanticRole.Source, "FROM").BindWith<LoadXmlCommandBinder>().HandleWith<LoadXmlCommandHandler>();
+        module.Command<LoadBinaryCommand, BinaryValue>("LOADBINARY", "Binary").FrameId("surface.load.binary").CommandId("flunet.surface.loadbinary").Positional<BinaryValue>(SemanticRole.Output, SlotDirection.Output).Marked<string>(SemanticRole.Source, "FROM").BindWith<LoadBinaryCommandBinder>().HandleWith<LoadBinaryCommandHandler>();
+        module.Command<LoadImageCommand, ImageValue>("LOADIMAGE", "Image").FrameId("surface.load.image").CommandId("flunet.surface.loadimage").Positional<ImageValue>(SemanticRole.Output, SlotDirection.Output).Marked<string>(SemanticRole.Source, "FROM").BindWith<LoadImageCommandBinder>().HandleWith<LoadImageCommandHandler>();
         module.Command<GetHttpJsonCommand, JsonElement>("GETHTTP", "Json").FrameId("surface.get.http.json").CommandId("flunet.surface.gethttp").Positional<JsonElement>(SemanticRole.Output, SlotDirection.Output).Marked<Uri>(SemanticRole.Source, "FROM").BindWith<GetHttpJsonCommandBinder>().HandleWith<GetHttpJsonCommandHandler>();
         module.Command<GetEnvironmentCommand, string>("GETENV", "Text").FrameId("surface.get.environment").CommandId("flunet.surface.getenv").Positional<string>(SemanticRole.Output, SlotDirection.Output).Marked<string>(SemanticRole.Source, "FROM").BindWith<GetEnvironmentCommandBinder>().HandleWith<GetEnvironmentCommandHandler>();
         module.Command<GetSecretCommand, SecretValue>("GETSECRET", "Secret").FrameId("surface.get.secret").CommandId("flunet.surface.getsecret").Positional<SecretValue>(SemanticRole.Output, SlotDirection.Output).Marked<string>(SemanticRole.Source, "FROM").BindWith<GetSecretCommandBinder>().HandleWith<GetSecretCommandHandler>();
@@ -31,5 +33,4 @@ public sealed class SurfaceLanguageModule : IFluNetModule
         module.Conversion<JsonElement, JsonElement[], JsonToJsonListConversion>();
     }
 }
-
 public static class SurfaceLanguage { public static FluNetRuntimeDefinition CreateRuntime() => new FluNetModuleBuilder().AddModule(new StandardLanguageModule()).AddModule(new SurfaceLanguageModule()).Build(); }
