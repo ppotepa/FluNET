@@ -6,7 +6,6 @@ public sealed record SurfaceProgramSyntax(
 
 public abstract record SurfaceStatementSyntax(SourceSpan Span);
 
-/// <summary>A compact/canonical command before inference and lowering.</summary>
 public sealed record SurfaceCommandSyntax(
     string Name,
     IReadOnlyList<SurfaceValueSyntax> Values,
@@ -16,7 +15,12 @@ public sealed record SurfaceCommandSyntax(
     public string NormalizedName => Name.ToUpperInvariant();
 }
 
-/// <summary>One source-level value. Its meaning is deliberately unresolved here.</summary>
+/// <summary>Lexically scoped compact FROM block.</summary>
+public sealed record SurfaceContextSyntax(
+    SurfaceValueSyntax BaseResource,
+    IReadOnlyList<SurfaceStatementSyntax> Statements,
+    SourceSpan Span) : SurfaceStatementSyntax(Span);
+
 public sealed record SurfaceValueSyntax(string Text, SourceSpan Span)
 {
     public string UnquotedText =>
