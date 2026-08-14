@@ -150,7 +150,9 @@ public sealed class SqlResourceObserver(ISqlQueryExecutor sql) : IResourceObserv
         string query = ((SqlResourceReference)descriptor.Reference).Query;
         IReadOnlyList<IReadOnlyDictionary<string, object?>> rows =
             await sql.QueryAsync(query, cancellationToken).ConfigureAwait(false);
-        JsonElement[] values = rows.Select(JsonSerializer.SerializeToElement).ToArray();
+        JsonElement[] values = rows
+            .Select(row => JsonSerializer.SerializeToElement(row))
+            .ToArray();
         return ResourceObservationSnapshot.Create(descriptor, request, values);
     }
 }
