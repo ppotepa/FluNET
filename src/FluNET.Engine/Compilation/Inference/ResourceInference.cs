@@ -10,23 +10,13 @@ public sealed class ResourceClassifier
         ArgumentNullException.ThrowIfNull(value);
         string text = value.UnquotedText.Trim();
         if (text.StartsWith("env:", StringComparison.OrdinalIgnoreCase))
-        {
             return new EnvironmentResourceReference(RequiredSuffix(text, "env:"));
-        }
         if (text.StartsWith("secret:", StringComparison.OrdinalIgnoreCase))
-        {
             return new SecretResourceReference(RequiredSuffix(text, "secret:"));
-        }
         if (text.StartsWith("sql:", StringComparison.OrdinalIgnoreCase))
-        {
-            string query = RequiredSuffix(text, "sql:").Trim('"', '\'');
-            return new SqlResourceReference(query);
-        }
+            return new SqlResourceReference(RequiredSuffix(text, "sql:").Trim('"', '\''));
         if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) && uri.Scheme is "http" or "https")
-        {
             return new HttpResourceReference(uri);
-        }
-
         return new FileResourceReference(text, !Path.IsPathRooted(text));
     }
 
@@ -44,12 +34,18 @@ public sealed class FormatInference
     public ResourceFormat Infer(ResourceReference reference) => reference switch
     {
         FileResourceReference file => FromExtension(Path.GetExtension(file.Path)),
-        HttpResourceReference http => FromExtension(Path.GetExtension(http.Uri.AbsolutePath)),
+        HttpResourceReference http => HttpFormat(http.Uri),
         EnvironmentResourceReference => ResourceFormat.Text,
         SecretResourceReference => ResourceFormat.Text,
         SqlResourceReference => ResourceFormat.Unknown,
         _ => ResourceFormat.Unknown
     };
+
+    private static ResourceFormat HttpFormat(Uri uri)
+    {
+        ResourceFormat extension = FromExtension(Path.GetExtension(uri.AbsolutePath));
+        return extension == ResourceFormat.Unknown ? ResourceFormat.Json : extension;
+    }
 
     private static ResourceFormat FromExtension(string extension) => extension.ToLowerInvariant() switch
     {
@@ -79,17 +75,19 @@ public sealed class VariableNameInference
     private static string PatternName(string pattern)
     {
         string? directory = Path.GetDirectoryName(pattern)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
-        string candidate = string.IsNullOrWhiteSpace(directory)
-            ? "items"
-            : Path.GetFileName(directory);
-        return Normalize(candidate);
+        return Normalize(string.IsNullOrWhiteSpace(directory) ? "items" : Path.GetFileName(directory));
     }
 
     private static string HttpName(Uri uri)
     {
-        string segment = uri.Segments.LastOrDefault()?.Trim('/') ?? string.Empty;
-        if (segment.Length == 0) return uri.Host.Split('.').FirstOrDefault() ?? "response";
-        return Path.GetFileNameWithoutExtension(segment);
+        string[] segments = uri.Segments.Select(segment => segment.Trim('/')).Where(segment => segment.Length > 0).ToArray();
+        if (segments.Length == 0) return uri.Host.Split('.').FirstOrDefault() ?? "response";
+        string last = Path.GetFileNameWithoutExtension(segments[^1]);
+        if (last.All(char.IsDigit) && segments.Length > 1)
+        {
+            last = Path.GetFileNameWithoutExtension(segments[^2]);
+        }
+        return last;
     }
 
     private static string Normalize(string value)

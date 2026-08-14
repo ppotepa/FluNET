@@ -23,11 +23,8 @@ public sealed class SurfaceLowerer
     private readonly InferenceEngine _inference;
 
     public SurfaceLowerer() : this(new InferenceEngine()) { }
-
-    public SurfaceLowerer(InferenceEngine inference)
-    {
+    public SurfaceLowerer(InferenceEngine inference) =>
         _inference = inference ?? throw new ArgumentNullException(nameof(inference));
-    }
 
     public LoweringResult Lower(
         SurfaceParseResult parse,
@@ -55,6 +52,7 @@ public sealed class SurfaceLowerer
             {
                 "SAY" => [LowerSay(command, grammar)],
                 "LOAD" => LowerLoad(command, grammar, language, trace, diagnostics),
+                "GET" => LowerGet(command, grammar, language, trace, diagnostics),
                 _ => []
             };
             if (lowered.Count == 0)
@@ -80,6 +78,79 @@ public sealed class SurfaceLowerer
 
         return new LoweringResult(parse.Document, parse.Program, new PromptSyntax(commands, links),
             new SourceMap(map), trace, diagnostics);
+    }
+
+    private IReadOnlyList<CommandSyntax> LowerGet(
+        SurfaceCommandSyntax command,
+        PromptGrammar grammar,
+        LanguageSnapshot language,
+        InferenceTrace trace,
+        ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        if (command.Values.Count == 0)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN230", "GET requires at least one resource.", command.Span));
+            return [];
+        }
+        if (command.Values.Count > 1 && command.Alias is not null)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN231", "AS can name only one explicit GET resource.", command.Span));
+            return [];
+        }
+
+        List<CommandSyntax> result = [];
+        foreach (SurfaceValueSyntax value in command.Values)
+        {
+            ResourceDescriptor descriptor;
+            try { descriptor = _inference.InferResource(value, language, trace); }
+            catch (FormatException exception)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN232", exception.Message, value.Span));
+                continue;
+            }
+            string variable = OutputName(command, descriptor, value, trace);
+            switch (descriptor.Reference)
+            {
+                case FileResourceReference:
+                    result.AddRange(LowerLoad(
+                        new SurfaceCommandSyntax("LOAD", [value], command.Alias, command.Span),
+                        grammar, language, trace, diagnostics));
+                    break;
+                case HttpResourceReference http when descriptor.Format == ResourceFormat.Json:
+                    result.Add(new CommandSyntax([
+                        Token("GETHTTP", PromptTokenKind.Word, command.Span.Start, Math.Min(7, command.Span.Length)),
+                        Token($"[{variable}]", PromptTokenKind.Variable, value.Span.Start, value.Span.Length),
+                        Token("FROM", PromptTokenKind.Word, value.Span.Start, 0),
+                        Token($"{{{http.Uri}}}", PromptTokenKind.Reference, value.Span.Start, value.Span.Length)
+                    ], grammar));
+                    break;
+                case HttpResourceReference:
+                    diagnostics.Add(new SurfaceDiagnostic("FLN233",
+                        $"Compact HTTP GET currently has a Json contract; inferred format was '{descriptor.Format}'.", value.Span));
+                    break;
+                case EnvironmentResourceReference environment:
+                    result.Add(new CommandSyntax([
+                        Token("GETENV", PromptTokenKind.Word, command.Span.Start, Math.Min(6, command.Span.Length)),
+                        Token($"[{variable}]", PromptTokenKind.Variable, value.Span.Start, value.Span.Length),
+                        Token("FROM", PromptTokenKind.Word, value.Span.Start, 0),
+                        Token($"{{{environment.Name}}}", PromptTokenKind.Reference, value.Span.Start, value.Span.Length)
+                    ], grammar));
+                    break;
+                case SecretResourceReference:
+                    diagnostics.Add(new SurfaceDiagnostic("FLN234",
+                        "secret: resources require the secret capability/provider module.", value.Span));
+                    break;
+                case SqlResourceReference:
+                    diagnostics.Add(new SurfaceDiagnostic("FLN235",
+                        "sql: resources require the SQL provider module.", value.Span));
+                    break;
+                default:
+                    diagnostics.Add(new SurfaceDiagnostic("FLN236",
+                        $"GET does not support resource kind '{descriptor.Reference.Kind}'.", value.Span));
+                    break;
+            }
+        }
+        return result;
     }
 
     private IReadOnlyList<CommandSyntax> LowerLoad(
@@ -116,12 +187,7 @@ public sealed class SurfaceLowerer
                     $"LOAD currently accepts local files; '{descriptor.Reference.Kind}' belongs to GET/resource providers.", value.Span));
                 continue;
             }
-            string variable = command.Alias ?? descriptor.SuggestedVariableName;
-            if (command.Alias is not null)
-            {
-                trace.Add(new InferenceDecision(InferenceKind.VariableName, value.Text, variable,
-                    "explicit-AS", value.Span, InferenceConfidence.Explicit));
-            }
+            string variable = OutputName(command, descriptor, value, trace);
             if (file.IsPattern)
             {
                 if (descriptor.Format != ResourceFormat.Json)
@@ -159,6 +225,21 @@ public sealed class SurfaceLowerer
             ], grammar));
         }
         return result;
+    }
+
+    private static string OutputName(
+        SurfaceCommandSyntax command,
+        ResourceDescriptor descriptor,
+        SurfaceValueSyntax value,
+        InferenceTrace trace)
+    {
+        string variable = command.Alias ?? descriptor.SuggestedVariableName;
+        if (command.Alias is not null)
+        {
+            trace.Add(new InferenceDecision(InferenceKind.VariableName, value.Text, variable,
+                "explicit-AS", value.Span, InferenceConfidence.Explicit));
+        }
+        return variable;
     }
 
     private static CommandSyntax LowerSay(SurfaceCommandSyntax command, PromptGrammar grammar)

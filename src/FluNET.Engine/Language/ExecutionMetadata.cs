@@ -1,31 +1,15 @@
 namespace FluNET.Language;
 
-public enum ExecutionEffect
-{
-    Pure,
-    Read,
-    Write,
-    ExternalMutation
-}
+public enum ExecutionEffect { Pure, Read, Write, ExternalMutation }
+public enum ConcurrencyPolicy { ParallelSafe, Ordered, Exclusive }
 
-public enum ConcurrencyPolicy
-{
-    ParallelSafe,
-    Ordered,
-    Exclusive
-}
-
-public sealed record FrameExecutionMetadata(
-    FrameId FrameId,
-    ExecutionEffect Effect,
-    ConcurrencyPolicy Concurrency);
+public sealed record FrameExecutionMetadata(FrameId FrameId, ExecutionEffect Effect, ConcurrencyPolicy Concurrency);
 
 public interface IExecutionMetadataProvider
 {
     FrameExecutionMetadata Get(CommandFrameDescriptor frame);
 }
 
-/// <summary>Conservative execution metadata for built-in and extension frames.</summary>
 public sealed class DefaultExecutionMetadataProvider : IExecutionMetadataProvider
 {
     private static readonly IReadOnlyDictionary<string, (ExecutionEffect Effect, ConcurrencyPolicy Concurrency)> BuiltIns =
@@ -35,6 +19,8 @@ public sealed class DefaultExecutionMetadataProvider : IExecutionMetadataProvide
             ["core.load.text"] = (ExecutionEffect.Read, ConcurrencyPolicy.ParallelSafe),
             ["core.load.config"] = (ExecutionEffect.Read, ConcurrencyPolicy.ParallelSafe),
             ["surface.load.glob.json"] = (ExecutionEffect.Read, ConcurrencyPolicy.ParallelSafe),
+            ["surface.get.http.json"] = (ExecutionEffect.Read, ConcurrencyPolicy.ParallelSafe),
+            ["surface.get.environment"] = (ExecutionEffect.Read, ConcurrencyPolicy.ParallelSafe),
             ["core.set.text"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
             ["core.set.json"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
             ["core.set.number"] = (ExecutionEffect.Pure, ConcurrencyPolicy.ParallelSafe),
