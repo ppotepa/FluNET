@@ -55,6 +55,22 @@ public sealed class TypedAnalysisTests
     }
 
     [Test]
+    public void TypedAnalysisAcceptsListTextProducerForTextConsumer()
+    {
+        using FluNETContext context = FluNETContext.Create();
+
+        TypedAnalysisResult result = context.AnalyzeTyped(
+            new ProcessedPrompt("GET [lines] FROM {input.txt} THEN SAY [lines]."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsValid, Is.True, result.CompilationError?.Message);
+            Assert.That(result.TypedProgram, Is.Not.Null);
+            Assert.That(result.TypedProgram!.Commands, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
     public void TypedAnalysisRejectsUnresolvedVariableBeforePlanningOrExecution()
     {
         using FluNETContext context = FluNETContext.Create();
