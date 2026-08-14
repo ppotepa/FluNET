@@ -1,5 +1,6 @@
 using FluNET.Declarative.Reconciliation;
 using FluNET.Execution.Planning;
+using FluNET.Telemetry;
 using FluNET.Variables;
 using Microsoft.Extensions.DependencyInjection;
 using System.Runtime.CompilerServices;
@@ -23,6 +24,7 @@ public static class ReconciliationExecutionExtensions
     public static IReconciliationLeaseStore GetReconciliationLeaseStore(this FluNETContext context) => context.ServiceProvider.GetService<IReconciliationLeaseStore>() ?? DefaultLeaseStores.GetValue(context, _ => new InMemoryReconciliationLeaseStore());
     public static IReconciliationLeaseContextAccessor GetReconciliationLeaseContextAccessor(this FluNETContext context) => context.ServiceProvider.GetService<IReconciliationLeaseContextAccessor>() ?? DefaultLeaseAccessors.GetValue(context, _ => new ReconciliationLeaseContextAccessor());
     public static IReconciliationCheckpointStore GetReconciliationCheckpointStore(this FluNETContext context) => context.ServiceProvider.GetService<IReconciliationCheckpointStore>() ?? DefaultCheckpointStores.GetValue(context, _ => new InMemoryReconciliationCheckpointStore());
+    public static IFluNetTelemetrySink GetFluNetTelemetrySink(this FluNETContext context) => context.ServiceProvider.GetService<IFluNetTelemetrySink>() ?? NullFluNetTelemetrySink.Instance;
 
     public static ReconciliationRunner GetReconciliationRunner(this FluNETContext context) => new(
         context.GetResourceObserverRegistry(),
@@ -36,7 +38,9 @@ public static class ReconciliationExecutionExtensions
     public static ReconciliationCoordinator GetReconciliationCoordinator(this FluNETContext context)
     {
         ReconciliationCoordinationOptions options = context.ServiceProvider.GetService<ReconciliationCoordinationOptions>() ?? ReconciliationCoordinationOptions.Default;
-        return new(context.GetReconciliationRunner(), context.GetReconciliationLeaseStore(), context.GetReconciliationLeaseContextAccessor(), options);
+        IReconciliationLeaseContextAccessor accessor = context.GetReconciliationLeaseContextAccessor();
+        IReconciliationExecutor observed = new TelemetryReconciliationExecutor(context.GetReconciliationRunner(), context.GetFluNetTelemetrySink(), accessor);
+        return new(observed, context.GetReconciliationLeaseStore(), accessor, options);
     }
 
     public static async ValueTask<IReadOnlyList<ReconciliationRunResult>> ExecuteSyncAsync(this FluNETContext context, string source, CancellationToken cancellationToken = default)
