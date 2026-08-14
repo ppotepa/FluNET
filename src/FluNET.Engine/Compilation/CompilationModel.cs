@@ -14,6 +14,8 @@ public enum CompilationPhase
     Parse,
     Bind,
     Validate,
+    Compile,
+    TypeCheck,
     Plan
 }
 
@@ -42,6 +44,7 @@ public static class CompilationDiagnosticCodes
     public const string ValidationFailure = "FLN115";
     public const string CompatibilitySentenceFailure = "FLN116";
     public const string PlanningFailure = "FLN120";
+    public const string CompilationFailure = "FLN125";
     public const string UnknownMarker = "FLN130";
     public const string DuplicateMarker = "FLN131";
     public const string MissingRequiredRole = "FLN132";
@@ -133,7 +136,7 @@ public sealed record BoundCommandStatement : BoundStatement
     public BoundCommand Command { get; }
 }
 
-/// <summary>The canonical bound representation consumed by validation and planning.</summary>
+/// <summary>The canonical bound representation consumed by validation and typed compilation.</summary>
 public sealed record BoundProgram
 {
     private readonly ReadOnlyCollection<BoundStatement> _statements;
@@ -162,9 +165,8 @@ public sealed record BoundProgram
 }
 
 /// <summary>
-/// Full, side-effect-free output of FluNET compilation. It derives from the
-/// compatibility PromptAnalysis view so existing Analyze consumers can keep
-/// reading ValidationResult, Sentence, BoundCommands, and Plan.
+/// Source-compatible compilation view used by Engine.Analyze. Typed compilation
+/// is exposed additively through FluNETContext.AnalyzeTyped.
 /// </summary>
 public record CompilationResult : PromptAnalysis
 {
@@ -194,7 +196,10 @@ public record CompilationResult : PromptAnalysis
     public DiagnosticBag DiagnosticBag { get; }
     public CompilationPhase? FailedPhase { get; }
 
-    /// <summary>True when all four compiler phases completed without errors.</summary>
+    /// <summary>
+    /// True when the source-compatible Analyze pipeline completed without errors.
+    /// Typed compilation/type-check validity is available from AnalyzeTyped.
+    /// </summary>
     public bool IsCompilationSuccessful =>
         FailedPhase is null &&
         !DiagnosticBag.HasErrors &&
