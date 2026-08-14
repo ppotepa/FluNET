@@ -16,7 +16,7 @@ public sealed class TypeValidationStep : IExecutionStep
             cancellationToken.ThrowIfCancellationRequested();
             TypedProgram program = context.GetTypedProgram()
                 ?? throw new CommandCompilationException(
-                    "FLN125",
+                    CompilationDiagnosticCodes.CompilationFailure,
                     "Type checking requires a typed program.",
                     context.Prompt.Syntax.Span);
             _validator.Validate(program);
@@ -26,7 +26,7 @@ public sealed class TypeValidationStep : IExecutionStep
         {
             context.CompilationDiagnostics.Add(
                 exception.Code,
-                CompilationPhase.Validate,
+                CompilationPhase.TypeCheck,
                 exception.Message,
                 exception.Span);
             return ValueTask.FromResult(ExecutionResult.Failed(
