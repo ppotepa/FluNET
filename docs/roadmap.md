@@ -1,19 +1,15 @@
 # FluNET master roadmap
 
-This file is the authoritative implementation ledger after the 0.3 published identity. A feature is not a released language guarantee merely because its source implementation exists.
-
-Status values: **PLANNED**, **IMPLEMENTED**, **VERIFIED**, **FROZEN**.
+Status values: **PLANNED**, **IMPLEMENTED**, **VERIFIED**, **FROZEN**. Public `StandardLanguageIdentity.Version` remains `0.3` until an exact candidate tree passes the release gate.
 
 ## Existing source milestones
 
 | Milestone | Scope | Status |
 | --- | --- | --- |
-| 0.4 | typed compiler core, conversions, variables, expressions, type checking | IMPLEMENTED, not release-verified |
-| 0.5 | compact syntax, inference/lowering, contexts, tooling, `,`, `;`, `|` | IMPLEMENTED, not release-verified |
-| 0.6 | typed JSON data language and schema inference | IMPLEMENTED, not release-verified |
-| 0.7 | tasks, policies, providers, cache/idempotency, secrets, automation, ENSURE foundation | IMPLEMENTED/experimental, not release-verified |
-
-Public `StandardLanguageIdentity.Version` remains `0.3` until an exact candidate tree passes the release gate.
+| 0.4 | typed compiler core | IMPLEMENTED, not release-verified |
+| 0.5 | compact syntax/inference/tooling/separators | IMPLEMENTED, not release-verified |
+| 0.6 | data language/schema inference | IMPLEMENTED, not release-verified |
+| 0.7 | tasks/policies/providers/automation/ENSURE foundation | IMPLEMENTED/experimental, not release-verified |
 
 ## 0.8 — Integration & Execution
 
@@ -21,7 +17,7 @@ Public `StandardLanguageIdentity.Version` remains `0.3` until an exact candidate
 | --- | --- | --- |
 | 52 | roadmap/release baseline | IMPLEMENTED |
 | 53 | unified resource payload + decoder/encoder registry | IMPLEMENTED |
-| 54 | CSV/XML decoders | PLANNED |
+| 54 | CSV/XML decoders | IMPLEMENTED |
 | 55 | Binary/Image language values | PLANNED |
 | 56 | generic HTTP response/media model | PLANNED |
 | 57 | SQL provider | PLANNED |
@@ -69,5 +65,3 @@ dotnet restore FluNET.sln
 dotnet build FluNET.sln --configuration Release --no-restore
 dotnet test FluNET.sln --configuration Release --no-build
 ```
-
-No source-only implementation step may silently bump a public language version or claim a passing CI result.

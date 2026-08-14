@@ -8,13 +8,7 @@ public enum ResourceCapability { FileRead, NetworkRead, EnvironmentRead, SecretR
 public sealed record ResourceProviderContext(ResourceDescriptor Descriptor, string OutputVariable, SurfaceCommandSyntax SurfaceCommand, SurfaceValueSyntax Source, PromptGrammar Grammar, ResourceReadIntent Intent);
 public sealed record ResourceProviderResult(IReadOnlyList<CommandSyntax> Commands, string? ErrorCode = null, string? ErrorMessage = null)
 { public bool IsSuccess => ErrorCode is null; public static ResourceProviderResult Error(string code, string message) => new([], code, message); }
-public interface IResourceProvider
-{
-    string Id { get; }
-    IReadOnlyList<ResourceCapability> RequiredCapabilities => [];
-    bool CanHandle(ResourceDescriptor descriptor);
-    ResourceProviderResult LowerRead(ResourceProviderContext context);
-}
+public interface IResourceProvider { string Id { get; } IReadOnlyList<ResourceCapability> RequiredCapabilities => []; bool CanHandle(ResourceDescriptor descriptor); ResourceProviderResult LowerRead(ResourceProviderContext context); }
 public interface IResourceProviderRegistry { IReadOnlyList<IResourceProvider> Providers { get; } IResourceProvider? Resolve(ResourceDescriptor descriptor); }
 internal sealed record ResourceProviderRegistration(Type ProviderType, Func<IServiceProvider, IResourceProvider> Create);
 
@@ -23,8 +17,7 @@ public sealed class ResourceProviderRegistry : IResourceProviderRegistry
     private readonly IResourceProvider[] _providers;
     internal ResourceProviderRegistry(IServiceProvider services, IEnumerable<ResourceProviderRegistration> registrations)
     {
-        _providers = new IResourceProvider[] { new FileResourceProvider(), new HttpResourceProvider(), new EnvironmentResourceProvider(), new SecretResourceProvider() }
-            .Concat(registrations.Select(registration => registration.Create(services))).ToArray();
+        _providers = new IResourceProvider[] { new FileResourceProvider(), new HttpResourceProvider(), new EnvironmentResourceProvider(), new SecretResourceProvider() }.Concat(registrations.Select(registration => registration.Create(services))).ToArray();
         string[] duplicateIds = _providers.GroupBy(provider => provider.Id, StringComparer.OrdinalIgnoreCase).Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
         if (duplicateIds.Length > 0) throw new LanguageDefinitionException($"Resource provider ids must be unique: {string.Join(", ", duplicateIds)}.");
     }
@@ -46,12 +39,20 @@ public sealed class FileResourceProvider : IResourceProvider
         if (file.IsPattern)
         {
             if (context.Descriptor.Format != ResourceFormat.Json) return ResourceProviderResult.Error("FLN225", $"Glob LOAD currently supports JSON patterns; '{context.Descriptor.Format}' needs a collection codec.");
-            return new([new CommandSyntax([Token("LOADGLOB", PromptTokenKind.Word, context.SurfaceCommand.Span.Start), Token($"[{context.OutputVariable}]", PromptTokenKind.Variable, context.Source.Span.Start), Token("FROM", PromptTokenKind.Word, context.Source.Span.Start), Token($"{{{file.Path}}}", PromptTokenKind.Reference, context.Source.Span.Start)], context.Grammar)]);
+            return new([Command("LOADGLOB", context, file.Path)]);
         }
+        string verb = context.Descriptor.Format switch
+        {
+            ResourceFormat.Csv => "LOADCSV",
+            ResourceFormat.Xml => "LOADXML",
+            _ => string.Empty
+        };
+        if (verb.Length > 0) return new([Command(verb, context, file.Path)]);
         string qualifier = context.Descriptor.Format switch { ResourceFormat.Json => "CONFIG", ResourceFormat.Text => "TEXT", _ => string.Empty };
         if (qualifier.Length == 0) return ResourceProviderResult.Error("FLN224", $"No canonical file decoder is registered for format '{context.Descriptor.Format}'.");
         return new([new CommandSyntax([Token("LOAD", PromptTokenKind.Word, context.SurfaceCommand.Span.Start), Token(qualifier, PromptTokenKind.Word, context.Source.Span.Start), Token($"[{context.OutputVariable}]", PromptTokenKind.Variable, context.Source.Span.Start), Token("FROM", PromptTokenKind.Word, context.Source.Span.Start), Token($"{{{file.Path}}}", PromptTokenKind.Reference, context.Source.Span.Start)], context.Grammar)]);
     }
+    private static CommandSyntax Command(string verb, ResourceProviderContext context, string path) => new([Token(verb, PromptTokenKind.Word, context.SurfaceCommand.Span.Start), Token($"[{context.OutputVariable}]", PromptTokenKind.Variable, context.Source.Span.Start), Token("FROM", PromptTokenKind.Word, context.Source.Span.Start), Token($"{{{path}}}", PromptTokenKind.Reference, context.Source.Span.Start)], context.Grammar);
     private static PromptToken Token(string text, PromptTokenKind kind, int start) => new(text, kind, Math.Max(0, start), 0);
 }
 
