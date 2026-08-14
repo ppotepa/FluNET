@@ -132,6 +132,14 @@ public sealed class ExpressionBinder
         string literal = token.Kind == PromptTokenKind.Reference
             ? UnwrapReference(token.Text)
             : NormalizeTextLiteral(token.Text);
+        if (InterpolatedTextExpression.TryCreate(
+            literal,
+            _language,
+            _values,
+            out IExpression<string>? interpolated))
+        {
+            return interpolated!;
+        }
         return new LiteralExpression<string>(literal);
     }
 
