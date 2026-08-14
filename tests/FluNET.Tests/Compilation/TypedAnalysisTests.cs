@@ -71,6 +71,22 @@ public sealed class TypedAnalysisTests
     }
 
     [Test]
+    public void TypedAnalysisAcceptsRegisteredHostVariableThroughConversionGraph()
+    {
+        using FluNETContext context = FluNETContext.Create();
+        context.GetEngine().RegisterVariable("count", 42m);
+
+        TypedAnalysisResult result = context.AnalyzeTyped(
+            new ProcessedPrompt("SAY [count]."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsValid, Is.True, result.CompilationError?.Message);
+            Assert.That(result.TypedProgram, Is.Not.Null);
+        });
+    }
+
+    [Test]
     public void TypedAnalysisRejectsUnresolvedVariableBeforePlanningOrExecution()
     {
         using FluNETContext context = FluNETContext.Create();
