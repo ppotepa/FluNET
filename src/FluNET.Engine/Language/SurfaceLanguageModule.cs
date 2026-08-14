@@ -57,6 +57,13 @@ public sealed class SurfaceLanguageModule : IFluNetModule
             .Marked<string>(new FrameRoleId("Projection"), "USING")
             .BindWith<ProjectJsonCommandBinder>().HandleWith<ProjectJsonCommandHandler>();
 
+        module.Command<DefaultJsonCommand, JsonElement[]>("DEFAULTJSON", "JsonList")
+            .FrameId("surface.data.default.json").CommandId("flunet.surface.defaultjson")
+            .Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<JsonElement[]>(SemanticRole.Source, "FROM")
+            .Marked<string>(new FrameRoleId("Default"), "USING")
+            .BindWith<DefaultJsonCommandBinder>().HandleWith<DefaultJsonCommandHandler>();
+
         module.Conversion<JsonElement, JsonElement[], JsonToJsonListConversion>();
     }
 }

@@ -13,7 +13,7 @@ public sealed partial class ExpressionSyntaxParser
     public static ExpressionSyntax Parse(string source, int offset = 0)
     {
         ExpressionSyntaxParser parser = new(ExpressionScanner.Scan(source, offset));
-        ExpressionSyntax expression = parser.ParseOr();
+        ExpressionSyntax expression = parser.ParseCoalesce();
         if (parser.Current.Kind != ExpressionTokenKind.End)
         {
             throw parser.Error($"Unexpected token '{parser.Current.Text}'.");

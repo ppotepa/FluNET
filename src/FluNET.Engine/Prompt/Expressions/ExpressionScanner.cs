@@ -82,7 +82,7 @@ internal static class ExpressionScanner
             if (index + 1 < source.Length)
             {
                 string pair = source.Substring(index, 2);
-                if (pair is "==" or "!=" or "<=" or ">=")
+                if (pair is "==" or "!=" or "<=" or ">=" or "??")
                 {
                     index += 2;
                     Add(tokens, source, start, index, ExpressionTokenKind.Operator, offset);
@@ -90,7 +90,7 @@ internal static class ExpressionScanner
                 }
             }
 
-            if (current is '+' or '-' or '*' or '/' or '<' or '>' or '!' or '=')
+            if (current is '+' or '-' or '*' or '/' or '<' or '>' or '!' or '=' or '?')
             {
                 index++;
                 Add(tokens, source, start, index, ExpressionTokenKind.Operator, offset);
@@ -107,7 +107,7 @@ internal static class ExpressionScanner
             while (index < source.Length && !char.IsWhiteSpace(source[index]) &&
                 source[index] is not '[' and not ']' &&
                 source[index] is not '(' and not ')' and not ',' and not '.' and not ':' and
-                not '+' and not '-' and not '*' and not '/' and not '<' and not '>' and not '!' and not '=')
+                not '+' and not '-' and not '*' and not '/' and not '<' and not '>' and not '!' and not '=' and not '?')
             {
                 index++;
             }

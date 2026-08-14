@@ -6,7 +6,7 @@ namespace FluNET.Compilation.Lowering;
 internal static class SurfaceDataLowering
 {
     public static bool IsDataStage(SurfaceCommandSyntax command) =>
-        command.NormalizedName is "FILTER" or "SORT" or "TAKE" or "SELECT" or "MAP";
+        command.NormalizedName is "FILTER" or "SORT" or "TAKE" or "SELECT" or "MAP" or "DEFAULT";
 
     public static CommandSyntax? Lower(
         SurfaceCommandSyntax stage,
@@ -20,6 +20,7 @@ internal static class SurfaceDataLowering
         "TAKE" => Take(stage, inputVariable, outputVariable, grammar, diagnostics),
         "SELECT" => Select(stage, inputVariable, outputVariable, grammar, diagnostics),
         "MAP" => Map(stage, inputVariable, outputVariable, grammar, diagnostics),
+        "DEFAULT" => Default(stage, inputVariable, outputVariable, grammar, diagnostics),
         _ => null
     };
 
@@ -85,6 +86,25 @@ internal static class SurfaceDataLowering
             return null;
         }
         return Command("PROJECTJSON", output, input, $"map:{text[3..].Trim()}", stage.Values[0], grammar);
+    }
+
+    private static CommandSyntax? Default(SurfaceCommandSyntax stage, string input, string output, PromptGrammar grammar, ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        if (stage.Values.Count != 1)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN266", "DEFAULT requires `field TO fallback`.", stage.Span));
+            return null;
+        }
+        string text = stage.Values[0].UnquotedText.Trim();
+        int separator = text.IndexOf(" TO ", StringComparison.OrdinalIgnoreCase);
+        if (separator <= 0 || separator + 4 >= text.Length)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN266", "DEFAULT requires `field TO fallback`.", stage.Values[0].Span));
+            return null;
+        }
+        string field = text[..separator].Trim();
+        string fallback = text[(separator + 4)..].Trim();
+        return Command("DEFAULTJSON", output, input, $"{field}|{fallback}", stage.Values[0], grammar);
     }
 
     private static CommandSyntax Command(string verb, string output, string input, string value, SurfaceValueSyntax source, PromptGrammar grammar) =>

@@ -14,6 +14,7 @@ public sealed partial class ConditionExpressionCompiler
 
         return operation switch
         {
+            "??" => context => left(context) ?? right(context),
             "AND" => context => ToBoolean(left(context)) && ToBoolean(right(context)),
             "OR" => context => ToBoolean(left(context)) || ToBoolean(right(context)),
             "==" => context => EqualValues(left(context), right(context)),

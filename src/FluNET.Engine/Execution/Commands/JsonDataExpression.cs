@@ -43,6 +43,7 @@ public sealed class JsonDataExpression
     private static object? Literal(string text, JsonElement row)
     {
         string value = text.Trim();
+        if (value.Equals("null", StringComparison.OrdinalIgnoreCase)) return null;
         if (value.Length >= 2 && ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\''))) return value[1..^1];
         if (bool.TryParse(value, out bool boolean)) return boolean;
         if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal number)) return number;
@@ -64,6 +65,7 @@ public sealed class JsonDataExpression
     {
         object? left = EvaluateNode(binary.Left, row, variables);
         string op = binary.Operator.ToUpperInvariant();
+        if (op == "??") return left ?? EvaluateNode(binary.Right, row, variables);
         if (op == "AND" && !ToBoolean(left)) return false;
         if (op == "OR" && ToBoolean(left)) return true;
         object? right = EvaluateNode(binary.Right, row, variables);

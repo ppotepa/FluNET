@@ -2,6 +2,18 @@ namespace FluNET.Prompt.Expressions;
 
 public sealed partial class ExpressionSyntaxParser
 {
+    private ExpressionSyntax ParseCoalesce()
+    {
+        ExpressionSyntax left = ParseOr();
+        if (MatchOperator("??"))
+        {
+            ExpressionToken operation = Previous;
+            ExpressionSyntax right = ParseCoalesce();
+            return Binary(left, operation, right);
+        }
+        return left;
+    }
+
     private ExpressionSyntax ParseOr()
     {
         ExpressionSyntax left = ParseAnd();

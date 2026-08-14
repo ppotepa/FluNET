@@ -10,6 +10,7 @@ public sealed record FilterJsonCommand(IExpression<JsonElement[]> Source, JsonDa
 public sealed record SortJsonCommand(IExpression<JsonElement[]> Source, JsonDataExpression Key) : ICommand<JsonElement[]>;
 public sealed record TakeJsonCommand(IExpression<JsonElement[]> Source, IExpression<int> Count) : ICommand<JsonElement[]>;
 public sealed record ProjectJsonCommand(IExpression<JsonElement[]> Source, JsonProjection Projection) : ICommand<JsonElement[]>;
+public sealed record DefaultJsonCommand(IExpression<JsonElement[]> Source, JsonDefaultSpec Default) : ICommand<JsonElement[]>;
 
 public sealed class FilterJsonCommandBinder(LanguageSnapshot language, IValueCodecRegistry values) : ICommandBinder<FilterJsonCommand, JsonElement[]>
 {
@@ -65,6 +66,19 @@ public sealed class ProjectJsonCommandBinder(LanguageSnapshot language, IValueCo
     private static string Unwrap(string value) => value.Length >= 2 && value[0] == '{' && value[^1] == '}' ? value[1..^1] : value;
 }
 
+public sealed class DefaultJsonCommandBinder(LanguageSnapshot language, IValueCodecRegistry values) : ICommandBinder<DefaultJsonCommand, JsonElement[]>
+{
+    public DefaultJsonCommand? TryBind(BoundCommand command)
+    {
+        if (command.Frame.Id != new FrameId("surface.data.default.json")) return null;
+        CommandBindingContext context = new(command, new ExpressionBinder(language, values));
+        BoundArgument spec = command[new FrameRoleId("Default")];
+        string source = string.Join(" ", spec.Tokens.Select(token => Unwrap(token.Text))).Trim();
+        return new DefaultJsonCommand(context.Require<JsonElement[]>(SemanticRole.Source), JsonDefaultSpec.Parse(source));
+    }
+    private static string Unwrap(string value) => value.Length >= 2 && value[0] == '{' && value[^1] == '}' ? value[1..^1] : value;
+}
+
 public sealed class FilterJsonCommandHandler(IVariableResolver variables) : ICommandHandler<FilterJsonCommand, JsonElement[]>
 {
     public ValueTask<JsonElement[]> HandleAsync(FilterJsonCommand command, CancellationToken cancellationToken = default)
@@ -113,6 +127,17 @@ public sealed class ProjectJsonCommandHandler(IVariableResolver variables) : ICo
         cancellationToken.ThrowIfCancellationRequested();
         return ValueTask.FromResult(command.Source.Evaluate(variables)
             .Select(item => command.Projection.Evaluate(item, variables))
+            .ToArray());
+    }
+}
+
+public sealed class DefaultJsonCommandHandler(IVariableResolver variables) : ICommandHandler<DefaultJsonCommand, JsonElement[]>
+{
+    public ValueTask<JsonElement[]> HandleAsync(DefaultJsonCommand command, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(command.Source.Evaluate(variables)
+            .Select(item => command.Default.Apply(item, variables))
             .ToArray());
     }
 }
