@@ -14,40 +14,31 @@ See [0.8 freeze readiness](compiler-0.8-freeze-readiness.md).
 
 Batches **66–75: IMPLEMENTED source candidate / NOT VERIFIED**.
 
-| Batch | Scope | Status |
-| --- | --- | --- |
-| 66 | Desired/Observed State IR + canonical fingerprints | IMPLEMENTED |
-| 67 | pluggable resource observation | IMPLEMENTED |
-| 68 | `SYNC target WITH source BY key` compiler | IMPLEMENTED |
-| 69 | keyed Create/Update/Delete/Unchanged/Conflict diff IR | IMPLEMENTED |
-| 70 | reconciliation mutation planner / runner | IMPLEMENTED |
-| 71 | WATCH / WHEN reconciliation signal bridge | IMPLEMENTED |
-| 72 | explicit compensation contracts | IMPLEMENTED |
-| 73 | saga execution | IMPLEMENTED |
-| 74 | redacted audit/history API + durable run catalog | IMPLEMENTED |
-| 75 | 0.9 freeze/stabilization ledger | IMPLEMENTED / NOT VERIFIED |
+66 Desired/Observed State IR · 67 pluggable observation · 68 SYNC compiler · 69 keyed diff/conflicts · 70 reconciliation runner · 71 WATCH bridge · 72 compensation · 73 saga · 74 redacted history · 75 freeze ledger.
 
 See [0.9 freeze readiness](compiler-0.9-freeze-readiness.md).
 
 ## 1.0 — Production Readiness
 
-The 1.0 track is stability-first and intentionally does not add another language feature wave.
+Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 is the only remaining release gate and cannot be marked complete without real build/test evidence.
 
 | Batch | Scope | Status |
 | --- | --- | --- |
-| 76 | solution-wide verification surface + release scripts | IMPLEMENTED / NOT VERIFIED |
-| 77 | durable reconciliation baseline/state | PLANNED |
-| 78 | explicit conflict policies | PLANNED |
-| 79 | generic reconciliation mutator contract | PLANNED |
-| 80 | leases/fencing + duplicate concurrent reconciliation protection | PLANNED |
-| 81 | crash/restart semantics + checkpoints | PLANNED |
-| 82 | secure host/network/file policy hardening | PLANNED |
-| 83 | telemetry/observability contract | PLANNED |
-| 84 | stress/property/invariant tests | PLANNED |
-| 85 | language/API/serialization contract freeze | PLANNED |
-| 86 | packaging + CLI consolidation | PLANNED |
-| 87 | upgrade/backward-compatibility tests | PLANNED |
-| 88 | 1.0 RC ledger | PLANNED |
-| 89 | final verification/release gate | PLANNED |
+| 76 | solution-wide Release gate + bash/PowerShell scripts | IMPLEMENTED / NOT VERIFIED |
+| 77 | durable reconciliation baseline/state | IMPLEMENTED |
+| 78 | `ON CONFLICT FAIL/KEEP TARGET/KEEP SOURCE` | IMPLEMENTED |
+| 79 | generic reconciliation mutator registry | IMPLEMENTED |
+| 80 | target leases, heartbeat and monotonic fencing tokens | IMPLEMENTED |
+| 81 | crash/restart checkpoints + atomic physical SAVE | IMPLEMENTED |
+| 82 | opt-in secure host, DNS/private-address and redirect hardening | IMPLEMENTED |
+| 83 | metadata-only command/reconciliation telemetry | IMPLEMENTED |
+| 84 | property/stress/corruption/concurrency contracts | IMPLEMENTED source tests |
+| 85 | extension/persistence/durable-format contract freeze candidate | IMPLEMENTED |
+| 86 | `FluNET.Tool` packaging + compatibility CLI boundary | IMPLEMENTED |
+| 87 | backward-compatibility/upgrade contracts | IMPLEMENTED source tests |
+| 88 | RC readiness ledger | IMPLEMENTED / NOT VERIFIED |
+| 89 | exact-tree Release verification + version/package promotion decision | BLOCKED ON VERIFICATION |
+
+See [1.0 RC readiness](1.0-rc-readiness.md) and [verification gate](1.0-verification.md).
 
 No public version promotion or release claim occurs until Batch 89 has successful evidence for the exact candidate tree.

@@ -1,6 +1,6 @@
 # FluNET documentation
 
-FluNET has an explicit canonical surface and an inference-oriented compact surface; both converge on one typed compiler/runtime. Public built-in `LanguageVersion` remains `0.3` until the exact tree passes Release verification.
+FluNET has an explicit canonical surface and an inference-oriented compact surface; both converge on the same typed compiler/runtime. Public built-in `LanguageVersion` remains `0.3` until the exact tree passes Release verification.
 
 ## Start here
 
@@ -14,6 +14,8 @@ FluNET has an explicit canonical surface and an inference-oriented compact surfa
 8. [Status and limitations](status-and-limitations.md)
 9. [Durable workflows](durable-workflows.md)
 10. [Master roadmap](roadmap.md)
+11. [1.0 RC source readiness](1.0-rc-readiness.md)
+12. [1.0 verification gate](1.0-verification.md)
 
 ## Milestone ledgers
 
@@ -22,8 +24,7 @@ FluNET has an explicit canonical surface and an inference-oriented compact surfa
 - [0.6 data language](compiler-0.6-freeze-readiness.md)
 - [0.7 automation language](compiler-0.7-freeze-readiness.md)
 - [0.8 integration/execution](compiler-0.8-freeze-readiness.md)
-- [0.9 plan](compiler-0.9-plan.md)
-- [0.9 reconciliation freeze readiness](compiler-0.9-freeze-readiness.md)
-- [1.0 contract plan](1.0-contract-plan.md)
+- [0.9 reconciliation](compiler-0.9-freeze-readiness.md)
+- [1.0 RC source readiness](1.0-rc-readiness.md)
 
-Compact, canonical, data, task, automation, ENSURE and 0.9 reconciliation mutations all reuse the typed command/planning/execution stack; there is no separate compact/query/automation/reconciliation command executor.
+Compact, canonical, data, task, automation, ENSURE and reconciliation mutation execution reuse the typed command/planning/execution stack; there is no second query/automation/reconciliation command executor.
