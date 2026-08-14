@@ -27,22 +27,27 @@ Batches **66–75: IMPLEMENTED source candidate / NOT VERIFIED**.
 | 74 | redacted audit/history API + durable run catalog | IMPLEMENTED |
 | 75 | 0.9 freeze/stabilization ledger | IMPLEMENTED / NOT VERIFIED |
 
-The repaired 0.9 path is now concrete rather than roadmap-only:
-
-```text
-SYNC source
-  -> SyncCompiler
-  -> SyncDefinition
-  -> IResourceObserverRegistry
-  -> Desired/Observed snapshots
-  -> ReconciliationDiffEngine
-  -> ReconciliationMutationPlanner
-  -> ordinary SurfaceCompiler / ExecutionPlan
-  -> ExecutionPlanExecutor
-```
-
 See [0.9 freeze readiness](compiler-0.9-freeze-readiness.md).
 
-## 1.0 — Stable Platform candidate
+## 1.0 — Production Readiness
 
-Separate 1.0 candidate material exists on `main`, but it is **outside the 0.9 freeze** and remains unverified. The 0.9 closure does not promote the public language version and does not make a 1.0 release claim.
+The 1.0 track is stability-first and intentionally does not add another language feature wave.
+
+| Batch | Scope | Status |
+| --- | --- | --- |
+| 76 | solution-wide verification surface + release scripts | IMPLEMENTED / NOT VERIFIED |
+| 77 | durable reconciliation baseline/state | PLANNED |
+| 78 | explicit conflict policies | PLANNED |
+| 79 | generic reconciliation mutator contract | PLANNED |
+| 80 | leases/fencing + duplicate concurrent reconciliation protection | PLANNED |
+| 81 | crash/restart semantics + checkpoints | PLANNED |
+| 82 | secure host/network/file policy hardening | PLANNED |
+| 83 | telemetry/observability contract | PLANNED |
+| 84 | stress/property/invariant tests | PLANNED |
+| 85 | language/API/serialization contract freeze | PLANNED |
+| 86 | packaging + CLI consolidation | PLANNED |
+| 87 | upgrade/backward-compatibility tests | PLANNED |
+| 88 | 1.0 RC ledger | PLANNED |
+| 89 | final verification/release gate | PLANNED |
+
+No public version promotion or release claim occurs until Batch 89 has successful evidence for the exact candidate tree.
