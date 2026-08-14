@@ -2,27 +2,23 @@
 
 Status: **PLANNED / IMPLEMENTED / VERIFIED / FROZEN**. Public language identity remains 0.3 until Release verification.
 
-## 0.8 — Integration & Execution
+## 0.8
 
-| Batch | Scope | Status |
+|Batch|Scope|Status|
 |---|---|---|
-|52|roadmap/release baseline|IMPLEMENTED|
-|53|resource payload + decoder/encoder registry|IMPLEMENTED|
-|54|CSV/XML decoders|IMPLEMENTED|
-|55|Binary/Image values|IMPLEMENTED|
-|56|generic HTTP media model|IMPLEMENTED|
+|52|roadmap baseline|IMPLEMENTED|
+|53|resource payload/decoder registry|IMPLEMENTED|
+|54|CSV/XML|IMPLEMENTED|
+|55|Binary/Image|IMPLEMENTED|
+|56|generic HTTP|IMPLEMENTED|
 |57|SQL provider|IMPLEMENTED|
-|58|AUTH profiles/secret binding|PLANNED|
+|58|AUTH profiles/secret binding|IMPLEMENTED|
 |59|compiled nested actions|PLANNED|
-|60|full FOR EACH bodies|PLANNED|
+|60|full FOR EACH|PLANNED|
 |61|policy model 2|PLANNED|
 |62|durable cache/idempotency|PLANNED|
-|63|calendar/cron triggers|PLANNED|
+|63|calendar/cron|PLANNED|
 |64|automation/ENSURE CLI|PLANNED|
 |65|0.8 tooling/freeze candidate|PLANNED|
 
-## 0.9 — Batches 66–75
-Desired/Observed state, observation, SYNC, diff, reconciliation, WATCH bridge, compensation, saga, history, freeze.
-
-## 1.0 — Batches 76–83
-Language/API/security/persistence contracts, compatibility cleanup, module boundaries, complete CLI, cross-platform verification.
+0.9 = Batches 66–75. 1.0 = Batches 76–83. No public version bump without Release verification.
