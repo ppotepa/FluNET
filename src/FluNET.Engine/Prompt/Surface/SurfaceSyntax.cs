@@ -15,13 +15,24 @@ public sealed record SurfaceCommandSyntax(
     public string NormalizedName => Name.ToUpperInvariant();
 }
 
-/// <summary>One explicit `|` pipeline. Stages remain normal surface commands.</summary>
 public sealed record SurfacePipelineSyntax(
     IReadOnlyList<SurfaceCommandSyntax> Stages,
     SourceSpan Span) : SurfaceStatementSyntax(Span);
 
 public sealed record SurfaceContextSyntax(
     SurfaceValueSyntax BaseResource,
+    IReadOnlyList<SurfaceStatementSyntax> Statements,
+    SourceSpan Span) : SurfaceStatementSyntax(Span);
+
+/// <summary>Compile-time policy profile declaration; never becomes an execution command.</summary>
+public sealed record SurfacePolicyDefinitionSyntax(
+    string Name,
+    IReadOnlyList<SurfaceStatementSyntax> Statements,
+    SourceSpan Span) : SurfaceStatementSyntax(Span);
+
+/// <summary>Lexical application of one policy profile to an indented block.</summary>
+public sealed record SurfacePolicyContextSyntax(
+    string Name,
     IReadOnlyList<SurfaceStatementSyntax> Statements,
     SourceSpan Span) : SurfaceStatementSyntax(Span);
 
