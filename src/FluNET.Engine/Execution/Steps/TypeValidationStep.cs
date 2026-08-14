@@ -2,9 +2,19 @@ using FluNET.Compilation;
 
 namespace FluNET.Execution.Steps;
 
-public sealed class TypeValidationStep : IExecutionStep
+public sealed class TypeValidationStep
 {
-    private readonly TypedProgramTypeValidator _validator = new();
+    private readonly TypedProgramTypeValidator _validator;
+
+    public TypeValidationStep()
+        : this(new TypedProgramTypeValidator())
+    {
+    }
+
+    public TypeValidationStep(TypedProgramTypeValidator validator)
+    {
+        _validator = validator ?? throw new ArgumentNullException(nameof(validator));
+    }
 
     public ValueTask<ExecutionResult> ExecuteAsync(
         ExecutionContext context,
