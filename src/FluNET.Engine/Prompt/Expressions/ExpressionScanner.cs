@@ -83,7 +83,7 @@ internal static class ExpressionScanner
                 }
             }
 
-            if (current is '+' or '-' or '*' or '/' or '<' or '>' or '!')
+            if (current is '+' or '-' or '*' or '/' or '<' or '>' or '!' or '=')
             {
                 index++;
                 Add(tokens, source, start, index, ExpressionTokenKind.Operator, offset);
@@ -106,7 +106,10 @@ internal static class ExpressionScanner
             Add(tokens, source, start, index, ExpressionTokenKind.Word, offset);
         }
 
-        tokens.Add(new ExpressionToken(string.Empty, ExpressionTokenKind.End, new SourceSpan(offset + source.Length, 0)));
+        tokens.Add(new ExpressionToken(
+            string.Empty,
+            ExpressionTokenKind.End,
+            new SourceSpan(offset + source.Length, 0)));
         return tokens;
     }
 
