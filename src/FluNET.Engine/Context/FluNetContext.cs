@@ -20,126 +20,30 @@ namespace FluNET.Context
 {
     public class FluNETContext : IDisposable
     {
-        private static FluNETContext? _defaultContext;
-        private readonly ServiceProvider _serviceProvider;
-        private readonly IServiceScope? _scope;
-
+        private static FluNETContext? _defaultContext; private readonly ServiceProvider _serviceProvider; private readonly IServiceScope? _scope;
         public static FluNETContext Default => _defaultContext ??= Create();
-
-        private FluNETContext(ServiceProvider serviceProvider, bool createScope = true)
+        private FluNETContext(ServiceProvider serviceProvider, bool createScope = true) { _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider)); if (createScope) _scope = _serviceProvider.CreateScope(); }
+        public static FluNETContext Create(Action<IServiceCollection>? configureServices = null) { var services = new ServiceCollection(); ConfigureDefaultServices(services, StandardLanguage.CreateRuntime()); configureServices?.Invoke(services); return new FluNETContext(services.BuildServiceProvider()); }
+        public static FluNETContext CreateWithRuntime(FluNetRuntimeDefinition runtime, Action<IServiceCollection>? configureServices = null) { ArgumentNullException.ThrowIfNull(runtime); var services = new ServiceCollection(); ConfigureDefaultServices(services, runtime); configureServices?.Invoke(services); return new FluNETContext(services.BuildServiceProvider()); }
+        public static void ConfigureDefaultServices(IServiceCollection services) => ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
+        public static void ConfigureDefaultServices(IServiceCollection services, FluNetRuntimeDefinition runtime)
         {
-            _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider));
-            if (createScope)
-            {
-                _scope = _serviceProvider.CreateScope();
-            }
+            ArgumentNullException.ThrowIfNull(services); ArgumentNullException.ThrowIfNull(runtime);
+            services.AddSingleton(runtime.Language); services.AddSingleton<LanguageRegistry>(); services.AddSingleton<DiscoveryService>(); services.AddSingleton<SemanticCommandBinder>();
+            services.AddSingleton<IExecutionPolicy, AllowAllExecutionPolicy>(); services.AddSingleton<IFluNetFileSystem, PhysicalFluNetFileSystem>(); services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
+            services.AddSingleton<IHttpTransport, HttpTransport>(); services.AddSingleton<ITextOutput, ConsoleTextOutput>(); services.AddSingleton<IEmailTransport, DiagnosticEmailTransport>();
+            services.AddSingleton<IWorkflowStateStore, InMemoryWorkflowStateStore>(); services.AddSingleton<IWorkflowValueSerializer, JsonWorkflowValueSerializer>();
+            services.AddSingleton<IExecutionResultCache, InMemoryExecutionResultCache>();
+            services.AddTransient<TokenFactory>(); services.AddTransient<TokenTreeFactory>(); services.AddTransient<WordFactory>(); services.AddTransient<Lexicon.Lexicon>(); services.AddTransient<SentenceValidator>(); services.AddSingleton<VerbRegistry>(); services.AddTransient<SentenceFactory>(); services.AddTransient<SentenceExecutor>(); services.AddTransient<LegacySentenceAdapter>();
+            runtime.RegisterRoutes(services); services.AddTransient<CommandDispatcher>(); services.AddTransient<TypedProgramCompiler>(); services.AddTransient<TypedProgramTypeValidator>(); services.AddSingleton<ExecutionPlanner>(); services.AddTransient<ExecutionPlanExecutor>();
+            services.AddPatternMatchers(); services.AddScoped<IVariableResolver, VariableResolver>(); services.AddTransient<Execution.ExecutionPipelineFactory>();
+            services.AddTransient<Engine>(provider => new Engine(provider.GetRequiredService<IVariableResolver>(), provider.GetRequiredService<Execution.ExecutionPipelineFactory>(), provider.GetRequiredService<SemanticCommandBinder>(), provider.GetRequiredService<ExecutionPlanner>(), provider.GetRequiredService<LanguageSnapshot>(), provider.GetRequiredService<LegacySentenceAdapter>()));
         }
-
-        public static FluNETContext Create(Action<IServiceCollection>? configureServices = null)
-        {
-            var services = new ServiceCollection();
-            ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
-            configureServices?.Invoke(services);
-            return new FluNETContext(services.BuildServiceProvider());
-        }
-
-        public static FluNETContext CreateWithRuntime(
-            FluNetRuntimeDefinition runtime,
-            Action<IServiceCollection>? configureServices = null)
-        {
-            ArgumentNullException.ThrowIfNull(runtime);
-            var services = new ServiceCollection();
-            ConfigureDefaultServices(services, runtime);
-            configureServices?.Invoke(services);
-            return new FluNETContext(services.BuildServiceProvider());
-        }
-
-        public static void ConfigureDefaultServices(IServiceCollection services) =>
-            ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
-
-        public static void ConfigureDefaultServices(
-            IServiceCollection services,
-            FluNetRuntimeDefinition runtime)
-        {
-            ArgumentNullException.ThrowIfNull(services);
-            ArgumentNullException.ThrowIfNull(runtime);
-
-            services.AddSingleton(runtime.Language);
-            services.AddSingleton<LanguageRegistry>();
-            services.AddSingleton<DiscoveryService>();
-            services.AddSingleton<SemanticCommandBinder>();
-
-            services.AddSingleton<IExecutionPolicy, AllowAllExecutionPolicy>();
-            services.AddSingleton<IFluNetFileSystem, PhysicalFluNetFileSystem>();
-            services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
-            services.AddSingleton<IHttpTransport, HttpTransport>();
-            services.AddSingleton<ITextOutput, ConsoleTextOutput>();
-            services.AddSingleton<IEmailTransport, DiagnosticEmailTransport>();
-            services.AddSingleton<IWorkflowStateStore, InMemoryWorkflowStateStore>();
-            services.AddSingleton<IWorkflowValueSerializer, JsonWorkflowValueSerializer>();
-
-            services.AddTransient<TokenFactory>();
-            services.AddTransient<TokenTreeFactory>();
-            services.AddTransient<WordFactory>();
-            services.AddTransient<Lexicon.Lexicon>();
-            services.AddTransient<SentenceValidator>();
-            services.AddSingleton<VerbRegistry>();
-            services.AddTransient<SentenceFactory>();
-            services.AddTransient<SentenceExecutor>();
-            services.AddTransient<LegacySentenceAdapter>();
-
-            runtime.RegisterRoutes(services);
-            services.AddTransient<CommandDispatcher>();
-            services.AddTransient<TypedProgramCompiler>();
-            services.AddTransient<TypedProgramTypeValidator>();
-            services.AddSingleton<ExecutionPlanner>();
-            services.AddTransient<ExecutionPlanExecutor>();
-
-            services.AddPatternMatchers();
-            services.AddScoped<IVariableResolver, VariableResolver>();
-            services.AddTransient<Execution.ExecutionPipelineFactory>();
-
-            services.AddTransient<Engine>(provider => new Engine(
-                provider.GetRequiredService<IVariableResolver>(),
-                provider.GetRequiredService<Execution.ExecutionPipelineFactory>(),
-                provider.GetRequiredService<SemanticCommandBinder>(),
-                provider.GetRequiredService<ExecutionPlanner>(),
-                provider.GetRequiredService<LanguageSnapshot>(),
-                provider.GetRequiredService<LegacySentenceAdapter>()));
-        }
-
         public Engine GetEngine() => GetService<Engine>();
-
-        public T GetService<T>() where T : notnull
-        {
-            return _scope != null
-                ? _scope.ServiceProvider.GetRequiredService<T>()
-                : _serviceProvider.GetRequiredService<T>();
-        }
-
-        public object GetService(Type serviceType)
-        {
-            return _scope != null
-                ? _scope.ServiceProvider.GetRequiredService(serviceType)
-                : _serviceProvider.GetRequiredService(serviceType);
-        }
-
+        public T GetService<T>() where T : notnull => _scope != null ? _scope.ServiceProvider.GetRequiredService<T>() : _serviceProvider.GetRequiredService<T>();
+        public object GetService(Type serviceType) => _scope != null ? _scope.ServiceProvider.GetRequiredService(serviceType) : _serviceProvider.GetRequiredService(serviceType);
         public IServiceProvider ServiceProvider => _scope?.ServiceProvider ?? _serviceProvider;
-
-        public void Dispose()
-        {
-            _scope?.Dispose();
-            if (this == _defaultContext)
-            {
-                _defaultContext = null;
-            }
-            _serviceProvider.Dispose();
-        }
-
-        public static void ResetDefault()
-        {
-            _defaultContext?.Dispose();
-            _defaultContext = null;
-        }
+        public void Dispose() { _scope?.Dispose(); if (this == _defaultContext) _defaultContext = null; _serviceProvider.Dispose(); }
+        public static void ResetDefault() { _defaultContext?.Dispose(); _defaultContext = null; }
     }
 }

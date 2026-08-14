@@ -12,29 +12,31 @@ using FluNET.Prompt.Surface;
 namespace FluNET.Compilation;
 
 public sealed record SurfaceCompilationResult(SourceDocument Document, SurfaceParseResult SurfaceParse, LoweringResult Lowering, DiagnosticBag Diagnostics, BoundProgram? BoundProgram, TypedProgram? TypedProgram, DependencyGraph? DependencyGraph, ExecutionPlan? Plan, CompilationPhase? FailedPhase)
-{
-    public bool IsValid => SurfaceParse.IsValid && Lowering.IsValid && !Diagnostics.HasErrors && TypedProgram is not null && DependencyGraph is not null && Plan is not null && FailedPhase is null;
-}
+{ public bool IsValid => SurfaceParse.IsValid && Lowering.IsValid && !Diagnostics.HasErrors && TypedProgram is not null && DependencyGraph is not null && Plan is not null && FailedPhase is null; }
 
-public sealed class SurfaceCompiler(LanguageSnapshot language, SemanticCommandBinder binder, TypedProgramCompiler typedCompiler,
-    TypedProgramTypeValidator typeValidator, ExecutionPlanner planner, IResourceProviderRegistry resourceProviders)
+public sealed class SurfaceCompiler(LanguageSnapshot language, SemanticCommandBinder binder, TypedProgramCompiler typedCompiler, TypedProgramTypeValidator typeValidator, ExecutionPlanner planner, IResourceProviderRegistry resourceProviders)
 {
-    private readonly SemanticProgramValidator _semanticValidator = new(language);
-    private readonly DependencyAnalyzer _dependencies = new();
-
+    private readonly SemanticProgramValidator _semanticValidator = new(language); private readonly DependencyAnalyzer _dependencies = new();
     public SurfaceCompilationResult Compile(SourceDocument document)
     {
         ArgumentNullException.ThrowIfNull(document); DiagnosticBag diagnostics = new();
         SurfaceParseResult raw = new SurfaceParser().Parse(document);
         SurfaceTaskCompilationResult tasks = new SurfaceTaskCompiler(language).Compile(raw);
         SurfacePolicyCompilationResult policies = new SurfacePolicyCompiler().Compile(tasks.Parse);
-        SurfaceParseResult parsed = policies.Parse;
+        SurfaceCacheCompilationResult cache = new SurfaceCacheCompiler().Compile(policies.Parse);
+        SurfaceParseResult parsed = cache.Parse;
         LoweringResult lowered = new SurfaceLowerer(resourceProviders).Lower(parsed, language.Grammar, language);
         lowered = SurfacePolicyApplicationPass.Apply(lowered, policies.Assignments, language.Grammar);
-        if (!lowered.IsValid || !policies.IsValid || !tasks.IsValid) return new SurfaceCompilationResult(document, parsed, lowered, diagnostics, null, null, null, null, CompilationPhase.Parse);
+        if (!lowered.IsValid || !policies.IsValid || !tasks.IsValid || !cache.IsValid) return new SurfaceCompilationResult(document, parsed, lowered, diagnostics, null, null, null, null, CompilationPhase.Parse);
         BoundProgram bound;
-        try { IReadOnlyList<BoundCommand> commands = binder.BindProgram(lowered.CanonicalSyntax); bound = BoundProgram.FromCommands(new FluNetProgram(new ProcessedPrompt(document.Text, language.Grammar), lowered.CanonicalSyntax), commands); }
+        try
+        {
+            IReadOnlyList<BoundCommand> commands = binder.BindProgram(lowered.CanonicalSyntax);
+            bound = BoundProgram.FromCommands(new FluNetProgram(new ProcessedPrompt(document.Text, language.Grammar), lowered.CanonicalSyntax), commands);
+            SurfaceCachePolicyPass.Attach(bound, lowered.SourceMap, cache.Assignments);
+        }
         catch (SemanticBindingException exception) { diagnostics.Add(CompilationDiagnosticCodes.BindingFailure, CompilationPhase.Bind, exception.Message, exception.Span); return new SurfaceCompilationResult(document, parsed, lowered, diagnostics, null, null, null, null, CompilationPhase.Bind); }
+        catch (CommandCompilationException exception) { diagnostics.Add(exception.Code, CompilationPhase.Compile, exception.Message, exception.Span); return new SurfaceCompilationResult(document, parsed, lowered, diagnostics, bound, null, null, null, CompilationPhase.Compile); }
         DiagnosticBag semantic = _semanticValidator.Validate(bound); diagnostics.AddRange(semantic);
         if (semantic.HasErrors) return new SurfaceCompilationResult(document, parsed, lowered, diagnostics, bound, null, null, null, CompilationPhase.Validate);
         TypedProgram typed;
