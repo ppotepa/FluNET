@@ -2,7 +2,7 @@ using FluNET.Compilation;
 
 namespace FluNET.Execution.Steps;
 
-public sealed class TypeValidationStep
+public sealed class TypeValidationStep : IExecutionStep
 {
     private readonly TypedProgramTypeValidator _validator;
 
