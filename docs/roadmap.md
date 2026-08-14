@@ -6,39 +6,35 @@ Status vocabulary: **IMPLEMENTED** means the source contract exists on `main`; *
 
 Batches **52–65: IMPLEMENTED source candidate / NOT VERIFIED**.
 
-52 roadmap · 53 resource payload/decoders · 54 CSV/XML · 55 Binary/Image · 56 typed HTTP media · 57 SQL · 58 AUTH · 59 nested action IR · 60 full FOR EACH actions · 61 policy v2 · 62 durable cache/idempotency · 63 calendar/cron · 64 automation/ENSURE CLI adapters · 65 tooling/freeze ledger.
-
 See [0.8 freeze readiness](compiler-0.8-freeze-readiness.md).
 
 ## 0.9 — Declarative Reconciliation
 
 Batches **66–75: IMPLEMENTED source candidate / NOT VERIFIED**.
 
-66 Desired/Observed State IR · 67 pluggable observation · 68 SYNC compiler · 69 keyed diff/conflicts · 70 reconciliation runner · 71 WATCH bridge · 72 compensation · 73 saga · 74 redacted history · 75 freeze ledger.
-
 See [0.9 freeze readiness](compiler-0.9-freeze-readiness.md).
 
 ## 1.0 — Production Readiness
 
-Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 is the only remaining release gate and cannot be marked complete without real build/test evidence.
+Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 has implemented the release-gate policy and recorded the current absence of verification evidence; release remains blocked.
 
 | Batch | Scope | Status |
 | --- | --- | --- |
 | 76 | solution-wide Release gate + bash/PowerShell scripts | IMPLEMENTED / NOT VERIFIED |
 | 77 | durable reconciliation baseline/state | IMPLEMENTED |
-| 78 | `ON CONFLICT FAIL/KEEP TARGET/KEEP SOURCE` | IMPLEMENTED |
+| 78 | explicit reconciliation conflict policies | IMPLEMENTED |
 | 79 | generic reconciliation mutator registry | IMPLEMENTED |
-| 80 | target leases, heartbeat and monotonic fencing tokens | IMPLEMENTED |
+| 80 | leases, heartbeat and monotonic fencing tokens | IMPLEMENTED |
 | 81 | crash/restart checkpoints + atomic physical SAVE | IMPLEMENTED |
-| 82 | opt-in secure host, DNS/private-address and redirect hardening | IMPLEMENTED |
-| 83 | metadata-only command/reconciliation telemetry | IMPLEMENTED |
-| 84 | property/stress/corruption/concurrency contracts | IMPLEMENTED source tests |
-| 85 | extension/persistence/durable-format contract freeze candidate | IMPLEMENTED |
-| 86 | `FluNET.Tool` packaging + compatibility CLI boundary | IMPLEMENTED |
-| 87 | backward-compatibility/upgrade contracts | IMPLEMENTED source tests |
-| 88 | RC readiness ledger | IMPLEMENTED / NOT VERIFIED |
-| 89 | exact-tree Release verification + version/package promotion decision | BLOCKED ON VERIFICATION |
+| 82 | secure host/network/file hardening | IMPLEMENTED |
+| 83 | metadata-only telemetry | IMPLEMENTED |
+| 84 | stress/property/corruption/concurrency contracts | IMPLEMENTED source tests |
+| 85 | language/API/persistence/durable-format freeze candidate | IMPLEMENTED |
+| 86 | Tool packaging + compatibility CLI boundary | IMPLEMENTED |
+| 87 | upgrade/backward-compatibility contracts | IMPLEMENTED source tests |
+| 88 | RC source-readiness ledger | IMPLEMENTED / NOT VERIFIED |
+| 89 | release-promotion gate policy + evidence decision | GATE IMPLEMENTED / RELEASE BLOCKED |
 
-See [1.0 RC readiness](1.0-rc-readiness.md) and [verification gate](1.0-verification.md).
+See [1.0 RC source readiness](1.0-rc-readiness.md), [verification gate](1.0-verification.md), and [release gate](1.0-release-gate.md).
 
-No public version promotion or release claim occurs until Batch 89 has successful evidence for the exact candidate tree.
+The next action is not another feature batch. It is to run the canonical gate in a .NET 9 environment, fix any failures, rerun it, promote the public version only after green pre-promotion evidence, and rerun again before an explicit release/tag.
