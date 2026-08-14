@@ -3,6 +3,7 @@ using FluNET.Language.Binding;
 using FluNET.Language.Values;
 using FluNET.Syntax.Verbs;
 using FluNET.Variables;
+using FluNET.Capabilities;
 using System.Text.Json;
 
 namespace FluNET.Execution.Commands;
@@ -11,7 +12,7 @@ public sealed record SetTextCommand(IExpression<string> Value) : ICommand<string
 public sealed record SetJsonCommand(IExpression<JsonElement> Value) : ICommand<JsonElement>;
 public sealed record SetNumberCommand(IExpression<decimal> Value) : ICommand<decimal>;
 public sealed record SetBooleanCommand(IExpression<bool> Value) : ICommand<bool>;
-public sealed record ParseJsonCommand(IExpression<JsonElement> Source) : ICommand<JsonElement>;
+public sealed record ParseJsonCommand(IExpression<string> Source) : ICommand<JsonElement>;
 public sealed record FormatJsonCommand(IExpression<JsonElement> Source) : ICommand<string>;
 
 public sealed class SetTextCommandBinder(
@@ -56,7 +57,7 @@ public sealed class ParseJsonCommandBinder(
     FrameCommandBinder<ParseJsonCommand, JsonElement, ParseJson>(language, values)
 {
     protected override ParseJsonCommand Bind(BoundCommand command) =>
-        new(Context(command).Require<JsonElement>(SemanticRole.Source));
+        new(Context(command).RequireText(SemanticRole.Source));
 }
 
 public sealed class FormatJsonCommandBinder(
@@ -116,15 +117,22 @@ public sealed class SetBooleanCommandHandler(IVariableResolver variables)
     }
 }
 
-public sealed class ParseJsonCommandHandler(IVariableResolver variables)
+public sealed class ParseJsonCommandHandler(
+    IVariableResolver variables,
+    IFluNetFileSystem fileSystem)
     : ICommandHandler<ParseJsonCommand, JsonElement>
 {
-    public ValueTask<JsonElement> HandleAsync(
+    public async ValueTask<JsonElement> HandleAsync(
         ParseJsonCommand command,
         CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return ValueTask.FromResult(command.Source.Evaluate(variables));
+        string source = command.Source.Evaluate(variables);
+        string json = source.TrimStart().StartsWith('{') ||
+            source.TrimStart().StartsWith('[')
+            ? source
+            : await fileSystem.ReadAllTextAsync(source, cancellationToken).ConfigureAwait(false);
+        return JsonDocument.Parse(json).RootElement.Clone();
     }
 }
 
