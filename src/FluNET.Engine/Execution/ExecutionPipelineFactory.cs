@@ -2,6 +2,7 @@ using FluNET.Compilation;
 using FluNET.Execution.Planning;
 using FluNET.Execution.Steps;
 using FluNET.Language.Binding;
+using FluNET.Language.Values;
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
@@ -52,7 +53,9 @@ namespace FluNET.Execution
                 planExecutor)
         {
             _compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
-            _typeValidator = new TypedProgramTypeValidator();
+            _typeValidator = new TypedProgramTypeValidator(
+                _semanticBinder.Language,
+                ValueCodecRegistryFactory.CreateDefault(_semanticBinder.Language));
         }
 
         /// <summary>Canonical 0.4 constructor with host variables and conversion-aware type validation.</summary>
