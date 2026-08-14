@@ -42,7 +42,6 @@ public sealed class SurfaceLowerer
         List<SourceMapEntry> map = [];
         List<SurfaceDiagnostic> diagnostics = [.. parse.Diagnostics];
         InferenceTrace trace = new();
-        int? previousStatementLast = null;
 
         foreach (SurfaceStatementSyntax statement in parse.Program.Statements)
         {
@@ -52,7 +51,6 @@ public sealed class SurfaceLowerer
                     $"Unsupported surface statement '{statement.GetType().Name}'.", statement.Span));
                 continue;
             }
-            int first = commands.Count;
             IReadOnlyList<CommandSyntax> lowered = command.NormalizedName switch
             {
                 "SAY" => [LowerSay(command, grammar)],
@@ -68,10 +66,6 @@ public sealed class SurfaceLowerer
                 }
                 continue;
             }
-            if (previousStatementLast is int previous)
-            {
-                links.Add(Link(previous, first, CommandLinkKind.Sequence, command.Span.Start, "THEN"));
-            }
             for (int offset = 0; offset < lowered.Count; offset++)
             {
                 int commandIndex = commands.Count;
@@ -82,7 +76,6 @@ public sealed class SurfaceLowerer
                     links.Add(Link(commandIndex - 1, commandIndex, CommandLinkKind.Parallel, command.Span.Start, "AND"));
                 }
             }
-            previousStatementLast = commands.Count - 1;
         }
 
         return new LoweringResult(parse.Document, parse.Program, new PromptSyntax(commands, links),
@@ -107,7 +100,6 @@ public sealed class SurfaceLowerer
                 "AS on multiple explicit LOAD resources is reserved for collection/glob lowering.", command.Span));
             return [];
         }
-
         List<CommandSyntax> result = [];
         foreach (SurfaceValueSyntax value in command.Values)
         {
@@ -188,10 +180,7 @@ public sealed class SurfaceLowerer
             ExpressionSyntax expression = ExpressionSyntaxParser.Parse(text);
             return expression is PropertyExpressionSyntax or IndexExpressionSyntax;
         }
-        catch (FormatException)
-        {
-            return false;
-        }
+        catch (FormatException) { return false; }
     }
 
     private static CommandLinkSyntax Link(int predecessor, int successor, CommandLinkKind kind, int position, string text) =>
