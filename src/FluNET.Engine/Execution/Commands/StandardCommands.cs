@@ -1,6 +1,7 @@
 using FluNET.Capabilities;
 using FluNET.Language;
 using FluNET.Language.Binding;
+using FluNET.Language.Values;
 using FluNET.Syntax.Core;
 using FluNET.Syntax.Verbs;
 using FluNET.Variables;
@@ -8,11 +9,16 @@ using System.Text.Json;
 
 namespace FluNET.Execution.Commands;
 
-public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>
-    : ICommandBinder<TCommand, TResult>
+public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) : ICommandBinder<TCommand, TResult>
     where TCommand : class, ICommand<TResult>
     where TImplementation : class, IVerb
 {
+    private readonly ExpressionBinder _expressions = new(
+        language ?? throw new ArgumentNullException(nameof(language)),
+        values ?? throw new ArgumentNullException(nameof(values)));
+
     public TCommand? TryBind(BoundCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
@@ -20,6 +26,9 @@ public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>
             ? Bind(command)
             : null;
     }
+
+    protected CommandBindingContext Context(BoundCommand command) =>
+        new(command, _expressions);
 
     protected abstract TCommand Bind(BoundCommand command);
 }
@@ -47,84 +56,115 @@ public sealed record TransformEncodingCommand(
     IExpression<string> Theme,
     IExpression<System.Text.Encoding> Instrument) : ICommand<string>;
 
-public sealed class GetTextCommandBinder :
-    FrameCommandBinder<GetTextCommand, string[], GetText>
+public sealed class GetTextCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<GetTextCommand, string[], GetText>(language, values)
 {
     protected override GetTextCommand Bind(BoundCommand command) =>
-        new(Expressions.File(command[SemanticRole.Source]));
+        new(Context(command).Require<FileInfo>(SemanticRole.Source));
 }
 
-public sealed class LoadTextCommandBinder :
-    FrameCommandBinder<LoadTextCommand, string[], LoadText>
+public sealed class LoadTextCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<LoadTextCommand, string[], LoadText>(language, values)
 {
     protected override LoadTextCommand Bind(BoundCommand command) =>
-        new(Expressions.File(command[SemanticRole.Source]));
+        new(Context(command).Require<FileInfo>(SemanticRole.Source));
 }
 
-public sealed class LoadConfigCommandBinder :
-    FrameCommandBinder<LoadConfigCommand, Dictionary<string, object>, LoadConfig>
+public sealed class LoadConfigCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<LoadConfigCommand, Dictionary<string, object>, LoadConfig>(language, values)
 {
     protected override LoadConfigCommand Bind(BoundCommand command) =>
-        new(Expressions.File(command[SemanticRole.Source]));
+        new(Context(command).Require<FileInfo>(SemanticRole.Source));
 }
 
-public sealed class SaveTextCommandBinder(LanguageSnapshot language) :
-    FrameCommandBinder<SaveTextCommand, string, SaveText>
+public sealed class SaveTextCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<SaveTextCommand, string, SaveText>(language, values)
 {
-    protected override SaveTextCommand Bind(BoundCommand command) => new(
-        TextExpression.Bind(command[SemanticRole.Theme], language),
-        Expressions.File(command[SemanticRole.Goal]));
+    protected override SaveTextCommand Bind(BoundCommand command)
+    {
+        CommandBindingContext context = Context(command);
+        return new SaveTextCommand(
+            context.RequireText(SemanticRole.Theme),
+            context.Require<FileInfo>(SemanticRole.Goal));
+    }
 }
 
-public sealed class DeleteFileCommandBinder(LanguageSnapshot language) :
-    FrameCommandBinder<DeleteFileCommand, string, DeleteFile>
+public sealed class DeleteFileCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<DeleteFileCommand, string, DeleteFile>(language, values)
 {
     protected override DeleteFileCommand Bind(BoundCommand command)
     {
-        BoundArgument source = command[SemanticRole.Source];
+        CommandBindingContext context = Context(command);
         return new DeleteFileCommand(
-            TextExpression.Bind(command[SemanticRole.Theme], language),
-            source.IsPresent ? Expressions.Directory(source) : null);
+            context.RequireText(SemanticRole.Theme),
+            context.Optional<DirectoryInfo>(SemanticRole.Source));
     }
 }
 
-public sealed class DownloadFileCommandBinder :
-    FrameCommandBinder<DownloadFileCommand, FileInfo, DownloadFile>
+public sealed class DownloadFileCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<DownloadFileCommand, FileInfo, DownloadFile>(language, values)
 {
     protected override DownloadFileCommand Bind(BoundCommand command)
     {
-        BoundArgument goal = command[SemanticRole.Goal];
+        CommandBindingContext context = Context(command);
         return new DownloadFileCommand(
-            Expressions.Uri(command[SemanticRole.Source]),
-            goal.IsPresent ? Expressions.File(goal) : null);
+            context.Require<Uri>(SemanticRole.Source),
+            context.Optional<FileInfo>(SemanticRole.Goal));
     }
 }
 
-public sealed class PostJsonCommandBinder(LanguageSnapshot language) :
-    FrameCommandBinder<PostJsonCommand, string, PostJson>
+public sealed class PostJsonCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<PostJsonCommand, string, PostJson>(language, values)
 {
-    protected override PostJsonCommand Bind(BoundCommand command) => new(
-        TextExpression.Bind(
-            command[SemanticRole.Theme],
-            language,
-            preserveStructuredReferences: true),
-        Expressions.Uri(command[SemanticRole.Goal]));
+    protected override PostJsonCommand Bind(BoundCommand command)
+    {
+        CommandBindingContext context = Context(command);
+        return new PostJsonCommand(
+            context.RequireText(SemanticRole.Theme, preserveStructuredReferences: true),
+            context.Require<Uri>(SemanticRole.Goal));
+    }
 }
 
-public sealed class SendEmailCommandBinder(LanguageSnapshot language) :
-    FrameCommandBinder<SendEmailCommand, string, SendEmail>
+public sealed class SendEmailCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<SendEmailCommand, string, SendEmail>(language, values)
 {
-    protected override SendEmailCommand Bind(BoundCommand command) => new(
-        TextExpression.Bind(command[SemanticRole.Theme], language),
-        Expressions.String(command[SemanticRole.Recipient]));
+    protected override SendEmailCommand Bind(BoundCommand command)
+    {
+        CommandBindingContext context = Context(command);
+        return new SendEmailCommand(
+            context.RequireText(SemanticRole.Theme),
+            context.Require<string>(SemanticRole.Recipient));
+    }
 }
 
-public sealed class TransformEncodingCommandBinder(LanguageSnapshot language) :
-    FrameCommandBinder<TransformEncodingCommand, string, TransformEncoding>
+public sealed class TransformEncodingCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<TransformEncodingCommand, string, TransformEncoding>(language, values)
 {
-    protected override TransformEncodingCommand Bind(BoundCommand command) => new(
-        TextExpression.Bind(command[SemanticRole.Theme], language),
-        Expressions.Encoding(command[SemanticRole.Instrument]));
+    protected override TransformEncodingCommand Bind(BoundCommand command)
+    {
+        CommandBindingContext context = Context(command);
+        return new TransformEncodingCommand(
+            context.RequireText(SemanticRole.Theme),
+            context.Require<System.Text.Encoding>(SemanticRole.Instrument));
+    }
 }
 
 public sealed class GetTextCommandHandler(
@@ -271,18 +311,4 @@ public sealed class TransformEncodingCommandHandler(IVariableResolver variables)
             .GetBytes(command.Theme.Evaluate(variables));
         return ValueTask.FromResult(Convert.ToBase64String(bytes));
     }
-}
-
-internal static class Expressions
-{
-    internal static ScalarExpression<string> String(BoundArgument argument) =>
-        new(argument, new StringValueConverter());
-    internal static ScalarExpression<FileInfo> File(BoundArgument argument) =>
-        new(argument, new FileInfoValueConverter());
-    internal static ScalarExpression<DirectoryInfo> Directory(BoundArgument argument) =>
-        new(argument, new DirectoryInfoValueConverter());
-    internal static ScalarExpression<Uri> Uri(BoundArgument argument) =>
-        new(argument, new UriValueConverter());
-    internal static ScalarExpression<System.Text.Encoding> Encoding(BoundArgument argument) =>
-        new(argument, new EncodingValueConverter());
 }
