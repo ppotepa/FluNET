@@ -13,6 +13,7 @@ namespace FluNET.Execution
         private readonly SemanticCommandBinder _semanticBinder;
         private readonly SemanticProgramValidator _semanticValidator;
         private readonly TypedProgramCompiler? _compiler;
+        private readonly TypedProgramTypeValidator? _typeValidator;
         private readonly ExecutionPlanner _planner;
         private readonly ExecutionPlanExecutor _planExecutor;
 
@@ -33,6 +34,7 @@ namespace FluNET.Execution
             _planExecutor = planExecutor ?? throw new ArgumentNullException(nameof(planExecutor));
         }
 
+        /// <summary>Compatibility constructor retained for pre-validator hosts.</summary>
         public ExecutionPipelineFactory(
             TokenTreeFactory tokenTreeFactory,
             SentenceValidator sentenceValidator,
@@ -50,6 +52,29 @@ namespace FluNET.Execution
                 planExecutor)
         {
             _compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
+            _typeValidator = new TypedProgramTypeValidator();
+        }
+
+        /// <summary>Canonical 0.4 constructor with host variables and conversion-aware type validation.</summary>
+        public ExecutionPipelineFactory(
+            TokenTreeFactory tokenTreeFactory,
+            SentenceValidator sentenceValidator,
+            SentenceFactory sentenceFactory,
+            SemanticCommandBinder semanticBinder,
+            TypedProgramCompiler compiler,
+            TypedProgramTypeValidator typeValidator,
+            ExecutionPlanner planner,
+            ExecutionPlanExecutor planExecutor)
+            : this(
+                tokenTreeFactory,
+                sentenceValidator,
+                sentenceFactory,
+                semanticBinder,
+                planner,
+                planExecutor)
+        {
+            _compiler = compiler ?? throw new ArgumentNullException(nameof(compiler));
+            _typeValidator = typeValidator ?? throw new ArgumentNullException(nameof(typeValidator));
         }
 
         public ExecutionPipeline CreateStandardPipeline()
@@ -63,7 +88,8 @@ namespace FluNET.Execution
             {
                 pipeline
                     .AddStep(new CommandCompilationStep(_compiler))
-                    .AddStep(new TypeValidationStep());
+                    .AddStep(new TypeValidationStep(
+                        _typeValidator ?? new TypedProgramTypeValidator()));
             }
 
             return pipeline
