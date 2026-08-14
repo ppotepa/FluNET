@@ -4,7 +4,7 @@ public sealed partial class ExpressionSyntaxParser
 {
     private ExpressionSyntax ParseUnary()
     {
-        if (MatchWord("NOT"))
+        if (MatchWord("NOT") || MatchOperator("!", "-"))
         {
             ExpressionToken operation = Previous;
             ExpressionSyntax operand = ParseUnary();
@@ -13,6 +13,6 @@ public sealed partial class ExpressionSyntaxParser
                 operand,
                 SourceSpan.FromBounds(operation.Span.Start, operand.Span.End));
         }
-        return ParsePrimary();
+        return ParsePostfix();
     }
 }
