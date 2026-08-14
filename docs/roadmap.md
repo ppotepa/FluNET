@@ -2,12 +2,7 @@
 
 This file is the authoritative implementation ledger after the 0.3 published identity. A feature is not a released language guarantee merely because its source implementation exists.
 
-Status values:
-
-- **PLANNED** — designed, not yet merged;
-- **IMPLEMENTED** — source implementation is on `main`;
-- **VERIFIED** — the exact tree passed the required Release restore/build/test gate;
-- **FROZEN** — compatibility contract/version snapshot is intentionally frozen.
+Status values: **PLANNED**, **IMPLEMENTED**, **VERIFIED**, **FROZEN**.
 
 ## Existing source milestones
 
@@ -25,7 +20,7 @@ Public `StandardLanguageIdentity.Version` remains `0.3` until an exact candidate
 | Batch | Scope | Status |
 | --- | --- | --- |
 | 52 | roadmap/release baseline | IMPLEMENTED |
-| 53 | unified resource payload + decoder/encoder registry | PLANNED |
+| 53 | unified resource payload + decoder/encoder registry | IMPLEMENTED |
 | 54 | CSV/XML decoders | PLANNED |
 | 55 | Binary/Image language values | PLANNED |
 | 56 | generic HTTP response/media model | PLANNED |
@@ -68,8 +63,6 @@ Public `StandardLanguageIdentity.Version` remains `0.3` until an exact candidate
 | 83 | cross-platform verification and 1.0 release gate | PLANNED |
 
 ## Release gate
-
-A milestone cannot become VERIFIED/FROZEN until the exact candidate tree passes:
 
 ```bash
 dotnet restore FluNET.sln

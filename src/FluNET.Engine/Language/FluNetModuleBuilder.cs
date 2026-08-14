@@ -28,6 +28,8 @@ public sealed class FluNetModuleBuilder
     private readonly List<ValueCodecRegistration> _codecs = [];
     private readonly List<ValueConversionRegistration> _conversions = [];
     private readonly List<ResourceProviderRegistration> _resourceProviders = [];
+    private readonly List<ResourceDecoderRegistration> _resourceDecoders = [];
+    private readonly List<ResourceEncoderRegistration> _resourceEncoders = [];
     public LanguageBuilder Language { get; } = new();
 
     public FluNetModuleBuilder AddModule(IFluNetModule module) { ArgumentNullException.ThrowIfNull(module); module.Register(this); return this; }
@@ -44,10 +46,13 @@ public sealed class FluNetModuleBuilder
     }
 
     public FluNetModuleBuilder ResourceProvider<TProvider>() where TProvider : class, IResourceProvider
-    {
-        _resourceProviders.Add(new ResourceProviderRegistration(typeof(TProvider), services => ActivatorUtilities.CreateInstance<TProvider>(services)));
-        return this;
-    }
+    { _resourceProviders.Add(new ResourceProviderRegistration(typeof(TProvider), services => ActivatorUtilities.CreateInstance<TProvider>(services))); return this; }
+
+    public FluNetModuleBuilder ResourceDecoder<TDecoder>() where TDecoder : class, IResourceDecoder
+    { _resourceDecoders.Add(new ResourceDecoderRegistration(typeof(TDecoder), services => ActivatorUtilities.CreateInstance<TDecoder>(services))); return this; }
+
+    public FluNetModuleBuilder ResourceEncoder<TEncoder>() where TEncoder : class, IResourceEncoder
+    { _resourceEncoders.Add(new ResourceEncoderRegistration(typeof(TEncoder), services => ActivatorUtilities.CreateInstance<TEncoder>(services))); return this; }
 
     public FluNetModuleBuilder Route<TCommand, TResult, TBinder, THandler>(FrameId frameId)
         where TCommand : class, ICommand<TResult> where TBinder : class, ICommandBinder<TCommand, TResult> where THandler : class, ICommandHandler<TCommand, TResult>
@@ -72,7 +77,7 @@ public sealed class FluNetModuleBuilder
     {
         LanguageSnapshot language = Language.Build();
         ResolveLegacyFrameIds(language); ValidateRoutes(language); ValidateValues(language);
-        return new FluNetRuntimeDefinition(language, _routes, _codecs, _conversions, _resourceProviders);
+        return new FluNetRuntimeDefinition(language, _routes, _codecs, _conversions, _resourceProviders, _resourceDecoders, _resourceEncoders);
     }
 
     private void ResolveLegacyFrameIds(LanguageSnapshot language)
@@ -113,6 +118,10 @@ public sealed class FluNetModuleBuilder
         }
         Type[] duplicateProviders = _resourceProviders.GroupBy(item => item.ProviderType).Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
         if (duplicateProviders.Length > 0) throw new LanguageDefinitionException($"Resource provider types are registered more than once: {string.Join(", ", duplicateProviders.Select(type => type.FullName))}.");
+        Type[] duplicateDecoders = _resourceDecoders.GroupBy(item => item.DecoderType).Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
+        if (duplicateDecoders.Length > 0) throw new LanguageDefinitionException($"Resource decoder types are registered more than once: {string.Join(", ", duplicateDecoders.Select(type => type.FullName))}.");
+        Type[] duplicateEncoders = _resourceEncoders.GroupBy(item => item.EncoderType).Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
+        if (duplicateEncoders.Length > 0) throw new LanguageDefinitionException($"Resource encoder types are registered more than once: {string.Join(", ", duplicateEncoders.Select(type => type.FullName))}.");
     }
 }
 
@@ -122,14 +131,18 @@ public sealed class FluNetRuntimeDefinition
     private readonly ReadOnlyCollection<ValueCodecRegistration> _codecs;
     private readonly ReadOnlyCollection<ValueConversionRegistration> _conversions;
     private readonly ReadOnlyCollection<ResourceProviderRegistration> _resourceProviders;
+    private readonly ReadOnlyCollection<ResourceDecoderRegistration> _resourceDecoders;
+    private readonly ReadOnlyCollection<ResourceEncoderRegistration> _resourceEncoders;
 
     internal FluNetRuntimeDefinition(LanguageSnapshot language, IEnumerable<PendingCommandRoute> routes,
         IEnumerable<ValueCodecRegistration>? codecs = null, IEnumerable<ValueConversionRegistration>? conversions = null,
-        IEnumerable<ResourceProviderRegistration>? resourceProviders = null)
+        IEnumerable<ResourceProviderRegistration>? resourceProviders = null, IEnumerable<ResourceDecoderRegistration>? resourceDecoders = null,
+        IEnumerable<ResourceEncoderRegistration>? resourceEncoders = null)
     {
         Language = language ?? throw new ArgumentNullException(nameof(language));
         _routes = Array.AsReadOnly(routes.ToArray()); _codecs = Array.AsReadOnly(codecs?.ToArray() ?? []);
         _conversions = Array.AsReadOnly(conversions?.ToArray() ?? []); _resourceProviders = Array.AsReadOnly(resourceProviders?.ToArray() ?? []);
+        _resourceDecoders = Array.AsReadOnly(resourceDecoders?.ToArray() ?? []); _resourceEncoders = Array.AsReadOnly(resourceEncoders?.ToArray() ?? []);
         Routes = Array.AsReadOnly(_routes.Select(route => route.Descriptor).ToArray());
     }
     public LanguageSnapshot Language { get; }
@@ -140,5 +153,7 @@ public sealed class FluNetRuntimeDefinition
         foreach (PendingCommandRoute route in _routes) route.Register(services, route.Descriptor.FrameId);
         services.AddSingleton<IValueCodecRegistry>(provider => new ValueCodecRegistry(Language, provider, _codecs, _conversions));
         services.AddSingleton<IResourceProviderRegistry>(provider => new ResourceProviderRegistry(provider, _resourceProviders));
+        services.AddSingleton<IResourceDecoderRegistry>(provider => new ResourceDecoderRegistry(provider, _resourceDecoders));
+        services.AddSingleton<IResourceEncoderRegistry>(provider => new ResourceEncoderRegistry(provider, _resourceEncoders));
     }
 }
