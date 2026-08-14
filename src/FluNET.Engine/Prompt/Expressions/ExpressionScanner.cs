@@ -38,6 +38,7 @@ internal static class ExpressionScanner
                 char quote = current;
                 index++;
                 bool escaped = false;
+                bool closed = false;
                 while (index < source.Length)
                 {
                     char value = source[index++];
@@ -51,8 +52,14 @@ internal static class ExpressionScanner
                     }
                     else if (value == quote)
                     {
+                        closed = true;
                         break;
                     }
+                }
+                if (!closed)
+                {
+                    throw new FormatException(
+                        $"Unterminated expression string starting at position {offset + start}.");
                 }
                 Add(tokens, source, start, index, ExpressionTokenKind.String, offset);
                 continue;
