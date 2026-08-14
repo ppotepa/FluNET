@@ -9,55 +9,48 @@ namespace FluNET.Context;
 public static class ReconciliationExecutionExtensions
 {
     private static readonly ConditionalWeakTable<FluNETContext, IReconciliationStateStore> DefaultStateStores = new();
+    private static readonly ConditionalWeakTable<FluNETContext, IReconciliationLeaseStore> DefaultLeaseStores = new();
+    private static readonly ConditionalWeakTable<FluNETContext, IReconciliationLeaseContextAccessor> DefaultLeaseAccessors = new();
 
     public static IReconciliationMutatorRegistry GetReconciliationMutatorRegistry(this FluNETContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
         IReconciliationMutator[] custom = context.ServiceProvider.GetServices<IReconciliationMutator>().ToArray();
-        IReconciliationMutator builtIn = new LocalJsonFileReconciliationMutator(
-            context.GetSurfaceCompiler(),
-            context.GetService<IVariableResolver>());
+        IReconciliationMutator builtIn = new LocalJsonFileReconciliationMutator(context.GetSurfaceCompiler(), context.GetService<IVariableResolver>());
         return new ReconciliationMutatorRegistry(custom.Append(builtIn));
     }
 
-    public static ReconciliationMutationPlanner GetReconciliationMutationPlanner(this FluNETContext context)
+    public static ReconciliationMutationPlanner GetReconciliationMutationPlanner(this FluNETContext context) => new(context.GetReconciliationMutatorRegistry());
+
+    public static IReconciliationStateStore GetReconciliationStateStore(this FluNETContext context) =>
+        context.ServiceProvider.GetService<IReconciliationStateStore>() ?? DefaultStateStores.GetValue(context, _ => new InMemoryReconciliationStateStore());
+
+    public static IReconciliationLeaseStore GetReconciliationLeaseStore(this FluNETContext context) =>
+        context.ServiceProvider.GetService<IReconciliationLeaseStore>() ?? DefaultLeaseStores.GetValue(context, _ => new InMemoryReconciliationLeaseStore());
+
+    public static IReconciliationLeaseContextAccessor GetReconciliationLeaseContextAccessor(this FluNETContext context) =>
+        context.ServiceProvider.GetService<IReconciliationLeaseContextAccessor>() ?? DefaultLeaseAccessors.GetValue(context, _ => new ReconciliationLeaseContextAccessor());
+
+    public static ReconciliationRunner GetReconciliationRunner(this FluNETContext context) => new(
+        context.GetResourceObserverRegistry(),
+        new ReconciliationDiffEngine(),
+        context.GetReconciliationMutationPlanner(),
+        context.GetService<ExecutionPlanExecutor>(),
+        context.GetReconciliationStateStore());
+
+    public static ReconciliationCoordinator GetReconciliationCoordinator(this FluNETContext context)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        return new ReconciliationMutationPlanner(context.GetReconciliationMutatorRegistry());
+        ReconciliationCoordinationOptions options = context.ServiceProvider.GetService<ReconciliationCoordinationOptions>() ?? ReconciliationCoordinationOptions.Default;
+        return new(context.GetReconciliationRunner(), context.GetReconciliationLeaseStore(), context.GetReconciliationLeaseContextAccessor(), options);
     }
 
-    public static IReconciliationStateStore GetReconciliationStateStore(this FluNETContext context)
+    public static async ValueTask<IReadOnlyList<ReconciliationRunResult>> ExecuteSyncAsync(this FluNETContext context, string source, CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(context);
-        return context.ServiceProvider.GetService<IReconciliationStateStore>()
-            ?? DefaultStateStores.GetValue(context, _ => new InMemoryReconciliationStateStore());
-    }
-
-    public static ReconciliationRunner GetReconciliationRunner(this FluNETContext context)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-        return new ReconciliationRunner(
-            context.GetResourceObserverRegistry(),
-            new ReconciliationDiffEngine(),
-            context.GetReconciliationMutationPlanner(),
-            context.GetService<ExecutionPlanExecutor>(),
-            context.GetReconciliationStateStore());
-    }
-
-    public static async ValueTask<IReadOnlyList<ReconciliationRunResult>> ExecuteSyncAsync(
-        this FluNETContext context,
-        string source,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(context);
         SyncCompilationResult compilation = context.CompileSync(source);
-        if (!compilation.IsValid)
-            throw new InvalidOperationException(
-                "SYNC source does not compile: " + string.Join(" | ", compilation.Diagnostics.Select(item => $"{item.Code}: {item.Message}")));
-        ReconciliationRunner runner = context.GetReconciliationRunner();
+        if (!compilation.IsValid) throw new InvalidOperationException("SYNC source does not compile: " + string.Join(" | ", compilation.Diagnostics.Select(item => $"{item.Code}: {item.Message}")));
+        IReconciliationExecutor executor = context.GetReconciliationCoordinator();
         List<ReconciliationRunResult> runs = [];
         foreach (SyncDefinition definition in compilation.Definitions)
-            runs.Add(await runner.RunAsync(definition, null, cancellationToken).ConfigureAwait(false));
+            runs.Add(await executor.RunAsync(definition, null, cancellationToken).ConfigureAwait(false));
         return runs;
     }
 }
