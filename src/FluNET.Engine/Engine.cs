@@ -185,20 +185,40 @@ namespace FluNET
             }
             catch (ExecutionPlanException exception)
             {
-                diagnostics.Add(
-                    CompilationDiagnosticCodes.PlanningFailure,
-                    CompilationPhase.Plan,
-                    exception.Message,
-                    prompt.Syntax.Span);
-                return new CompilationResult(
-                    program,
-                    ValidationResult.Failure(exception.Message),
-                    null,
-                    diagnostics,
-                    boundProgram,
-                    null,
-                    CompilationPhase.Plan);
+                return PlanningFailure(program, boundProgram, diagnostics, prompt, exception.Message);
             }
+            catch (Exception exception) when (
+                exception is FormatException or NotSupportedException or InvalidOperationException)
+            {
+                return PlanningFailure(
+                    program,
+                    boundProgram,
+                    diagnostics,
+                    prompt,
+                    $"Invalid execution policy expression: {exception.Message}");
+            }
+        }
+
+        private static CompilationResult PlanningFailure(
+            FluNetProgram program,
+            BoundProgram boundProgram,
+            DiagnosticBag diagnostics,
+            ProcessedPrompt prompt,
+            string message)
+        {
+            diagnostics.Add(
+                CompilationDiagnosticCodes.PlanningFailure,
+                CompilationPhase.Plan,
+                message,
+                prompt.Syntax.Span);
+            return new CompilationResult(
+                program,
+                ValidationResult.Failure(message),
+                null,
+                diagnostics,
+                boundProgram,
+                null,
+                CompilationPhase.Plan);
         }
 
         /// <summary>
@@ -232,8 +252,8 @@ namespace FluNET
         }
 
         /// <summary>
-        /// Asynchronously executes the canonical Parse, Bind, Validate, Plan,
-        /// Execute pipeline. Standard execution never constructs ISentence.
+        /// Asynchronously executes the canonical Parse, Bind, Validate, Compile,
+        /// TypeCheck, Plan, Execute pipeline. Standard execution never constructs ISentence.
         /// </summary>
         public async Task<ExecutionResult> ExecuteAsync(
             ProcessedPrompt prompt,
