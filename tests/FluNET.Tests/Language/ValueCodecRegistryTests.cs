@@ -51,10 +51,14 @@ public sealed class ValueCodecRegistryTests
         });
     }
 
-    private sealed record Slug(string Value);
+    public sealed record Slug(string Value);
 
-    private sealed class SlugCodec : IValueCodec<Slug>
+    public sealed class SlugCodec : IValueCodec<Slug>
     {
+        public SlugCodec()
+        {
+        }
+
         public Slug Parse(ValueLiteral literal, ValueParseContext context) =>
             new(literal.Text.Trim().ToLowerInvariant().Replace(' ', '-'));
 
