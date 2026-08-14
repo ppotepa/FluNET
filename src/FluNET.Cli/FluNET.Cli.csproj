@@ -7,6 +7,8 @@
     <Nullable>enable</Nullable>
     <AssemblyName>flunet</AssemblyName>
     <RootNamespace>FluNET.Cli</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Description>Compatibility FluNET CLI. New tooling is provided by FluNET.Tool.</Description>
   </PropertyGroup>
 
   <ItemGroup>

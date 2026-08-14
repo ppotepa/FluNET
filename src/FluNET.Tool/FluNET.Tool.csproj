@@ -1,11 +1,17 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>flunet</AssemblyName>
     <RootNamespace>FluNET.Tool</RootNamespace>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>flunet</ToolCommandName>
+    <PackageId>FluNET.Tool</PackageId>
+    <PackageVersion>0.3.0-preview</PackageVersion>
+    <Description>FluNET compiler, workflow and reconciliation command-line tool.</Description>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../FluNET.Engine/FluNET.Engine.csproj" />

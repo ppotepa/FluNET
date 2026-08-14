@@ -1,6 +1,10 @@
 # FluNET 1.0 candidate CLI
 
-`src/FluNET.Tool` is the complete 1.0-source-candidate command surface. It is additive: the existing `FluNET.Cli` remains the compatibility entry point until the 1.0 candidate is build/test verified.
+`src/FluNET.Tool` is the preferred source-candidate command surface. It now targets the same `net9.0` framework as `FluNET.Engine`, is included in `FluNET.sln`, and is configured as the `FluNET.Tool` .NET tool package with command name `flunet`.
+
+The package version deliberately remains **`0.3.0-preview`** while public `StandardLanguageIdentity.Version` is `0.3`. A production package/version promotion is part of the final verified release gate, not this source batch.
+
+The historical `src/FluNET.Cli` project remains buildable for compatibility but is explicitly `IsPackable=false`; new CLI work belongs in `FluNET.Tool`.
 
 Commands:
 
@@ -34,8 +38,4 @@ flunet persistence
 
 The tool calls the same compiler/runner APIs used by embedding hosts. It contains no second implementation of language, automation, ENSURE or reconciliation semantics.
 
-Until verification, build it explicitly with:
-
-```bash
-dotnet build src/FluNET.Tool/FluNET.Tool.csproj --configuration Release
-```
+The canonical release scripts now build the solution, run tests and then pack/install the local `FluNET.Tool` package into a temporary tool directory for a smoke check.
