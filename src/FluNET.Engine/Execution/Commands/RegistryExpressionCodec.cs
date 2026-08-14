@@ -29,9 +29,16 @@ internal sealed class RegistryExpressionCodec<TValue>(
         }
 
         object converted = values.Convert(value, resolution.Path);
-        return converted is TValue result
-            ? result
-            : throw new InvalidCastException(
-                $"Conversion from '{source}' to '{target}' returned '{converted.GetType()}'.");
+        if (converted is TValue result)
+        {
+            return result;
+        }
+        if (target.Id == BuiltInTypeIds.Number)
+        {
+            return NumericRuntimeAdapter.ConvertTo<TValue>(converted);
+        }
+
+        throw new InvalidCastException(
+            $"Conversion from '{source}' to '{target}' returned '{converted.GetType()}'.");
     }
 }
