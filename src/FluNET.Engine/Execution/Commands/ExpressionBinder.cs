@@ -44,20 +44,7 @@ public sealed class ExpressionBinder
                 new RegistryExpressionCodec<TValue>(_language, _values));
         }
 
-        try
-        {
-            TValue value = _values.Parse<TValue>(new ValueLiteral(token.Text));
-            return new LiteralExpression<TValue>(value);
-        }
-        catch (Exception exception) when (
-            exception is FormatException or InvalidCastException or InvalidOperationException or JsonException)
-        {
-            throw new ExpressionBindingException(
-                ExpressionDiagnosticCodes.ValueParseFailure,
-                $"Cannot parse '{token.Text}' as '{_language.Types.Get<TValue>().Name}': {exception.Message}",
-                token.Span,
-                exception);
-        }
+        return new LiteralExpression<TValue>(ParseLiteral<TValue>(token));
     }
 
     public IExpression<string> BindText(
@@ -93,17 +80,32 @@ public sealed class ExpressionBinder
                 new RegistryExpressionCodec<TValue>(_language, _values));
         }
 
+        return new LiteralExpression<TValue>(ParseLiteral<TValue>(token));
+    }
+
+    private TValue ParseLiteral<TValue>(PromptToken token)
+    {
+        TypeSymbol target = _language.Types.Get<TValue>();
         try
         {
-            return new LiteralExpression<TValue>(
-                _values.Parse<TValue>(new ValueLiteral(token.Text)));
+            object parsed = _values.Parse(target.Id, new ValueLiteral(token.Text));
+            if (parsed is TValue typed)
+            {
+                return typed;
+            }
+            if (target.Id == BuiltInTypeIds.Number)
+            {
+                return NumericRuntimeAdapter.ConvertTo<TValue>(parsed);
+            }
+            throw new InvalidCastException(
+                $"Codec for '{target.Id}' returned '{parsed.GetType()}', expected '{typeof(TValue)}'.");
         }
         catch (Exception exception) when (
             exception is FormatException or InvalidCastException or InvalidOperationException or JsonException)
         {
             throw new ExpressionBindingException(
                 ExpressionDiagnosticCodes.ValueParseFailure,
-                $"Cannot parse '{token.Text}' as '{_language.Types.Get<TValue>().Name}': {exception.Message}",
+                $"Cannot parse '{token.Text}' as '{target.Name}': {exception.Message}",
                 token.Span,
                 exception);
         }
