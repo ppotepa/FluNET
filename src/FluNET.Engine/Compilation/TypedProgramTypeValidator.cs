@@ -17,12 +17,19 @@ public sealed partial class TypedProgramTypeValidator
 
     public TypedProgramTypeValidator(
         LanguageSnapshot language,
-        IVariableResolver variables,
         IValueCodecRegistry values)
     {
         _language = language ?? throw new ArgumentNullException(nameof(language));
-        _variables = variables ?? throw new ArgumentNullException(nameof(variables));
         _values = values ?? throw new ArgumentNullException(nameof(values));
+    }
+
+    public TypedProgramTypeValidator(
+        LanguageSnapshot language,
+        IVariableResolver variables,
+        IValueCodecRegistry values)
+        : this(language, values)
+    {
+        _variables = variables ?? throw new ArgumentNullException(nameof(variables));
     }
 
     private void ValidateType(
@@ -31,13 +38,7 @@ public sealed partial class TypedProgramTypeValidator
         TypeSymbol target,
         SourceSpan span)
     {
-        if (source.Id == target.Id)
-        {
-            return;
-        }
-
-        bool structural = target.Id != BuiltInTypeIds.Text && target.IsAssignableFrom(source);
-        if (structural)
+        if (source.Id == target.Id || target.IsAssignableFrom(source))
         {
             return;
         }
