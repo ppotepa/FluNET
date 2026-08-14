@@ -6,7 +6,7 @@ namespace FluNET.Compilation.Lowering;
 internal static class SurfaceDataLowering
 {
     public static bool IsDataStage(SurfaceCommandSyntax command) =>
-        command.NormalizedName is "FILTER" or "SORT" or "TAKE";
+        command.NormalizedName is "FILTER" or "SORT" or "TAKE" or "SELECT" or "MAP";
 
     public static CommandSyntax? Lower(
         SurfaceCommandSyntax stage,
@@ -18,6 +18,8 @@ internal static class SurfaceDataLowering
         "FILTER" => Filter(stage, inputVariable, outputVariable, grammar, diagnostics),
         "SORT" => Sort(stage, inputVariable, outputVariable, grammar, diagnostics),
         "TAKE" => Take(stage, inputVariable, outputVariable, grammar, diagnostics),
+        "SELECT" => Select(stage, inputVariable, outputVariable, grammar, diagnostics),
+        "MAP" => Map(stage, inputVariable, outputVariable, grammar, diagnostics),
         _ => null
     };
 
@@ -56,6 +58,33 @@ internal static class SurfaceDataLowering
             return null;
         }
         return Command("TAKEJSON", output, input, count.ToString(System.Globalization.CultureInfo.InvariantCulture), stage.Values[0], grammar);
+    }
+
+    private static CommandSyntax? Select(SurfaceCommandSyntax stage, string input, string output, PromptGrammar grammar, ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        if (stage.Values.Count == 0)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN264", "SELECT requires at least one field or expression.", stage.Span));
+            return null;
+        }
+        string projection = string.Join(", ", stage.Values.Select(value => value.UnquotedText.Trim()));
+        return Command("PROJECTJSON", output, input, $"select:{projection}", stage.Values[0], grammar);
+    }
+
+    private static CommandSyntax? Map(SurfaceCommandSyntax stage, string input, string output, PromptGrammar grammar, ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        if (stage.Values.Count != 1)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN265", "MAP requires `TO { field, alias: expression }`.", stage.Span));
+            return null;
+        }
+        string text = stage.Values[0].UnquotedText.Trim();
+        if (!text.StartsWith("TO ", StringComparison.OrdinalIgnoreCase) || text[3..].Trim().Length == 0)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN265", "MAP requires `TO { field, alias: expression }`.", stage.Values[0].Span));
+            return null;
+        }
+        return Command("PROJECTJSON", output, input, $"map:{text[3..].Trim()}", stage.Values[0], grammar);
     }
 
     private static CommandSyntax Command(string verb, string output, string input, string value, SurfaceValueSyntax source, PromptGrammar grammar) =>

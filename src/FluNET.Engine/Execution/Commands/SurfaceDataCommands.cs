@@ -9,6 +9,7 @@ namespace FluNET.Execution.Commands;
 public sealed record FilterJsonCommand(IExpression<JsonElement[]> Source, JsonDataExpression Predicate) : ICommand<JsonElement[]>;
 public sealed record SortJsonCommand(IExpression<JsonElement[]> Source, JsonDataExpression Key) : ICommand<JsonElement[]>;
 public sealed record TakeJsonCommand(IExpression<JsonElement[]> Source, IExpression<int> Count) : ICommand<JsonElement[]>;
+public sealed record ProjectJsonCommand(IExpression<JsonElement[]> Source, JsonProjection Projection) : ICommand<JsonElement[]>;
 
 public sealed class FilterJsonCommandBinder(LanguageSnapshot language, IValueCodecRegistry values) : ICommandBinder<FilterJsonCommand, JsonElement[]>
 {
@@ -44,6 +45,24 @@ public sealed class TakeJsonCommandBinder(LanguageSnapshot language, IValueCodec
         CommandBindingContext context = new(command, new ExpressionBinder(language, values));
         return new TakeJsonCommand(context.Require<JsonElement[]>(SemanticRole.Source), context.Require<int>(new FrameRoleId("Count")));
     }
+}
+
+public sealed class ProjectJsonCommandBinder(LanguageSnapshot language, IValueCodecRegistry values) : ICommandBinder<ProjectJsonCommand, JsonElement[]>
+{
+    public ProjectJsonCommand? TryBind(BoundCommand command)
+    {
+        if (command.Frame.Id != new FrameId("surface.data.project.json")) return null;
+        CommandBindingContext context = new(command, new ExpressionBinder(language, values));
+        BoundArgument projection = command[new FrameRoleId("Projection")];
+        string source = string.Join(" ", projection.Tokens.Select(token => Unwrap(token.Text))).Trim();
+        JsonProjection compiled = source.StartsWith("select:", StringComparison.OrdinalIgnoreCase)
+            ? JsonProjection.Select(source[7..])
+            : source.StartsWith("map:", StringComparison.OrdinalIgnoreCase)
+                ? JsonProjection.Map(source[4..])
+                : throw new FormatException("PROJECTJSON requires a select: or map: projection descriptor.");
+        return new ProjectJsonCommand(context.Require<JsonElement[]>(SemanticRole.Source), compiled);
+    }
+    private static string Unwrap(string value) => value.Length >= 2 && value[0] == '{' && value[^1] == '}' ? value[1..^1] : value;
 }
 
 public sealed class FilterJsonCommandHandler(IVariableResolver variables) : ICommandHandler<FilterJsonCommand, JsonElement[]>
@@ -84,5 +103,16 @@ public sealed class TakeJsonCommandHandler(IVariableResolver variables) : IComma
         int count = command.Count.Evaluate(variables);
         if (count < 0) throw new ArgumentOutOfRangeException(nameof(count), "TAKE requires a non-negative count.");
         return ValueTask.FromResult(command.Source.Evaluate(variables).Take(count).Select(item => item.Clone()).ToArray());
+    }
+}
+
+public sealed class ProjectJsonCommandHandler(IVariableResolver variables) : ICommandHandler<ProjectJsonCommand, JsonElement[]>
+{
+    public ValueTask<JsonElement[]> HandleAsync(ProjectJsonCommand command, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return ValueTask.FromResult(command.Source.Evaluate(variables)
+            .Select(item => command.Projection.Evaluate(item, variables))
+            .ToArray());
     }
 }
