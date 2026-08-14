@@ -95,7 +95,7 @@ public sealed class ProcessedPrompt
                 continue;
             }
 
-            if (character is '\"' or '\'' && (current.Length == 0 || delimiters.Count > 0))
+            if (character is '"' or '\'' && (current.Length == 0 || delimiters.Count > 0))
             {
                 if (tokenStart < 0)
                 {
@@ -215,6 +215,7 @@ public sealed class ProcessedPrompt
         List<PromptToken> commandTokens = [];
         PromptToken? pendingConnector = null;
         CommandLinkKind pendingLinkKind = default;
+        int parenthesisDepth = 0;
 
         foreach (PromptToken token in tokens)
         {
@@ -223,7 +224,8 @@ public sealed class ProcessedPrompt
                 continue;
             }
 
-            if (token.Kind == PromptTokenKind.Word &&
+            if (parenthesisDepth == 0 &&
+                token.Kind == PromptTokenKind.Word &&
                 grammar.TryGetLinkKind(token.Text, out CommandLinkKind linkKind))
             {
                 if (commandTokens.Count == 0)
@@ -254,6 +256,7 @@ public sealed class ProcessedPrompt
             }
 
             commandTokens.Add(token);
+            parenthesisDepth = UpdateParenthesisDepth(parenthesisDepth, token);
         }
 
         if (commandTokens.Count > 0)
@@ -269,6 +272,35 @@ public sealed class ProcessedPrompt
         }
 
         return new PromptSyntax(commands, links);
+    }
+
+    private static int UpdateParenthesisDepth(int depth, PromptToken token)
+    {
+        if (token.Kind is PromptTokenKind.Variable or PromptTokenKind.Reference)
+        {
+            return depth;
+        }
+
+        string text = token.Text;
+        if (text.Length >= 2 &&
+            ((text[0] == '"' && text[^1] == '"') ||
+             (text[0] == '\'' && text[^1] == '\'')))
+        {
+            return depth;
+        }
+
+        foreach (char character in text)
+        {
+            if (character == '(')
+            {
+                depth++;
+            }
+            else if (character == ')')
+            {
+                depth = Math.Max(0, depth - 1);
+            }
+        }
+        return depth;
     }
 
     public override string ToString()
