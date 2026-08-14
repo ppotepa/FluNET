@@ -33,10 +33,12 @@ public sealed class SurfaceParser
                 cursor++;
                 continue;
             }
-            SurfaceCommandSyntax? command = ParseCommand(line, diagnostics);
+
+            SurfaceStatementSyntax? parsed = ParseLineStatement(line, diagnostics);
             cursor++;
-            if (command is null) continue;
-            if (command.NormalizedName == "FROM")
+            if (parsed is null) continue;
+
+            if (parsed is SurfaceCommandSyntax command && command.NormalizedName == "FROM")
             {
                 if (command.Values.Count != 1 || command.Alias is not null)
                 {
@@ -56,21 +58,56 @@ public sealed class SurfaceParser
                 statements.Add(new SurfaceContextSyntax(command.Values[0], children, contextSpan));
                 continue;
             }
+
             if (cursor < lines.Count && lines[cursor].Indent > indent)
             {
-                diagnostics.Add(new SurfaceDiagnostic("FLN207", $"Command '{command.Name}' cannot own an indented block.", command.Span));
+                diagnostics.Add(new SurfaceDiagnostic("FLN207",
+                    $"Statement '{DisplayName(parsed)}' cannot own an indented block.", parsed.Span));
                 int ignoredIndent = lines[cursor].Indent;
                 _ = ParseBlock(lines, ref cursor, ignoredIndent, diagnostics);
             }
-            statements.Add(command);
+            statements.Add(parsed);
         }
         return statements;
     }
 
-    private static SurfaceCommandSyntax? ParseCommand(LineInfo line, ICollection<SurfaceDiagnostic> diagnostics)
+    private static SurfaceStatementSyntax? ParseLineStatement(
+        LineInfo line,
+        ICollection<SurfaceDiagnostic> diagnostics)
     {
-        string text = line.Text.Trim();
+        string trimmed = line.Text.Trim();
         int absoluteStart = line.Start + line.LeadingCharacters;
+        IReadOnlyList<(string Text, int Offset)> parts = SplitPipes(trimmed, diagnostics, absoluteStart);
+        if (parts.Count == 0) return null;
+        if (parts.Count == 1)
+        {
+            return ParseCommand(parts[0].Text, absoluteStart + parts[0].Offset, diagnostics);
+        }
+
+        List<SurfaceCommandSyntax> stages = [];
+        foreach ((string text, int offset) in parts)
+        {
+            SurfaceCommandSyntax? stage = ParseCommand(text, absoluteStart + offset, diagnostics);
+            if (stage is null) continue;
+            if (stage.NormalizedName == "FROM")
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN208",
+                    "FROM cannot appear as a pipeline stage.", stage.Span));
+                continue;
+            }
+            stages.Add(stage);
+        }
+        return stages.Count == 0
+            ? null
+            : new SurfacePipelineSyntax(stages, new SourceSpan(absoluteStart, trimmed.Length));
+    }
+
+    private static SurfaceCommandSyntax? ParseCommand(
+        string text,
+        int absoluteStart,
+        ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        text = text.Trim();
         int verbEnd = 0;
         while (verbEnd < text.Length && !char.IsWhiteSpace(text[verbEnd])) verbEnd++;
         string verb = text[..verbEnd];
@@ -85,10 +122,57 @@ public sealed class SurfaceParser
         (string valuesSource, string? alias, int aliasOffset) = SplitAlias(tail);
         List<SurfaceValueSyntax> values = SplitValues(valuesSource, absoluteStart + tailOffset, diagnostics);
         if (alias is not null && string.IsNullOrWhiteSpace(alias))
+        {
             diagnostics.Add(new SurfaceDiagnostic("FLN201", "AS must be followed by a non-empty alias.",
                 new SourceSpan(absoluteStart + tailOffset + aliasOffset, 2)));
-        return new SurfaceCommandSyntax(verb, values, string.IsNullOrWhiteSpace(alias) ? null : alias.Trim(),
-            new SourceSpan(absoluteStart, text.Length));
+        }
+        return new SurfaceCommandSyntax(verb, values,
+            string.IsNullOrWhiteSpace(alias) ? null : alias.Trim(), new SourceSpan(absoluteStart, text.Length));
+    }
+
+    private static IReadOnlyList<(string Text, int Offset)> SplitPipes(
+        string source,
+        ICollection<SurfaceDiagnostic> diagnostics,
+        int absoluteStart)
+    {
+        List<(string Text, int Offset)> result = [];
+        int segmentStart = 0;
+        int depth = 0;
+        char? quote = null;
+        bool escaped = false;
+        for (int index = 0; index <= source.Length; index++)
+        {
+            bool atEnd = index == source.Length;
+            char current = atEnd ? '\0' : source[index];
+            if (!atEnd)
+            {
+                if (escaped) { escaped = false; continue; }
+                if (quote is not null)
+                {
+                    if (current == '\\') escaped = true;
+                    else if (current == quote) quote = null;
+                    continue;
+                }
+                if (current is '"' or '\'') { quote = current; continue; }
+                if (current is '(' or '[' or '{') { depth++; continue; }
+                if (current is ')' or ']' or '}') { depth = Math.Max(0, depth - 1); continue; }
+            }
+            if (!atEnd && (current != '|' || depth != 0)) continue;
+            string segment = source[segmentStart..index];
+            int left = 0; while (left < segment.Length && char.IsWhiteSpace(segment[left])) left++;
+            int right = segment.Length; while (right > left && char.IsWhiteSpace(segment[right - 1])) right--;
+            if (left == right)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN209", "A pipeline stage cannot be empty.",
+                    new SourceSpan(absoluteStart + segmentStart, Math.Max(1, segment.Length))));
+            }
+            else
+            {
+                result.Add((segment[left..right], segmentStart + left));
+            }
+            segmentStart = index + 1;
+        }
+        return result;
     }
 
     private static (string Values, string? Alias, int AliasOffset) SplitAlias(string source)
@@ -112,7 +196,8 @@ public sealed class SurfaceParser
         return (source, null, -1);
     }
 
-    private static List<SurfaceValueSyntax> SplitValues(string source, int sourceStart, ICollection<SurfaceDiagnostic> diagnostics)
+    private static List<SurfaceValueSyntax> SplitValues(
+        string source, int sourceStart, ICollection<SurfaceDiagnostic> diagnostics)
     {
         List<SurfaceValueSyntax> values = [];
         if (string.IsNullOrWhiteSpace(source)) return values;
@@ -142,6 +227,14 @@ public sealed class SurfaceParser
             diagnostics.Add(new SurfaceDiagnostic("FLN203", "Unclosed quote or delimiter in compact statement.", new SourceSpan(sourceStart, source.Length)));
         return values;
     }
+
+    private static string DisplayName(SurfaceStatementSyntax statement) => statement switch
+    {
+        SurfaceCommandSyntax command => command.Name,
+        SurfacePipelineSyntax => "pipeline",
+        SurfaceContextSyntax => "context",
+        _ => statement.GetType().Name
+    };
 
     private static IEnumerable<LineInfo> Lines(string source)
     {

@@ -39,18 +39,29 @@ public sealed class SurfaceFormatter
                 WriteStatements(context.Statements, indent + 4, output);
                 continue;
             }
-            SurfaceCommandSyntax command = (SurfaceCommandSyntax)statement;
-            output.Append(prefix).Append(command.NormalizedName);
-            if (command.Values.Count > 0)
+            if (statement is SurfacePipelineSyntax pipeline)
             {
-                output.Append(' ').Append(string.Join(", ", command.Values.Select(value => value.Text)));
+                output.Append(prefix)
+                    .Append(string.Join(" | ", pipeline.Stages.Select(FormatCommand)))
+                    .AppendLine();
+                continue;
             }
-            if (command.Alias is not null)
-            {
-                output.Append(" AS ").Append(command.Alias);
-            }
-            output.AppendLine();
+            output.Append(prefix).Append(FormatCommand((SurfaceCommandSyntax)statement)).AppendLine();
         }
+    }
+
+    private static string FormatCommand(SurfaceCommandSyntax command)
+    {
+        StringBuilder output = new(command.NormalizedName);
+        if (command.Values.Count > 0)
+        {
+            output.Append(' ').Append(string.Join(", ", command.Values.Select(value => value.Text)));
+        }
+        if (command.Alias is not null)
+        {
+            output.Append(" AS ").Append(command.Alias);
+        }
+        return output.ToString();
     }
 }
 

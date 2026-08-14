@@ -15,7 +15,11 @@ public sealed record SurfaceCommandSyntax(
     public string NormalizedName => Name.ToUpperInvariant();
 }
 
-/// <summary>Lexically scoped compact FROM block.</summary>
+/// <summary>One explicit `|` pipeline. Stages remain normal surface commands.</summary>
+public sealed record SurfacePipelineSyntax(
+    IReadOnlyList<SurfaceCommandSyntax> Stages,
+    SourceSpan Span) : SurfaceStatementSyntax(Span);
+
 public sealed record SurfaceContextSyntax(
     SurfaceValueSyntax BaseResource,
     IReadOnlyList<SurfaceStatementSyntax> Statements,

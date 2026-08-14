@@ -59,6 +59,7 @@ public sealed class SurfaceLowerer
         List<SurfaceDiagnostic> diagnostics)
     {
         LoweringContext current = inherited;
+        string? implicitOutput = null;
         foreach (SurfaceStatementSyntax statement in statements)
         {
             if (statement is SurfaceContextSyntax context)
@@ -74,37 +75,165 @@ public sealed class SurfaceLowerer
                     baseUri!.ToString(), "lexical-FROM-base", context.BaseResource.Span));
                 LowerStatements(context.Statements, current with { BaseUri = baseUri }, namedBases,
                     grammar, language, commands, links, map, trace, diagnostics);
+                implicitOutput = null;
                 continue;
             }
+
+            if (statement is SurfacePipelineSyntax pipeline)
+            {
+                implicitOutput = LowerPipeline(pipeline, current, namedBases, grammar, language,
+                    commands, links, map, trace, diagnostics);
+                continue;
+            }
+
             if (statement is not SurfaceCommandSyntax command) continue;
             if (ApplyDirective(command, ref current, namedBases, trace, diagnostics)) continue;
 
-            SurfaceCommandSyntax resolved = ResolveCommandResources(command, current, namedBases, trace);
-            IReadOnlyList<CommandSyntax> lowered = resolved.NormalizedName switch
+            SurfaceCommandSyntax effective = command;
+            if (effective.NormalizedName == "SAY" && effective.Values.Count == 0 && implicitOutput is not null)
             {
-                "SAY" => [LowerSay(resolved, grammar)],
-                "LOAD" => LowerLoad(resolved, grammar, language, trace, diagnostics),
-                "GET" => LowerGet(resolved, grammar, language, trace, diagnostics),
-                _ => []
-            };
-            if (lowered.Count == 0)
-            {
-                if (!diagnostics.Any(item => item.Span == command.Span))
-                    diagnostics.Add(new SurfaceDiagnostic("FLN211",
-                        $"Surface command '{command.Name}' does not have a lowering rule yet.", command.Span));
-                continue;
+                effective = InjectValue(effective, implicitOutput);
+                trace.Add(new InferenceDecision(InferenceKind.Dependency, "implicit-pipeline-value",
+                    implicitOutput, "previous-statement-output", command.Span));
             }
-            for (int offset = 0; offset < lowered.Count; offset++)
+
+            IReadOnlyList<CommandSyntax> lowered = LowerCommand(effective, current, namedBases,
+                grammar, language, trace, diagnostics);
+            if (lowered.Count == 0) continue;
+            Append(lowered, command.Span, current, grammar, commands, links, map);
+            implicitOutput = ProducedVariable(effective, lowered);
+        }
+    }
+
+    private string? LowerPipeline(
+        SurfacePipelineSyntax pipeline,
+        LoweringContext context,
+        IDictionary<string, Uri> namedBases,
+        PromptGrammar grammar,
+        LanguageSnapshot language,
+        List<CommandSyntax> commands,
+        List<CommandLinkSyntax> links,
+        List<SourceMapEntry> map,
+        InferenceTrace trace,
+        List<SurfaceDiagnostic> diagnostics)
+    {
+        string? value = null;
+        for (int stageIndex = 0; stageIndex < pipeline.Stages.Count; stageIndex++)
+        {
+            SurfaceCommandSyntax stage = pipeline.Stages[stageIndex];
+            LoweringContext local = context;
+            if (ApplyDirective(stage, ref local, namedBases, trace, diagnostics))
             {
-                int commandIndex = commands.Count;
-                CommandSyntax canonical = WithPolicies(lowered[offset], current, grammar, command.Span.Start);
-                commands.Add(canonical);
-                map.Add(new SourceMapEntry(commandIndex, "command", command.Span));
-                if (offset > 0)
-                    links.Add(Link(commandIndex - 1, commandIndex, CommandLinkKind.Parallel, command.Span.Start, "AND"));
+                diagnostics.Add(new SurfaceDiagnostic("FLN250",
+                    $"Directive '{stage.Name}' cannot be used as a pipeline stage.", stage.Span));
+                return null;
+            }
+
+            SurfaceCommandSyntax effective = stage;
+            if (stageIndex > 0)
+            {
+                if (value is null)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN251",
+                        $"Pipeline stage '{stage.Name}' has no previous value to consume.", stage.Span));
+                    return null;
+                }
+                if (stage.NormalizedName == "SAY" && stage.Values.Count == 0)
+                {
+                    effective = InjectValue(stage, value);
+                }
+                else
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN252",
+                        $"Pipeline stage '{stage.Name}' does not yet declare an implicit input role.", stage.Span));
+                    return null;
+                }
+            }
+
+            IReadOnlyList<CommandSyntax> lowered = LowerCommand(effective, context, namedBases,
+                grammar, language, trace, diagnostics);
+            if (lowered.Count != 1)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN253",
+                    $"Pipeline stage '{stage.Name}' must lower to exactly one command; found {lowered.Count}.", stage.Span));
+                return null;
+            }
+            Append(lowered, stage.Span, context, grammar, commands, links, map);
+            string? produced = ProducedVariable(effective, lowered);
+            if (stageIndex < pipeline.Stages.Count - 1 && produced is null &&
+                effective.NormalizedName != "SAY")
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN254",
+                    $"Pipeline stage '{stage.Name}' does not expose a value for the next stage.", stage.Span));
+                return null;
+            }
+            value = produced;
+        }
+        return value;
+    }
+
+    private IReadOnlyList<CommandSyntax> LowerCommand(
+        SurfaceCommandSyntax command,
+        LoweringContext context,
+        IReadOnlyDictionary<string, Uri> namedBases,
+        PromptGrammar grammar,
+        LanguageSnapshot language,
+        InferenceTrace trace,
+        ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        SurfaceCommandSyntax resolved = ResolveCommandResources(command, context, namedBases, trace);
+        IReadOnlyList<CommandSyntax> lowered = resolved.NormalizedName switch
+        {
+            "SAY" => [LowerSay(resolved, grammar)],
+            "LOAD" => LowerLoad(resolved, grammar, language, trace, diagnostics),
+            "GET" => LowerGet(resolved, grammar, language, trace, diagnostics),
+            _ => []
+        };
+        if (lowered.Count == 0 && !diagnostics.Any(item => item.Span == command.Span))
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN211",
+                $"Surface command '{command.Name}' does not have a lowering rule yet.", command.Span));
+        }
+        return lowered;
+    }
+
+    private static void Append(
+        IReadOnlyList<CommandSyntax> lowered,
+        SourceSpan sourceSpan,
+        LoweringContext context,
+        PromptGrammar grammar,
+        List<CommandSyntax> commands,
+        List<CommandLinkSyntax> links,
+        List<SourceMapEntry> map)
+    {
+        for (int offset = 0; offset < lowered.Count; offset++)
+        {
+            int commandIndex = commands.Count;
+            commands.Add(WithPolicies(lowered[offset], context, grammar, sourceSpan.Start));
+            map.Add(new SourceMapEntry(commandIndex, "command", sourceSpan));
+            if (offset > 0)
+            {
+                links.Add(Link(commandIndex - 1, commandIndex, CommandLinkKind.Parallel, sourceSpan.Start, "AND"));
             }
         }
     }
+
+    private static string? ProducedVariable(
+        SurfaceCommandSyntax source,
+        IReadOnlyList<CommandSyntax> lowered)
+    {
+        if (lowered.Count != 1 || source.NormalizedName is not ("GET" or "LOAD")) return null;
+        PromptToken? token = lowered[0].AllTokens.FirstOrDefault(item => item.Kind == PromptTokenKind.Variable);
+        if (token is null) return null;
+        string text = token.Text.TrimEnd('.');
+        return text.Length >= 2 && text[0] == '[' && text[^1] == ']' ? text[1..^1] : null;
+    }
+
+    private static SurfaceCommandSyntax InjectValue(SurfaceCommandSyntax command, string variable) =>
+        command with
+        {
+            Values = [new SurfaceValueSyntax($"[{variable}]", command.Span)]
+        };
 
     private static bool ApplyDirective(
         SurfaceCommandSyntax command,
@@ -254,19 +383,42 @@ public sealed class SurfaceLowerer
         SurfaceCommandSyntax command, PromptGrammar grammar, LanguageSnapshot language,
         InferenceTrace trace, ICollection<SurfaceDiagnostic> diagnostics)
     {
-        if (command.Values.Count == 0) { diagnostics.Add(new SurfaceDiagnostic("FLN220", "LOAD requires at least one resource.", command.Span)); return []; }
-        if (command.Values.Count > 1 && command.Alias is not null) { diagnostics.Add(new SurfaceDiagnostic("FLN221", "AS on multiple explicit LOAD resources is reserved for collection/glob lowering.", command.Span)); return []; }
+        if (command.Values.Count == 0)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN220", "LOAD requires at least one resource.", command.Span));
+            return [];
+        }
+        if (command.Values.Count > 1 && command.Alias is not null)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN221",
+                "AS on multiple explicit LOAD resources is reserved for collection/glob lowering.", command.Span));
+            return [];
+        }
         List<CommandSyntax> result = [];
         foreach (SurfaceValueSyntax value in command.Values)
         {
             ResourceDescriptor descriptor;
             try { descriptor = _inference.InferResource(value, language, trace); }
-            catch (FormatException exception) { diagnostics.Add(new SurfaceDiagnostic("FLN222", exception.Message, value.Span)); continue; }
-            if (descriptor.Reference is not FileResourceReference file) { diagnostics.Add(new SurfaceDiagnostic("FLN223", $"LOAD currently accepts local files; '{descriptor.Reference.Kind}' belongs to GET/resource providers.", value.Span)); continue; }
+            catch (FormatException exception)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN222", exception.Message, value.Span));
+                continue;
+            }
+            if (descriptor.Reference is not FileResourceReference file)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN223",
+                    $"LOAD currently accepts local files; '{descriptor.Reference.Kind}' belongs to GET/resource providers.", value.Span));
+                continue;
+            }
             string variable = OutputName(command, descriptor, value, trace);
             if (file.IsPattern)
             {
-                if (descriptor.Format != ResourceFormat.Json) { diagnostics.Add(new SurfaceDiagnostic("FLN225", $"Glob LOAD currently supports JSON patterns; '{descriptor.Format}' needs a collection codec.", value.Span)); continue; }
+                if (descriptor.Format != ResourceFormat.Json)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN225",
+                        $"Glob LOAD currently supports JSON patterns; '{descriptor.Format}' needs a collection codec.", value.Span));
+                    continue;
+                }
                 result.Add(new CommandSyntax([
                     Token("LOADGLOB", PromptTokenKind.Word, command.Span.Start, Math.Min(8, command.Span.Length)),
                     Token($"[{variable}]", PromptTokenKind.Variable, value.Span.Start, value.Span.Length),
@@ -275,8 +427,18 @@ public sealed class SurfaceLowerer
                 ], grammar));
                 continue;
             }
-            string qualifier = descriptor.Format switch { ResourceFormat.Json => "CONFIG", ResourceFormat.Text => "TEXT", _ => string.Empty };
-            if (qualifier.Length == 0) { diagnostics.Add(new SurfaceDiagnostic("FLN224", $"LOAD cannot infer a canonical decoder for format '{descriptor.Format}'. Use an explicit canonical command.", value.Span)); continue; }
+            string qualifier = descriptor.Format switch
+            {
+                ResourceFormat.Json => "CONFIG",
+                ResourceFormat.Text => "TEXT",
+                _ => string.Empty
+            };
+            if (qualifier.Length == 0)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN224",
+                    $"LOAD cannot infer a canonical decoder for format '{descriptor.Format}'. Use an explicit canonical command.", value.Span));
+                continue;
+            }
             result.Add(new CommandSyntax([
                 Token("LOAD", PromptTokenKind.Word, command.Span.Start, 4),
                 Token(qualifier, PromptTokenKind.Word, value.Span.Start, Math.Min(qualifier.Length, value.Span.Length)),
@@ -288,7 +450,8 @@ public sealed class SurfaceLowerer
         return result;
     }
 
-    private static CommandSyntax WithPolicies(CommandSyntax command, LoweringContext context, PromptGrammar grammar, int position)
+    private static CommandSyntax WithPolicies(
+        CommandSyntax command, LoweringContext context, PromptGrammar grammar, int position)
     {
         if (context.Retry is null && context.Timeout is null) return command;
         List<PromptToken> tokens = [.. command.AllTokens];
@@ -307,11 +470,16 @@ public sealed class SurfaceLowerer
         return new CommandSyntax(tokens, grammar);
     }
 
-    private static string OutputName(SurfaceCommandSyntax command, ResourceDescriptor descriptor, SurfaceValueSyntax value, InferenceTrace trace)
+    private static string OutputName(
+        SurfaceCommandSyntax command, ResourceDescriptor descriptor,
+        SurfaceValueSyntax value, InferenceTrace trace)
     {
         string variable = command.Alias ?? descriptor.SuggestedVariableName;
         if (command.Alias is not null)
-            trace.Add(new InferenceDecision(InferenceKind.VariableName, value.Text, variable, "explicit-AS", value.Span, InferenceConfidence.Explicit));
+        {
+            trace.Add(new InferenceDecision(InferenceKind.VariableName, value.Text, variable,
+                "explicit-AS", value.Span, InferenceConfidence.Explicit));
+        }
         return variable;
     }
 
@@ -329,7 +497,11 @@ public sealed class SurfaceLowerer
     private static bool SurfacePath(string text)
     {
         if (text.Length >= 2 && (text[0] is '"' or '\'') && text[^1] == text[0]) return false;
-        try { ExpressionSyntax expression = ExpressionSyntaxParser.Parse(text); return expression is PropertyExpressionSyntax or IndexExpressionSyntax; }
+        try
+        {
+            ExpressionSyntax expression = ExpressionSyntaxParser.Parse(text);
+            return expression is PropertyExpressionSyntax or IndexExpressionSyntax;
+        }
         catch (FormatException) { return false; }
     }
 
@@ -341,7 +513,8 @@ public sealed class SurfaceLowerer
         return false;
     }
 
-    private static CommandLinkSyntax Link(int predecessor, int successor, CommandLinkKind kind, int position, string text) =>
+    private static CommandLinkSyntax Link(
+        int predecessor, int successor, CommandLinkKind kind, int position, string text) =>
         new(predecessor, successor, kind, Token(text, PromptTokenKind.Word, position, 0));
     private static PromptToken Token(string text, PromptTokenKind kind, int start, int length) =>
         new(text, kind, Math.Max(0, start), Math.Max(0, length));
