@@ -52,9 +52,7 @@ internal static class FluNetCli
             : options.Roots.ToArray();
 
         using FluNETContext context = FluNETContext.Create(services =>
-            services.AddSingleton<IExecutionPolicy>(new RestrictedExecutionPolicy(
-                roots,
-                options.Hosts)));
+            services.AddSingleton<IExecutionPolicy>(CreateExecutionPolicy(options, roots)));
         Engine engine = context.GetEngine();
         ProcessedPrompt prompt = new(promptText.Trim());
 
@@ -117,9 +115,7 @@ internal static class FluNetCli
             : options.Roots.ToArray();
 
         using FluNETContext context = FluNETContext.Create(services =>
-            services.AddSingleton<IExecutionPolicy>(new RestrictedExecutionPolicy(
-                roots,
-                options.Hosts)));
+            services.AddSingleton<IExecutionPolicy>(CreateExecutionPolicy(options, roots)));
         Engine engine = context.GetEngine();
 
         Console.WriteLine("FluNET interactive session");
@@ -261,7 +257,8 @@ internal static class FluNetCli
               --analyze          Parse and validate without executing.
               --root PATH        Allow file access under PATH (repeatable).
                                  Defaults to the current directory.
-              --host HOST        Allow HTTP/HTTPS access to HOST (repeatable).
+              --host HOST        Restrict HTTP/HTTPS access to HOST (repeatable).
+                                 If omitted, network access is unrestricted.
               -h, --help         Show this help.
 
             Examples:
@@ -270,6 +267,26 @@ internal static class FluNetCli
               flunet --root ./data -- "GET [text] FROM {./data/input.txt}."
               flunet --host example.com -- "DOWNLOAD [file] FROM {https://example.com/a.txt} TO {a.txt}."
             """);
+    }
+
+    private static IExecutionPolicy CreateExecutionPolicy(
+        CliOptions options,
+        IReadOnlyList<string> roots) =>
+        options.Hosts.Count == 0
+            ? new NetworkOpenFileRestrictedPolicy(roots)
+            : new RestrictedExecutionPolicy(roots, options.Hosts);
+
+    private sealed class NetworkOpenFileRestrictedPolicy(
+        IReadOnlyList<string> roots) : IExecutionPolicy
+    {
+        private readonly RestrictedExecutionPolicy _filePolicy =
+            new(roots, Array.Empty<string>());
+
+        public void EnsureFileAccess(string path) => _filePolicy.EnsureFileAccess(path);
+
+        public void EnsureNetworkAccess(Uri uri)
+        {
+        }
     }
 
     private static bool TryGetPastedBlock(string firstLine, out string? block)
