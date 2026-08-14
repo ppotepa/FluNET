@@ -17,9 +17,14 @@ public sealed record SurfaceCompilationResult(SourceDocument Document, SurfacePa
 public sealed class SurfaceCompiler(LanguageSnapshot language, SemanticCommandBinder binder, TypedProgramCompiler typedCompiler, TypedProgramTypeValidator typeValidator, ExecutionPlanner planner, IResourceProviderRegistry resourceProviders)
 {
     private readonly SemanticProgramValidator _semanticValidator = new(language); private readonly DependencyAnalyzer _dependencies = new();
-    public SurfaceCompilationResult Compile(SourceDocument document)
+    public SurfaceCompilationResult Compile(SourceDocument document) => Compile(new SurfaceParser().Parse(document));
+    public SurfaceCompilationResult Compile(SourceDocument document, SurfaceProgramSyntax program) =>
+        Compile(new SurfaceParseResult(document, program, Array.Empty<SurfaceDiagnostic>()));
+
+    public SurfaceCompilationResult Compile(SurfaceParseResult raw)
     {
-        DiagnosticBag diagnostics = new(); SurfaceParseResult raw = new SurfaceParser().Parse(document);
+        SourceDocument document = raw.Document;
+        DiagnosticBag diagnostics = new();
         SurfaceTaskCompilationResult tasks = new SurfaceTaskCompiler(language).Compile(raw);
         SurfacePolicyCompilationResult policies = new SurfacePolicyCompiler().Compile(tasks.Parse);
         SurfaceCacheCompilationResult cache = new SurfaceCacheCompiler().Compile(policies.Parse);
