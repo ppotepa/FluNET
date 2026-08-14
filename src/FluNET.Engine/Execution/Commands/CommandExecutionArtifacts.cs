@@ -1,3 +1,4 @@
+using FluNET.Execution.Planning;
 using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Variables;
@@ -11,15 +12,33 @@ namespace FluNET.Execution.Commands;
 
 public sealed record ExecutionCachePolicy(TimeSpan Ttl);
 public sealed record ExecutionIdempotencyPolicy(string KeyExpression);
+public sealed record AdvancedExecutionPolicy(
+    RetryBackoffPolicy? Backoff = null,
+    IReadOnlyList<int>? RetryOnStatusCodes = null,
+    IReadOnlyList<int>? ContinueOnStatusCodes = null,
+    IReadOnlyList<int>? FailOnStatusCodes = null)
+{
+    public bool IsEmpty => Backoff is null &&
+        (RetryOnStatusCodes is null || RetryOnStatusCodes.Count == 0) &&
+        (ContinueOnStatusCodes is null || ContinueOnStatusCodes.Count == 0) &&
+        (FailOnStatusCodes is null || FailOnStatusCodes.Count == 0);
+}
 
 public static class CommandExecutionArtifactStore
 {
-    private sealed class Holder { public ExecutionCachePolicy? Cache { get; set; } public ExecutionIdempotencyPolicy? Idempotency { get; set; } }
+    private sealed class Holder
+    {
+        public ExecutionCachePolicy? Cache { get; set; }
+        public ExecutionIdempotencyPolicy? Idempotency { get; set; }
+        public AdvancedExecutionPolicy? AdvancedPolicy { get; set; }
+    }
     private static readonly ConditionalWeakTable<BoundCommand, Holder> Values = new();
     public static void SetCache(BoundCommand command, ExecutionCachePolicy policy) => Values.GetOrCreateValue(command).Cache = policy;
     public static bool TryGetCache(BoundCommand command, out ExecutionCachePolicy? policy) { if (Values.TryGetValue(command, out Holder? holder) && holder.Cache is not null) { policy = holder.Cache; return true; } policy = null; return false; }
     public static void SetIdempotency(BoundCommand command, ExecutionIdempotencyPolicy policy) => Values.GetOrCreateValue(command).Idempotency = policy;
     public static bool TryGetIdempotency(BoundCommand command, out ExecutionIdempotencyPolicy? policy) { if (Values.TryGetValue(command, out Holder? holder) && holder.Idempotency is not null) { policy = holder.Idempotency; return true; } policy = null; return false; }
+    public static void SetAdvancedPolicy(BoundCommand command, AdvancedExecutionPolicy policy) => Values.GetOrCreateValue(command).AdvancedPolicy = policy;
+    public static bool TryGetAdvancedPolicy(BoundCommand command, out AdvancedExecutionPolicy? policy) { if (Values.TryGetValue(command, out Holder? holder) && holder.AdvancedPolicy is not null) { policy = holder.AdvancedPolicy; return true; } policy = null; return false; }
 
     public static string CommandFingerprint(BoundCommand command)
     {
