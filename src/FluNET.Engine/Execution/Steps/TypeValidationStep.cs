@@ -40,7 +40,7 @@ public sealed class TypeValidationStep : IExecutionStep
                 exception.Message,
                 exception.Span);
             return ValueTask.FromResult(ExecutionResult.Failed(
-                ExecutionFailureKind.Binding,
+                ExecutionFailureKind.Validation,
                 exception.Code,
                 exception.Message,
                 exception,
