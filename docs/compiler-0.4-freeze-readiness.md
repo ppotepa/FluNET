@@ -1,9 +1,27 @@
 # FluNET 0.4 compiler freeze readiness
 
-This document supersedes the earlier preview status for implementation tracking.
-The source tree contains the 0.4 compiler building blocks, but
+This document is the implementation gate for the 0.4 compiler milestone.
 `StandardLanguageIdentity.Version` intentionally remains `0.3` until a real
-Release build and test run verifies the complete tree.
+Release build and test run verifies the exact candidate tree.
+
+## Canonical pipeline
+
+The standard host now uses one pipeline:
+
+```text
+Parse
+  -> Bind
+  -> Validate
+  -> Compile
+  -> TypeCheck
+  -> Plan
+  -> Execute
+```
+
+`CompilationPhase` exposes all six side-effect-free compiler phases before
+execution. `Engine.Analyze` remains the source-compatible parse/bind/validate/
+plan view; `FluNETContext.AnalyzeTyped` adds typed command compilation and type
+checking without executing handlers.
 
 ## Batch status
 
@@ -16,42 +34,44 @@ Implemented.
 - positive-cost shortest-path resolution;
 - ambiguity and cycle protection;
 - built-in Text/Boolean/Number/File/Directory/Uri/Json/Encoding codecs;
-- built-in Text boundary conversions;
+- real conversion edges instead of `TypeSymbol` conversion shortcuts;
+- standard `List<Text> -> Text` conversion for GET/LOAD line producers;
 - module `Codec<TValue,TCodec>()` and
   `Conversion<TSource,TTarget,TConversion>()` registration;
-- typed compilation resolves the runtime module registry.
+- `ValueCodecRegistryFactory.CreateDefault` provides the same core conversion
+  contract to compatibility constructors and side-effect-free tests.
 
-The value registry treats `Number -> Text` and equivalent boundaries as real
-conversion edges, never registry identity.
+`TypeSymbol.IsAssignableFrom` is now purely structural. Runtime expression
+conversion goes through `IValueCodecRegistry`; there is no arbitrary CLR
+`ToString()` fallback in the canonical expression codec.
 
 ### Batch 11 — expression binding
 
-Infrastructure implemented; compatibility adapters remain inside several
-built-in binders.
+Implemented for all built-in command binders.
 
 - `ExpressionBinder` is the central role/value binder;
 - `CommandBindingContext` exposes `Require`, `Optional`, `Repeated`, and text
   binding;
 - registry-backed expression codecs emit FLN140–FLN143;
-- existing expression node types are reused rather than duplicated.
-
-Several 0.3 built-in binder classes still construct their historical expression
-helpers after the compiler has validated the same slots. Removing those helper
-calls is cleanup, not a second execution pipeline, but it is not represented as
-complete in this readiness document.
+- GET/LOAD/SAVE/DELETE/DOWNLOAD/POST/SAY/SEND/TRANSFORM/SET/PARSE/FORMAT bind
+  through the shared expression context;
+- historical `ScalarExpression`, `TextExpression`, `JsonExpression`, and value
+  converter classes remain compatibility APIs, not the standard binder path;
+- `FrameCommandBinder` retains protected compatibility constructors for existing
+  extension binders.
 
 ### Batch 12 — typed command IR
 
 Implemented for the module execution path.
 
 - `TypedProgram` / `CompiledCommand` are produced before planning;
-- `CommandCompilationStep` rejects malformed typed literals before execution;
+- malformed typed literals fail during Compile before any handler executes;
 - `CompiledCommandRoute<TCommand,TResult>` caches the typed command by immutable
   `BoundCommand` identity;
-- module route registration resolves to the compiled-route registration while
-  the old direct-DI `AddTypedCommand` remains the 0.3 compatibility API;
-- handlers receive the typed command value; route cache contracts assert that a
-  compiled route binds once.
+- module route registration uses compiled routes while direct-DI
+  `AddTypedCommand` remains the 0.3 compatibility API;
+- canonical module execution reuses the compiled command rather than rebinding
+  arguments at each step.
 
 ### Batch 13 — typed variable store
 
@@ -60,10 +80,12 @@ Implemented.
 - `RuntimeValue(TypeSymbol, object)` is the store value;
 - Host, Workflow, Block and Iteration scopes exist;
 - lookup order is Iteration -> Block -> Workflow -> Host;
-- declaration and assignment validate the language type;
+- declaration and assignment validate structural language types;
 - accidental type changes are rejected;
-- `VariableResolver` is an adapter over the typed store rather than an
-  independent object dictionary.
+- `VariableResolver` is an adapter over `VariableStore`, not an independent
+  `Dictionary<string, object>` source of truth;
+- host variables registered through `Engine.RegisterVariable` participate in
+  typed analysis with the active `LanguageSnapshot`.
 
 ### Batch 14 — expression syntax AST
 
@@ -96,15 +118,14 @@ primary
 ```
 
 `LIST(...)` and `OBJECT(...)` avoid collision with FluNET variable syntax.
-A single `=` is rejected instead of being treated as equality.
-
-The command tokenizer also tracks parenthesis depth before interpreting command
-connectors, so `IF ([a] AND [b])` remains one command while top-level
+A single `=` is tokenized safely and rejected by the parser rather than looping.
+The command parser tracks parenthesis depth before interpreting connectors, so
+`IF ([a] AND [b])` stays inside one command while top-level
 `command AND command` remains a parallel link.
 
 ### Batch 15 — typed program validation
 
-Implemented for producer flow and parallel-write invariants.
+Implemented before planning.
 
 Stable codes:
 
@@ -116,63 +137,76 @@ FLN153 parallel write conflict
 FLN154 invalid condition expression/type
 ```
 
-Producer/consumer types and same-stage availability are checked before
-execution. The compatibility planner still retains some older validation and
-host-variable discovery, so it has not yet been reduced to a purely structural
-DAG builder.
+The type validator checks:
+
+- producer/consumer flow;
+- same-stage availability;
+- host-variable existence and language type;
+- implicit conversion paths;
+- ambiguous conversions;
+- condition-variable dependencies;
+- parallel writes to the same target.
+
+`ExecutionPlanner` is now structural: it builds sequence/data dependencies,
+policies, result bindings and the DAG, but no longer decides type compatibility
+or parallel-write validity.
 
 ### Batch 16 — typed conditions
 
-Implemented without adding a second executor.
+Implemented without a second executor.
 
 - `ExpressionSyntaxParser` creates the condition AST;
-- `ConditionExpressionCompiler` compiles Boolean, comparison, arithmetic,
-  property/index, list/object and parenthesized nodes;
-- `CompiledCondition` contains `IExpression<bool>` and variable dependencies;
+- `ConditionExpressionCompiler` handles Boolean logic, equality/order,
+  arithmetic, unary operators, property/index access, lists/objects and
+  parenthesized expressions;
+- `CompiledCondition` contains `IExpression<bool>` and referenced variables;
 - `ConditionExpressionCache` reuses side-effect-free compiled trees;
-- condition compilation is part of typed command compilation/validation;
-- the existing executor delegates complex condition resolution through the
-  context resolver to the cached typed expression;
-- ELSE continues to use the existing inversion flag over the typed Boolean
-  result.
+- condition syntax is compiled before planning;
+- planner dependencies are derived from `CompiledCondition.VariableReferences`;
+- the existing executor evaluates the cached `IExpression<bool>` against the
+  current resolver; it no longer implements its own string truthiness parser;
+- ELSE preserves the existing inversion policy over the typed Boolean result.
 
-### Batch 17 — freeze
+### Batch 17 — freeze candidate
 
-Implementation candidate only; version bump intentionally deferred.
+Implementation complete; release verification is still pending.
 
-New contract tests cover:
+Contract tests now cover, among other things:
 
 - value registry and custom module codecs;
-- expression precedence and structural nodes;
-- typed variable-store rules;
+- Number/Text and List<Text>/Text conversion flow;
+- expression precedence and structural AST nodes;
+- typed variable-store scope/type rules;
+- host variables in typed analysis;
 - compile-time invalid literals;
+- unresolved command and condition variables;
 - parallel write conflicts;
 - compiled-route bind-once behavior;
-- typed conditions and produced-variable flow;
-- side-effect-free `AnalyzeTyped`.
+- parenthesized typed conditions;
+- side-effect-free `AnalyzeTyped` compile + type-check validity.
 
-`FluNETContext.AnalyzeTyped(...)` is the additive 0.4 analysis API. It first uses
-the source-compatible `Engine.Analyze` parse/bind/semantic analysis and then
-compiles that same `BoundProgram` into `TypedProgram`. This avoids a breaking
-change to the existing `Engine.Analyze` return type while making typed command
-compilation part of 0.4 validity.
+Superseded preview test sources and their MSBuild exclusion file have been
+removed; the active tests are the only source of the 0.4 contract.
 
-## Remaining compatibility cleanup
+## Release gate
 
-Before changing the public language version to `0.4`, complete these cleanup
-items and verify them in a real build:
+No version or release claim should be made until the following commands have
+run successfully against this exact tree with .NET 8 available:
 
-1. migrate the remaining built-in binder implementations from historical
-   expression helper construction to `CommandBindingContext`;
-2. remove the transitional non-Unit-to-Text rule from
-   `TypeSymbol.IsAssignableFrom` after every compatibility caller uses the
-   conversion registry;
-3. move the last host-variable/type checks out of `ExecutionPlanner` so planning
-   is structural only;
-4. expose Compile/TypeCheck as first-class `CompilationPhase` values once the
-   compatibility diagnostic contract is deliberately versioned;
-5. remove superseded preview test source files currently excluded by the test
-   project cleanup target.
+```bash
+dotnet restore FluNET.sln
+dotnet build FluNET.sln --configuration Release --no-restore
+dotnet test FluNET.sln --configuration Release --no-build
+```
 
-No release/version claim should be made until `dotnet build` and `dotnet test`
-have run against this exact tree.
+After a green run:
+
+1. fix any compiler/test regressions as isolated stabilization commits;
+2. set `StandardLanguageIdentity.Version` to `0.4`;
+3. replace the preview compiler contract snapshot with the final 0.4 snapshot;
+4. update release-facing README/migration wording;
+5. tag the verified commit only if the publishing workflow for the repository is
+   available and intentionally requested.
+
+Until that gate is satisfied, the code is a **0.4 freeze candidate** and the
+published language identity remains `0.3`.
