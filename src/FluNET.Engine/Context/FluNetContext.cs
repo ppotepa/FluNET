@@ -22,18 +22,17 @@ namespace FluNET.Context
     {
         private static FluNETContext? _defaultContext; private readonly ServiceProvider _serviceProvider; private readonly IServiceScope? _scope;
         public static FluNETContext Default => _defaultContext ??= Create();
-        private FluNETContext(ServiceProvider serviceProvider, bool createScope = true) { _serviceProvider = serviceProvider ?? throw new ArgumentNullException(nameof(serviceProvider)); if (createScope) _scope = _serviceProvider.CreateScope(); }
+        private FluNETContext(ServiceProvider serviceProvider, bool createScope = true) { _serviceProvider = serviceProvider; if (createScope) _scope = _serviceProvider.CreateScope(); }
         public static FluNETContext Create(Action<IServiceCollection>? configureServices = null) { var services = new ServiceCollection(); ConfigureDefaultServices(services, StandardLanguage.CreateRuntime()); configureServices?.Invoke(services); return new FluNETContext(services.BuildServiceProvider()); }
-        public static FluNETContext CreateWithRuntime(FluNetRuntimeDefinition runtime, Action<IServiceCollection>? configureServices = null) { ArgumentNullException.ThrowIfNull(runtime); var services = new ServiceCollection(); ConfigureDefaultServices(services, runtime); configureServices?.Invoke(services); return new FluNETContext(services.BuildServiceProvider()); }
+        public static FluNETContext CreateWithRuntime(FluNetRuntimeDefinition runtime, Action<IServiceCollection>? configureServices = null) { var services = new ServiceCollection(); ConfigureDefaultServices(services, runtime); configureServices?.Invoke(services); return new FluNETContext(services.BuildServiceProvider()); }
         public static void ConfigureDefaultServices(IServiceCollection services) => ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
         public static void ConfigureDefaultServices(IServiceCollection services, FluNetRuntimeDefinition runtime)
         {
-            ArgumentNullException.ThrowIfNull(services); ArgumentNullException.ThrowIfNull(runtime);
             services.AddSingleton(runtime.Language); services.AddSingleton<LanguageRegistry>(); services.AddSingleton<DiscoveryService>(); services.AddSingleton<SemanticCommandBinder>();
             services.AddSingleton<IExecutionPolicy, AllowAllExecutionPolicy>(); services.AddSingleton<IFluNetFileSystem, PhysicalFluNetFileSystem>(); services.AddSingleton(new HttpClient { Timeout = TimeSpan.FromMinutes(5) });
             services.AddSingleton<IHttpTransport, HttpTransport>(); services.AddSingleton<ITextOutput, ConsoleTextOutput>(); services.AddSingleton<IEmailTransport, DiagnosticEmailTransport>();
             services.AddSingleton<IWorkflowStateStore, InMemoryWorkflowStateStore>(); services.AddSingleton<IWorkflowValueSerializer, JsonWorkflowValueSerializer>();
-            services.AddSingleton<IExecutionResultCache, InMemoryExecutionResultCache>();
+            services.AddSingleton<IExecutionResultCache, InMemoryExecutionResultCache>(); services.AddSingleton<IIdempotencyStore, InMemoryIdempotencyStore>();
             services.AddTransient<TokenFactory>(); services.AddTransient<TokenTreeFactory>(); services.AddTransient<WordFactory>(); services.AddTransient<Lexicon.Lexicon>(); services.AddTransient<SentenceValidator>(); services.AddSingleton<VerbRegistry>(); services.AddTransient<SentenceFactory>(); services.AddTransient<SentenceExecutor>(); services.AddTransient<LegacySentenceAdapter>();
             runtime.RegisterRoutes(services); services.AddTransient<CommandDispatcher>(); services.AddTransient<TypedProgramCompiler>(); services.AddTransient<TypedProgramTypeValidator>(); services.AddSingleton<ExecutionPlanner>(); services.AddTransient<ExecutionPlanExecutor>();
             services.AddPatternMatchers(); services.AddScoped<IVariableResolver, VariableResolver>(); services.AddTransient<Execution.ExecutionPipelineFactory>();
