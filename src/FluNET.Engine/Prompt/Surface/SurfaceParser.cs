@@ -28,7 +28,7 @@ public sealed class SurfaceParser
             if (line.Indent > indent)
             {
                 diagnostics.Add(new SurfaceDiagnostic("FLN204",
-                    "Unexpected indentation. Only a FROM context may introduce an indented block.",
+                    "Unexpected indentation. Only block-form surface statements may introduce an indented block.",
                     new SourceSpan(line.Start, Math.Max(1, line.LeadingCharacters))));
                 cursor++;
                 continue;
@@ -46,16 +46,26 @@ public sealed class SurfaceParser
                         "A FROM context requires exactly one base resource and no AS alias.", command.Span));
                     continue;
                 }
-                if (cursor >= lines.Count || lines[cursor].Indent <= indent)
-                {
-                    diagnostics.Add(new SurfaceDiagnostic("FLN206",
-                        "A FROM context must be followed by an indented block.", command.Span));
+                if (!TryReadChildBlock(lines, ref cursor, indent, diagnostics, command.Span, "FROM context", out IReadOnlyList<SurfaceStatementSyntax>? children))
                     continue;
-                }
-                int childIndent = lines[cursor].Indent;
-                IReadOnlyList<SurfaceStatementSyntax> children = ParseBlock(lines, ref cursor, childIndent, diagnostics);
-                SourceSpan contextSpan = children.Count == 0 ? command.Span : SourceSpan.FromBounds(command.Span.Start, children[^1].Span.End);
+                SourceSpan contextSpan = SourceSpan.FromBounds(command.Span.Start, children![^1].Span.End);
                 statements.Add(new SurfaceContextSyntax(command.Values[0], children, contextSpan));
+                continue;
+            }
+
+            if (parsed is SurfaceCommandSyntax forCommand && forCommand.NormalizedName == "FOR")
+            {
+                if (!TryReadChildBlock(lines, ref cursor, indent, diagnostics, forCommand.Span, "FOR EACH", out IReadOnlyList<SurfaceStatementSyntax>? children))
+                    continue;
+                SourceSpan loopSpan = SourceSpan.FromBounds(forCommand.Span.Start, children![^1].Span.End);
+                if (SurfaceForEachDescriptor.TryCreate(forCommand, children, diagnostics, out SurfaceForEachDescriptor? descriptor))
+                {
+                    statements.Add(new SurfaceCommandSyntax(
+                        "FOREACH",
+                        [new SurfaceValueSyntax(descriptor!.Encode(), loopSpan)],
+                        null,
+                        loopSpan));
+                }
                 continue;
             }
 
@@ -71,41 +81,50 @@ public sealed class SurfaceParser
         return statements;
     }
 
-    private static SurfaceStatementSyntax? ParseLineStatement(
-        LineInfo line,
-        ICollection<SurfaceDiagnostic> diagnostics)
+    private static bool TryReadChildBlock(
+        IReadOnlyList<LineInfo> lines,
+        ref int cursor,
+        int parentIndent,
+        ICollection<SurfaceDiagnostic> diagnostics,
+        SourceSpan ownerSpan,
+        string owner,
+        out IReadOnlyList<SurfaceStatementSyntax>? children)
+    {
+        children = null;
+        if (cursor >= lines.Count || lines[cursor].Indent <= parentIndent)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN206", $"A {owner} must be followed by an indented block.", ownerSpan));
+            return false;
+        }
+        int childIndent = lines[cursor].Indent;
+        children = ParseBlock(lines, ref cursor, childIndent, diagnostics);
+        return children.Count > 0;
+    }
+
+    private static SurfaceStatementSyntax? ParseLineStatement(LineInfo line, ICollection<SurfaceDiagnostic> diagnostics)
     {
         string trimmed = line.Text.Trim();
         int absoluteStart = line.Start + line.LeadingCharacters;
         IReadOnlyList<(string Text, int Offset)> parts = SplitPipes(trimmed, diagnostics, absoluteStart);
         if (parts.Count == 0) return null;
-        if (parts.Count == 1)
-        {
-            return ParseCommand(parts[0].Text, absoluteStart + parts[0].Offset, diagnostics);
-        }
+        if (parts.Count == 1) return ParseCommand(parts[0].Text, absoluteStart + parts[0].Offset, diagnostics);
 
         List<SurfaceCommandSyntax> stages = [];
         foreach ((string text, int offset) in parts)
         {
             SurfaceCommandSyntax? stage = ParseCommand(text, absoluteStart + offset, diagnostics);
             if (stage is null) continue;
-            if (stage.NormalizedName == "FROM")
+            if (stage.NormalizedName is "FROM" or "FOR")
             {
-                diagnostics.Add(new SurfaceDiagnostic("FLN208",
-                    "FROM cannot appear as a pipeline stage.", stage.Span));
+                diagnostics.Add(new SurfaceDiagnostic("FLN208", $"{stage.NormalizedName} cannot appear as a pipeline stage.", stage.Span));
                 continue;
             }
             stages.Add(stage);
         }
-        return stages.Count == 0
-            ? null
-            : new SurfacePipelineSyntax(stages, new SourceSpan(absoluteStart, trimmed.Length));
+        return stages.Count == 0 ? null : new SurfacePipelineSyntax(stages, new SourceSpan(absoluteStart, trimmed.Length));
     }
 
-    private static SurfaceCommandSyntax? ParseCommand(
-        string text,
-        int absoluteStart,
-        ICollection<SurfaceDiagnostic> diagnostics)
+    private static SurfaceCommandSyntax? ParseCommand(string text, int absoluteStart, ICollection<SurfaceDiagnostic> diagnostics)
     {
         text = text.Trim();
         int verbEnd = 0;
@@ -131,9 +150,7 @@ public sealed class SurfaceParser
     }
 
     private static IReadOnlyList<(string Text, int Offset)> SplitPipes(
-        string source,
-        ICollection<SurfaceDiagnostic> diagnostics,
-        int absoluteStart)
+        string source, ICollection<SurfaceDiagnostic> diagnostics, int absoluteStart)
     {
         List<(string Text, int Offset)> result = [];
         int segmentStart = 0;
@@ -166,10 +183,7 @@ public sealed class SurfaceParser
                 diagnostics.Add(new SurfaceDiagnostic("FLN209", "A pipeline stage cannot be empty.",
                     new SourceSpan(absoluteStart + segmentStart, Math.Max(1, segment.Length))));
             }
-            else
-            {
-                result.Add((segment[left..right], segmentStart + left));
-            }
+            else result.Add((segment[left..right], segmentStart + left));
             segmentStart = index + 1;
         }
         return result;
@@ -196,8 +210,7 @@ public sealed class SurfaceParser
         return (source, null, -1);
     }
 
-    private static List<SurfaceValueSyntax> SplitValues(
-        string source, int sourceStart, ICollection<SurfaceDiagnostic> diagnostics)
+    private static List<SurfaceValueSyntax> SplitValues(string source, int sourceStart, ICollection<SurfaceDiagnostic> diagnostics)
     {
         List<SurfaceValueSyntax> values = [];
         if (string.IsNullOrWhiteSpace(source)) return values;

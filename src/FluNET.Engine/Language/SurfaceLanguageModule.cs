@@ -16,13 +16,11 @@ public sealed class SurfaceLanguageModule : IFluNetModule
             .Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<string>(SemanticRole.Source, "FROM")
             .BindWith<LoadJsonGlobCommandBinder>().HandleWith<LoadJsonGlobCommandHandler>();
-
         module.Command<GetHttpJsonCommand, JsonElement>("GETHTTP", "Json")
             .FrameId("surface.get.http.json").CommandId("flunet.surface.gethttp")
             .Positional<JsonElement>(SemanticRole.Output, SlotDirection.Output)
             .Marked<Uri>(SemanticRole.Source, "FROM")
             .BindWith<GetHttpJsonCommandBinder>().HandleWith<GetHttpJsonCommandHandler>();
-
         module.Command<GetEnvironmentCommand, string>("GETENV", "Text")
             .FrameId("surface.get.environment").CommandId("flunet.surface.getenv")
             .Positional<string>(SemanticRole.Output, SlotDirection.Output)
@@ -35,34 +33,36 @@ public sealed class SurfaceLanguageModule : IFluNetModule
             .Marked<JsonElement[]>(SemanticRole.Source, "FROM")
             .Marked<string>(new FrameRoleId("Predicate"), "USING")
             .BindWith<FilterJsonCommandBinder>().HandleWith<FilterJsonCommandHandler>();
-
         module.Command<SortJsonCommand, JsonElement[]>("SORTJSON", "JsonList")
             .FrameId("surface.data.sort.json").CommandId("flunet.surface.sortjson")
             .Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<JsonElement[]>(SemanticRole.Source, "FROM")
             .Marked<string>(new FrameRoleId("Key"), "USING")
             .BindWith<SortJsonCommandBinder>().HandleWith<SortJsonCommandHandler>();
-
         module.Command<TakeJsonCommand, JsonElement[]>("TAKEJSON", "JsonList")
             .FrameId("surface.data.take.json").CommandId("flunet.surface.takejson")
             .Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<JsonElement[]>(SemanticRole.Source, "FROM")
             .Marked<int>(new FrameRoleId("Count"), "USING")
             .BindWith<TakeJsonCommandBinder>().HandleWith<TakeJsonCommandHandler>();
-
         module.Command<ProjectJsonCommand, JsonElement[]>("PROJECTJSON", "JsonList")
             .FrameId("surface.data.project.json").CommandId("flunet.surface.projectjson")
             .Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<JsonElement[]>(SemanticRole.Source, "FROM")
             .Marked<string>(new FrameRoleId("Projection"), "USING")
             .BindWith<ProjectJsonCommandBinder>().HandleWith<ProjectJsonCommandHandler>();
-
         module.Command<DefaultJsonCommand, JsonElement[]>("DEFAULTJSON", "JsonList")
             .FrameId("surface.data.default.json").CommandId("flunet.surface.defaultjson")
             .Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<JsonElement[]>(SemanticRole.Source, "FROM")
             .Marked<string>(new FrameRoleId("Default"), "USING")
             .BindWith<DefaultJsonCommandBinder>().HandleWith<DefaultJsonCommandHandler>();
+        module.Command<ForEachJsonCommand, JsonElement[]>("FOREACHJSON", "JsonList")
+            .FrameId("surface.flow.foreach.json").CommandId("flunet.surface.foreachjson")
+            .Positional<JsonElement[]>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<JsonElement[]>(SemanticRole.Source, "FROM")
+            .Marked<string>(new FrameRoleId("Template"), "USING")
+            .BindWith<ForEachJsonCommandBinder>().HandleWith<ForEachJsonCommandHandler>();
 
         module.Conversion<JsonElement, JsonElement[], JsonToJsonListConversion>();
     }
