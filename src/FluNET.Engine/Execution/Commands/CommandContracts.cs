@@ -214,7 +214,7 @@ public sealed class CommandDispatcher
             ["frame.id"] = command.FrameId.Value,
             ["effect"] = metadata.Effect.ToString(),
             ["concurrency"] = metadata.Concurrency.ToString(),
-            ["result.type"] = command.ResultTypeSymbol.Id.Value,
+            ["result.type"] = command.ResultType.Id.Value,
             ["cache.enabled"] = hasCache.ToString(),
             ["idempotency.enabled"] = hasIdempotency.ToString()
         };

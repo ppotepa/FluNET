@@ -77,10 +77,8 @@ public sealed class BackwardCompatibilityContractTests
                     "surface.data.filter.json",
                     "surface.data.take.json"
                 }));
-            Assert.That(compilation.DependencyGraph!.Incoming(1).Select(edge => edge.From),
-                Does.Contain(0));
-            Assert.That(compilation.DependencyGraph.Incoming(2).Select(edge => edge.From),
-                Does.Contain(1));
+            Assert.That(compilation.DependencyGraph!.Incoming(1).Select(edge => edge.From), Does.Contain(0));
+            Assert.That(compilation.DependencyGraph.Incoming(2).Select(edge => edge.From), Does.Contain(1));
         });
     }
 
@@ -90,9 +88,9 @@ public sealed class BackwardCompatibilityContractTests
         LanguageSnapshot language = StandardLanguage.CreateSnapshot();
         ProcessedPrompt prompt = new("SAY first AND SAY second", language.Grammar);
         IReadOnlyList<BoundCommand> commands = new SemanticCommandBinder(language).BindProgram(prompt.Syntax);
-        BoundProgram program = BoundProgram.FromCommands(
+        BoundProgram program = new(
             new FluNetProgram(prompt),
-            commands);
+            commands.Select(command => new BoundCommandStatement(command)));
 
         DependencyGraph graph = new DependencyAnalyzer().Analyze(program, prompt.Syntax);
 
