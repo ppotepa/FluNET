@@ -95,12 +95,18 @@ public sealed class TypedCommandTests
             CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            string message = string.Join(" ", command.Message.Parts
-                .OfType<LiteralTextPart>()
-                .Select(part => part.Value));
+            string message = LiteralText(command.Message);
             Messages.Add(message);
             return ValueTask.FromResult($"typed:{message}");
         }
+
+        private static string LiteralText(IExpression<string> expression) => expression switch
+        {
+            LiteralExpression<string> literal => literal.Value,
+            JoinedTextExpression joined => string.Join(" ", joined.Parts.Select(LiteralText)),
+            _ => throw new InvalidOperationException(
+                $"Expected a literal-only SAY expression, got '{expression.GetType().Name}'.")
+        };
     }
 
     private sealed record CountCommand(int Value) : ICommand<int>;
