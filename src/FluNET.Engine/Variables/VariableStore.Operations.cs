@@ -31,9 +31,11 @@ public sealed partial class VariableStore
     {
         ArgumentNullException.ThrowIfNull(value);
         TypeSymbol type = _language.Types.Get(value.GetType());
+        object canonical = RuntimeValueCanonicalizer.Normalize(type, value);
         lock (_gate)
         {
-            _values[Key(VariableScopeKind.Host, Normalize(name))] = new RuntimeValue(type, value);
+            _values[Key(VariableScopeKind.Host, Normalize(name))] =
+                new RuntimeValue(type, canonical);
         }
     }
 
@@ -126,7 +128,9 @@ public sealed partial class VariableStore
             throw new InvalidCastException(
                 $"Variable '{symbol.Name}' expects '{symbol.Type}', received '{actual}'.");
         }
-        return new RuntimeValue(symbol.Type, value);
+
+        object canonical = RuntimeValueCanonicalizer.Normalize(symbol.Type, value);
+        return new RuntimeValue(symbol.Type, canonical);
     }
 
     private static readonly VariableScopeKind[] SearchOrder =
