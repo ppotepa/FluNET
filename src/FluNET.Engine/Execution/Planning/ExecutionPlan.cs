@@ -93,6 +93,10 @@ public sealed class ExecutionPlan
     public IReadOnlyList<VariableSymbol> Variables => _variables;
 }
 
+/// <summary>
+/// Creates orchestration structure only. Type compatibility, conversion
+/// resolution and parallel-write conflicts are compiler/type-checker concerns.
+/// </summary>
 public sealed class ExecutionPlanner
 {
     private const int MaximumRetryCount = 100;
@@ -106,6 +110,7 @@ public sealed class ExecutionPlanner
         {
             throw new ExecutionPlanException("Syntax and semantic command counts do not match.");
         }
+
         List<ExecutionPlanStep> steps = [];
         Dictionary<string, int> producers = new(StringComparer.OrdinalIgnoreCase);
         Dictionary<string, VariableSymbol> symbols = new(StringComparer.OrdinalIgnoreCase);
@@ -128,38 +133,14 @@ public sealed class ExecutionPlanner
                         ExecutionDependencyKind.Sequence))
                     .ToList();
 
-            foreach ((string variable, TypeSymbol expectedType) in FindInputVariables(command))
+            foreach (string variable in FindInputVariables(command))
             {
-                if (producers.TryGetValue(variable, out int producer))
-                {
-                    VariableSymbol symbol = symbols[variable];
-                    if (!expectedType.IsAssignableFrom(symbol.Type))
-                    {
-                        throw new ExecutionPlanException(
-                            $"Variable [{variable}] has type '{symbol.Type}', but " +
-                            $"{command.Command.Name}/{command.Frame.UsageName} expects '{expectedType}'.");
-                    }
-                    dependencies.Add(new ExecutionDependency(
-                        producer,
-                        ExecutionDependencyKind.Variable,
-                        variable));
-                }
+                AddVariableDependency(variable, producers, dependencies);
             }
 
-            string? conditionVariable = FindConditionVariable(policies[index]);
-            if (conditionVariable is not null &&
-                producers.TryGetValue(conditionVariable, out int conditionProducer) &&
-                !dependencies.Any(dependency =>
-                    dependency.PredecessorIndex == conditionProducer &&
-                    dependency.Kind == ExecutionDependencyKind.Variable &&
-                    dependency.Variable?.Equals(
-                        conditionVariable,
-                        StringComparison.OrdinalIgnoreCase) == true))
+            foreach (string variable in FindConditionVariables(policies[index]))
             {
-                dependencies.Add(new ExecutionDependency(
-                    conditionProducer,
-                    ExecutionDependencyKind.Variable,
-                    conditionVariable));
+                AddVariableDependency(variable, producers, dependencies);
             }
 
             steps.Add(new ExecutionPlanStep(
@@ -168,48 +149,70 @@ public sealed class ExecutionPlanner
                 resultBinding,
                 dependencies,
                 policies[index]));
+
             if (resultBinding is not null)
             {
                 resultBinding.Type = command.Frame.ResultTypeSymbol;
                 foreach (string target in resultBinding.Targets)
                 {
-                    if (symbols.TryGetValue(target, out VariableSymbol? previous) &&
-                        stages[previous.ProducerIndex] == stages[index])
-                    {
-                        throw new ExecutionPlanException(
-                            $"Parallel steps {previous.ProducerIndex} and {index} both write [{target}].");
-                    }
                     producers[target] = index;
                     symbols[target] = new VariableSymbol(target, resultBinding.Type, index);
                 }
             }
         }
 
-        return new ExecutionPlan(steps, symbols.Values.OrderBy(symbol => symbol.Name, StringComparer.OrdinalIgnoreCase));
+        return new ExecutionPlan(
+            steps,
+            symbols.Values.OrderBy(symbol => symbol.Name, StringComparer.OrdinalIgnoreCase));
     }
 
-    private static IEnumerable<(string Name, TypeSymbol ExpectedType)> FindInputVariables(BoundCommand command) =>
+    private static void AddVariableDependency(
+        string variable,
+        IReadOnlyDictionary<string, int> producers,
+        ICollection<ExecutionDependency> dependencies)
+    {
+        if (!producers.TryGetValue(variable, out int producer) ||
+            dependencies.Any(dependency =>
+                dependency.PredecessorIndex == producer &&
+                dependency.Kind == ExecutionDependencyKind.Variable &&
+                dependency.Variable?.Equals(variable, StringComparison.OrdinalIgnoreCase) == true))
+        {
+            return;
+        }
+
+        dependencies.Add(new ExecutionDependency(
+            producer,
+            ExecutionDependencyKind.Variable,
+            variable));
+    }
+
+    private static IEnumerable<string> FindInputVariables(BoundCommand command) =>
         command.Arguments.Values
             .Where(argument => argument.Slot.Direction == SlotDirection.Input)
-            .SelectMany(argument => argument.Tokens.Select(token => (argument, token)))
-            .Where(pair => pair.token.Kind == Prompt.PromptTokenKind.Variable)
-            .Select(pair => (
-                Reference: pair.token.Text.TrimEnd('.'),
-                ExpectedType: pair.argument.Slot.ValueTypeSymbol))
-            .Select(pair => (
-                Name: pair.Reference.Length >= 2 ? pair.Reference[1..^1] : pair.Reference,
-                pair.ExpectedType))
-            .Where(pair => !pair.Name.StartsWith('{'));
+            .SelectMany(argument => argument.Tokens)
+            .Where(token => token.Kind == Prompt.PromptTokenKind.Variable)
+            .Select(token => NormalizeVariableReference(token.Text))
+            .Where(name => !name.StartsWith('{'))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
 
-    private static string? FindConditionVariable(CommandExecutionPolicy policy)
+    private static IEnumerable<string> FindConditionVariables(CommandExecutionPolicy policy)
     {
-        string? reference = policy.Condition?.TrimEnd('.');
-        return reference is not null &&
-            reference.Length >= 2 &&
-            reference[0] == '[' &&
-            reference[^1] == ']'
-                ? reference[1..^1]
-                : null;
+        if (string.IsNullOrWhiteSpace(policy.Condition))
+        {
+            return Array.Empty<string>();
+        }
+
+        return ConditionExpressionCache.GetOrCompile(policy.Condition)
+            .VariableReferences
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizeVariableReference(string reference)
+    {
+        string normalized = reference.TrimEnd('.');
+        return normalized.Length >= 2 && normalized[0] == '[' && normalized[^1] == ']'
+            ? normalized[1..^1]
+            : normalized;
     }
 
     private static int[] BuildStages(int commandCount, Prompt.PromptSyntax? syntax)
@@ -254,41 +257,54 @@ public sealed class ExecutionPlanner
                 throw new ExecutionPlanException(
                     $"Modifier '{modifier.Kind}' is declared more than once on one command.");
             }
-            if (modifier.Values.Count != 1)
-            {
-                throw new ExecutionPlanException(
-                    $"Modifier '{modifier.Kind}' requires exactly one value.");
-            }
 
-            string value = Unwrap(modifier.Values[0].Text);
             policy = modifier.Kind switch
             {
                 Prompt.CommandModifierKind.Retry => policy with
                 {
-                    RetryCount = ParseRetry(value)
+                    RetryCount = ParseRetry(SingleModifierValue(modifier))
                 },
                 Prompt.CommandModifierKind.Timeout => policy with
                 {
-                    Timeout = ParseTimeout(value)
+                    Timeout = ParseTimeout(SingleModifierValue(modifier))
                 },
                 Prompt.CommandModifierKind.ErrorPolicy => policy with
                 {
-                    ErrorBehavior = value.ToUpperInvariant() switch
+                    ErrorBehavior = SingleModifierValue(modifier).ToUpperInvariant() switch
                     {
                         "CONTINUE" => WorkflowErrorBehavior.Continue,
                         "FAIL" or "STOP" => WorkflowErrorBehavior.Fail,
-                        _ => throw new ExecutionPlanException(
+                        string value => throw new ExecutionPlanException(
                             $"Unknown ON ERROR behavior '{value}'. Expected CONTINUE or FAIL.")
                     }
                 },
                 Prompt.CommandModifierKind.Condition => policy with
                 {
-                    Condition = modifier.Values[0].Text
+                    Condition = ConditionSource(modifier)
                 },
                 _ => throw new ExecutionPlanException($"Unknown command modifier '{modifier.Kind}'.")
             };
         }
         return policy;
+    }
+
+    private static string SingleModifierValue(Prompt.CommandModifierSyntax modifier)
+    {
+        if (modifier.Values.Count != 1)
+        {
+            throw new ExecutionPlanException(
+                $"Modifier '{modifier.Kind}' requires exactly one value.");
+        }
+        return Unwrap(modifier.Values[0].Text);
+    }
+
+    private static string ConditionSource(Prompt.CommandModifierSyntax modifier)
+    {
+        if (modifier.Values.Count == 0)
+        {
+            throw new ExecutionPlanException("IF must be followed by a condition expression.");
+        }
+        return string.Join(" ", modifier.Values.Select(token => token.Text));
     }
 
     private static void ApplyAlternatives(
@@ -747,25 +763,9 @@ public sealed class ExecutionPlanExecutor
         {
             return true;
         }
-        string condition = policy.Condition.TrimEnd('.');
-        object value = condition.StartsWith('[') && condition.EndsWith(']')
-            ? variables.Resolve<object>(condition)
-                ?? throw new InvalidOperationException($"Condition variable {condition} not found.")
-            : Unwrap(condition);
-        bool result = value switch
-        {
-            bool boolean => boolean,
-            string text when bool.TryParse(text, out bool boolean) => boolean,
-            string text when decimal.TryParse(
-                text,
-                System.Globalization.NumberStyles.Number,
-                System.Globalization.CultureInfo.InvariantCulture,
-                out decimal number) => number != 0,
-            string text => !string.IsNullOrWhiteSpace(text),
-            int integer => integer != 0,
-            decimal number => number != 0,
-            _ => true
-        };
+
+        CompiledCondition condition = ConditionExpressionCache.GetOrCompile(policy.Condition);
+        bool result = condition.Expression.Evaluate(new ExpressionEvaluationContext(variables));
         return policy.InvertCondition ? !result : result;
     }
 
@@ -817,14 +817,6 @@ public sealed class ExecutionPlanExecutor
         }));
         return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)));
     }
-
-    private static string Unwrap(string value) =>
-        value.Length >= 2 &&
-        ((value[0] == '{' && value[^1] == '}') ||
-         (value[0] == '"' && value[^1] == '"') ||
-         (value[0] == '\'' && value[^1] == '\''))
-            ? value[1..^1]
-            : value;
 
     private sealed record StepDispatch(
         ExecutionPlanStep Step,
