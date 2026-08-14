@@ -86,7 +86,8 @@ public sealed partial class VariableStore
             })
             {
                 string prefix = $"{(int)scope}:";
-                foreach ((string key, RuntimeValue value) in _values.Where(item => item.Key.StartsWith(prefix, StringComparison.Ordinal)))
+                foreach ((string key, RuntimeValue value) in _values.Where(item =>
+                    item.Key.StartsWith(prefix, StringComparison.Ordinal)))
                 {
                     result[key[prefix.Length..]] = value;
                 }
@@ -106,7 +107,8 @@ public sealed partial class VariableStore
             }
 
             string prefix = $"{(int)scope.Value}:";
-            foreach (string key in _values.Keys.Where(key => key.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
+            foreach (string key in _values.Keys.Where(key =>
+                key.StartsWith(prefix, StringComparison.Ordinal)).ToArray())
             {
                 _values.Remove(key);
             }
@@ -118,8 +120,7 @@ public sealed partial class VariableStore
         ArgumentNullException.ThrowIfNull(symbol);
         ArgumentNullException.ThrowIfNull(value);
         TypeSymbol actual = _language.Types.Get(value.GetType());
-        bool assignable = symbol.Type.Id == actual.Id ||
-            (symbol.Type.Id != BuiltInTypeIds.Text && symbol.Type.IsAssignableFrom(actual));
+        bool assignable = symbol.Type.Id == actual.Id || symbol.Type.IsAssignableFrom(actual);
         if (!assignable)
         {
             throw new InvalidCastException(
