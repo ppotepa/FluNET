@@ -13,6 +13,10 @@ public sealed partial class ConditionExpressionCompiler
         ParenthesizedExpressionSyntax grouped => CompileNode(grouped.Expression, variables),
         BinaryExpressionSyntax binary => CompileBinary(binary, variables),
         UnaryExpressionSyntax unary => CompileUnary(unary, variables),
+        PropertyExpressionSyntax property => CompileProperty(property, variables),
+        IndexExpressionSyntax index => CompileIndex(index, variables),
+        ListExpressionSyntax list => CompileList(list, variables),
+        ObjectExpressionSyntax value => CompileObject(value, variables),
         _ => throw new NotSupportedException($"Unsupported condition node '{syntax.GetType().Name}'.")
     };
 
@@ -30,18 +34,81 @@ public sealed partial class ConditionExpressionCompiler
     {
         string value = text.Trim('"', '\'');
         if (bool.TryParse(value, out bool boolean)) return boolean;
-        if (decimal.TryParse(value, System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture, out decimal number)) return number;
+        if (decimal.TryParse(
+            value,
+            System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out decimal number))
+        {
+            return number;
+        }
         return value;
     }
 
     private static bool ToBoolean(object? value) => value switch
     {
         bool boolean => boolean,
-        decimal number => number != 0m,
         string text when bool.TryParse(text, out bool boolean) => boolean,
         string text => !string.IsNullOrWhiteSpace(text),
         null => false,
+        _ when TryDecimal(value, out decimal number) => number != 0m,
         _ => true
     };
+
+    private static bool TryDecimal(object? value, out decimal number)
+    {
+        switch (value)
+        {
+            case decimal direct:
+                number = direct;
+                return true;
+            case byte direct:
+                number = direct;
+                return true;
+            case sbyte direct:
+                number = direct;
+                return true;
+            case short direct:
+                number = direct;
+                return true;
+            case ushort direct:
+                number = direct;
+                return true;
+            case int direct:
+                number = direct;
+                return true;
+            case uint direct:
+                number = direct;
+                return true;
+            case long direct:
+                number = direct;
+                return true;
+            case ulong direct when direct <= (ulong)decimal.MaxValue:
+                number = direct;
+                return true;
+            case float direct when float.IsFinite(direct):
+                try
+                {
+                    number = (decimal)direct;
+                    return true;
+                }
+                catch (OverflowException)
+                {
+                    break;
+                }
+            case double direct when double.IsFinite(direct):
+                try
+                {
+                    number = (decimal)direct;
+                    return true;
+                }
+                catch (OverflowException)
+                {
+                    break;
+                }
+        }
+
+        number = default;
+        return false;
+    }
 }
