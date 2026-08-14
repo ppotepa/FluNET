@@ -161,11 +161,7 @@ public sealed class TypeSymbol : IEquatable<TypeSymbol>
     /// <summary>The non-nullable type wrapped by Optional&lt;T&gt;, or this symbol.</summary>
     public TypeSymbol NonNullableType => _nonNullableType ?? this;
 
-    /// <summary>
-    /// Tests language assignability without consulting CLR inheritance. Text's
-    /// historical catch-all behavior is retained until conversions move to the
-    /// codec registry in Batch 10.
-    /// </summary>
+    /// <summary>Tests language assignability without consulting CLR inheritance or conversions.</summary>
     public bool IsAssignableFrom(TypeSymbol source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -233,9 +229,7 @@ public sealed class TypeSymbol : IEquatable<TypeSymbol>
             return true;
         }
 
-        // Transitional 0.3 compatibility: textual consumers historically accept
-        // any non-Unit producer. Batch 10 will model this as explicit conversion.
-        return Id == BuiltInTypeIds.Text && source.Id != BuiltInTypeIds.Unit;
+        return false;
     }
 
     internal void AddRuntimeType(Type runtimeType)
