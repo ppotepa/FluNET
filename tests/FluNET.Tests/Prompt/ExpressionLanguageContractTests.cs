@@ -64,6 +64,14 @@ public sealed class ExpressionLanguageContractTests
     }
 
     [Test]
+    public void UnterminatedExpressionStringIsRejected()
+    {
+        Assert.That(
+            () => ExpressionSyntaxParser.Parse("'unterminated"),
+            Throws.TypeOf<FormatException>());
+    }
+
+    [Test]
     public void CompiledLiteralConditionUsesTheSameExpressionTree()
     {
         ExpressionSyntax syntax = ExpressionSyntaxParser.Parse(
