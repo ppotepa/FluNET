@@ -1,4 +1,6 @@
 using FluNET.Compilation.Inference;
+using FluNET.Language;
+using FluNET.Language.Resources;
 using FluNET.Prompt;
 using FluNET.Prompt.Surface;
 
@@ -17,73 +19,197 @@ public sealed record LoweringResult(
 
 /// <summary>
 /// Lowers compact surface syntax directly to canonical PromptSyntax. It never
-/// emits a prompt string and never invokes ProcessedPrompt as a second parser.
+/// emits prompt strings and never invokes ProcessedPrompt as a second parser.
 /// </summary>
 public sealed class SurfaceLowerer
 {
-    public LoweringResult Lower(SurfaceParseResult parse, PromptGrammar grammar)
+    private readonly InferenceEngine _inference;
+
+    public SurfaceLowerer() : this(new InferenceEngine())
+    {
+    }
+
+    public SurfaceLowerer(InferenceEngine inference)
+    {
+        _inference = inference ?? throw new ArgumentNullException(nameof(inference));
+    }
+
+    public LoweringResult Lower(
+        SurfaceParseResult parse,
+        PromptGrammar grammar,
+        LanguageSnapshot? language = null)
     {
         ArgumentNullException.ThrowIfNull(parse);
         ArgumentNullException.ThrowIfNull(grammar);
+        language ??= StandardLanguage.CreateSnapshot();
+
         List<CommandSyntax> commands = [];
+        List<CommandLinkSyntax> links = [];
         List<SourceMapEntry> map = [];
         List<SurfaceDiagnostic> diagnostics = [.. parse.Diagnostics];
         InferenceTrace trace = new();
+        int? previousStatementLast = null;
 
-        for (int index = 0; index < parse.Program.Statements.Count; index++)
+        foreach (SurfaceStatementSyntax statement in parse.Program.Statements)
         {
-            if (parse.Program.Statements[index] is not SurfaceCommandSyntax command)
+            if (statement is not SurfaceCommandSyntax command)
             {
                 diagnostics.Add(new SurfaceDiagnostic(
                     "FLN210",
-                    $"Unsupported surface statement '{parse.Program.Statements[index].GetType().Name}'.",
-                    parse.Program.Statements[index].Span));
+                    $"Unsupported surface statement '{statement.GetType().Name}'.",
+                    statement.Span));
                 continue;
             }
 
-            CommandSyntax? lowered = command.NormalizedName switch
+            int first = commands.Count;
+            IReadOnlyList<CommandSyntax> lowered = command.NormalizedName switch
             {
-                "SAY" => LowerSay(command, grammar),
-                _ => null
+                "SAY" => [LowerSay(command, grammar)],
+                "LOAD" => LowerLoad(command, grammar, language, trace, diagnostics),
+                _ => []
             };
-            if (lowered is null)
+            if (lowered.Count == 0)
             {
-                diagnostics.Add(new SurfaceDiagnostic(
-                    "FLN211",
-                    $"Surface command '{command.Name}' does not have a lowering rule yet.",
-                    command.Span));
+                if (!diagnostics.Any(item => item.Span == command.Span))
+                {
+                    diagnostics.Add(new SurfaceDiagnostic(
+                        "FLN211",
+                        $"Surface command '{command.Name}' does not have a lowering rule yet.",
+                        command.Span));
+                }
                 continue;
             }
 
-            commands.Add(lowered);
-            map.Add(new SourceMapEntry(commands.Count - 1, "command", command.Span));
+            if (previousStatementLast is int previous)
+            {
+                links.Add(Link(previous, first, CommandLinkKind.Sequence, command.Span.Start, "THEN"));
+            }
+
+            for (int offset = 0; offset < lowered.Count; offset++)
+            {
+                int commandIndex = commands.Count;
+                commands.Add(lowered[offset]);
+                map.Add(new SourceMapEntry(commandIndex, "command", command.Span));
+                if (offset > 0)
+                {
+                    links.Add(Link(commandIndex - 1, commandIndex, CommandLinkKind.Parallel, command.Span.Start, "AND"));
+                }
+            }
+            previousStatementLast = commands.Count - 1;
         }
 
         return new LoweringResult(
             parse.Document,
             parse.Program,
-            new PromptSyntax(commands),
+            new PromptSyntax(commands, links),
             new SourceMap(map),
             trace,
             diagnostics);
     }
 
-    private static CommandSyntax LowerSay(SurfaceCommandSyntax command, PromptGrammar grammar)
+    private IReadOnlyList<CommandSyntax> LowerLoad(
+        SurfaceCommandSyntax command,
+        PromptGrammar grammar,
+        LanguageSnapshot language,
+        InferenceTrace trace,
+        ICollection<SurfaceDiagnostic> diagnostics)
     {
-        List<PromptToken> tokens =
-        [
-            new PromptToken("SAY", PromptTokenKind.Word, command.Span.Start, Math.Min(3, command.Span.Length))
-        ];
+        if (command.Values.Count == 0)
+        {
+            diagnostics.Add(new SurfaceDiagnostic("FLN220", "LOAD requires at least one resource.", command.Span));
+            return [];
+        }
+        if (command.Values.Count > 1 && command.Alias is not null)
+        {
+            diagnostics.Add(new SurfaceDiagnostic(
+                "FLN221",
+                "AS on multiple explicit LOAD resources is reserved for collection/glob lowering.",
+                command.Span));
+            return [];
+        }
+
+        List<CommandSyntax> result = [];
         foreach (SurfaceValueSyntax value in command.Values)
         {
-            tokens.Add(new PromptToken(
-                value.Text,
-                Classify(value.Text),
-                value.Span.Start,
-                value.Span.Length));
+            ResourceDescriptor descriptor;
+            try
+            {
+                descriptor = _inference.InferResource(value, language, trace);
+            }
+            catch (FormatException exception)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN222", exception.Message, value.Span));
+                continue;
+            }
+
+            if (descriptor.Reference is not FileResourceReference file)
+            {
+                diagnostics.Add(new SurfaceDiagnostic(
+                    "FLN223",
+                    $"LOAD currently accepts local files; '{descriptor.Reference.Kind}' belongs to GET/resource providers.",
+                    value.Span));
+                continue;
+            }
+
+            string variable = command.Alias ?? descriptor.SuggestedVariableName;
+            if (command.Alias is not null)
+            {
+                trace.Add(new InferenceDecision(
+                    InferenceKind.VariableName,
+                    value.Text,
+                    variable,
+                    "explicit-AS",
+                    value.Span,
+                    InferenceConfidence.Explicit));
+            }
+
+            string qualifier = descriptor.Format switch
+            {
+                ResourceFormat.Json => "CONFIG",
+                ResourceFormat.Text => "TEXT",
+                _ => string.Empty
+            };
+            if (qualifier.Length == 0)
+            {
+                diagnostics.Add(new SurfaceDiagnostic(
+                    "FLN224",
+                    $"LOAD cannot infer a canonical decoder for format '{descriptor.Format}'. Use an explicit canonical command.",
+                    value.Span));
+                continue;
+            }
+
+            result.Add(new CommandSyntax(
+            [
+                Token("LOAD", PromptTokenKind.Word, command.Span.Start, 4),
+                Token(qualifier, PromptTokenKind.Word, value.Span.Start, Math.Min(qualifier.Length, value.Span.Length)),
+                Token($"[{variable}]", PromptTokenKind.Variable, value.Span.Start, value.Span.Length),
+                Token("FROM", PromptTokenKind.Word, value.Span.Start, 0),
+                Token($"{{{file.Path}}}", PromptTokenKind.Reference, value.Span.Start, value.Span.Length)
+            ], grammar));
+        }
+        return result;
+    }
+
+    private static CommandSyntax LowerSay(SurfaceCommandSyntax command, PromptGrammar grammar)
+    {
+        List<PromptToken> tokens = [Token("SAY", PromptTokenKind.Word, command.Span.Start, Math.Min(3, command.Span.Length))];
+        foreach (SurfaceValueSyntax value in command.Values)
+        {
+            tokens.Add(Token(value.Text, Classify(value.Text), value.Span.Start, value.Span.Length));
         }
         return new CommandSyntax(tokens, grammar);
     }
+
+    private static CommandLinkSyntax Link(
+        int predecessor,
+        int successor,
+        CommandLinkKind kind,
+        int position,
+        string text) =>
+        new(predecessor, successor, kind, Token(text, PromptTokenKind.Word, position, 0));
+
+    private static PromptToken Token(string text, PromptTokenKind kind, int start, int length) =>
+        new(text, kind, Math.Max(0, start), Math.Max(0, length));
 
     private static PromptTokenKind Classify(string text) =>
         text.Length >= 2 && text[0] == '[' && text[^1] == ']'
