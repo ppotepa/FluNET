@@ -83,7 +83,7 @@ public sealed partial class ConditionExpressionCompiler
             case long direct:
                 number = direct;
                 return true;
-            case ulong direct when direct <= (ulong)decimal.MaxValue:
+            case ulong direct:
                 number = direct;
                 return true;
             case float direct when float.IsFinite(direct):
