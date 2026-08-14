@@ -6,7 +6,10 @@ public sealed class SurfaceParser
     {
         ArgumentNullException.ThrowIfNull(document);
         List<SurfaceDiagnostic> diagnostics = [];
-        LineInfo[] lines = Lines(document.Text).Where(line => !string.IsNullOrWhiteSpace(line.Text) && !line.Text.TrimStart().StartsWith('#')).ToArray();
+        LineInfo[] lines = Lines(document.Text)
+            .Where(line => !string.IsNullOrWhiteSpace(line.Text) && !line.Text.TrimStart().StartsWith('#'))
+            .SelectMany(line => SplitStatements(line, diagnostics))
+            .ToArray();
         int cursor = 0;
         int rootIndent = lines.Length == 0 ? 0 : lines.Min(line => line.Indent);
         IReadOnlyList<SurfaceStatementSyntax> statements = ParseBlock(lines, ref cursor, rootIndent, diagnostics);
@@ -151,6 +154,103 @@ public sealed class SurfaceParser
         }
         if (quote is not null || depth != 0) diagnostics.Add(new SurfaceDiagnostic("FLN203", "Unclosed quote or delimiter in compact statement.", new SourceSpan(sourceStart, source.Length)));
         return values;
+    }
+
+    /// <summary>
+    /// Splits one physical line into neutral compact statements. A top-level ';'
+    /// has the same statement-boundary semantics as a newline; it never implies
+    /// THEN, AND, or pipeline dataflow. Quotes and nested delimiters protect ';'.
+    /// </summary>
+    private static IReadOnlyList<LineInfo> SplitStatements(
+        LineInfo line,
+        ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        string source = line.Text;
+        List<LineInfo> result = [];
+        int segmentStart = line.LeadingCharacters;
+        int depth = 0;
+        char? quote = null;
+        bool escaped = false;
+        bool sawSeparator = false;
+
+        for (int index = line.LeadingCharacters; index < source.Length; index++)
+        {
+            char current = source[index];
+            if (escaped) { escaped = false; continue; }
+            if (quote is not null)
+            {
+                if (current == '\\') escaped = true;
+                else if (current == quote) quote = null;
+                continue;
+            }
+            if (current is '"' or '\'') { quote = current; continue; }
+            if (current is '(' or '[' or '{') { depth++; continue; }
+            if (current is ')' or ']' or '}') { depth = Math.Max(0, depth - 1); continue; }
+            if (current != ';' || depth != 0) continue;
+
+            sawSeparator = true;
+            AddStatementSegment(
+                source,
+                line,
+                segmentStart,
+                index,
+                allowEmpty: false,
+                diagnostics,
+                result);
+            segmentStart = index + 1;
+        }
+
+        if (!sawSeparator)
+        {
+            int start = line.LeadingCharacters;
+            return [new LineInfo(source[start..], line.Start + start, line.Indent, 0)];
+        }
+
+        // A final semicolon is a legal terminator. Interior/leading empty
+        // statements are diagnosed when their separator is encountered above.
+        AddStatementSegment(
+            source,
+            line,
+            segmentStart,
+            source.Length,
+            allowEmpty: true,
+            diagnostics,
+            result);
+        return result;
+    }
+
+    private static void AddStatementSegment(
+        string source,
+        LineInfo line,
+        int start,
+        int end,
+        bool allowEmpty,
+        ICollection<SurfaceDiagnostic> diagnostics,
+        ICollection<LineInfo> result)
+    {
+        int left = start;
+        while (left < end && char.IsWhiteSpace(source[left])) left++;
+        int right = end;
+        while (right > left && char.IsWhiteSpace(source[right - 1])) right--;
+
+        if (left == right)
+        {
+            if (!allowEmpty)
+            {
+                int marker = Math.Clamp(end, 0, Math.Max(0, source.Length - 1));
+                diagnostics.Add(new SurfaceDiagnostic(
+                    "FLN218",
+                    "A semicolon must separate two non-empty statements; only a final trailing semicolon may terminate a statement.",
+                    new SourceSpan(line.Start + marker, 1)));
+            }
+            return;
+        }
+
+        result.Add(new LineInfo(
+            source[left..right],
+            line.Start + left,
+            line.Indent,
+            0));
     }
 
     private static string DisplayName(SurfaceStatementSyntax statement) => statement switch
