@@ -1,5 +1,6 @@
 using FluNET.Execution.Commands;
 using FluNET.Keywords;
+using FluNET.Language.Values;
 using FluNET.Syntax.Verbs;
 using System.Text;
 using System.Text.Json;
@@ -29,7 +30,8 @@ public sealed class StandardLanguageModule : IFluNetModule
             .Route<SetNumberCommand, decimal, SetNumberCommandBinder, SetNumberCommandHandler>("core.set.number")
             .Route<SetBooleanCommand, bool, SetBooleanCommandBinder, SetBooleanCommandHandler>("core.set.boolean")
             .Route<ParseJsonCommand, JsonElement, ParseJsonCommandBinder, ParseJsonCommandHandler>("core.parse.json")
-            .Route<FormatJsonCommand, string, FormatJsonCommandBinder, FormatJsonCommandHandler>("core.format.json");
+            .Route<FormatJsonCommand, string, FormatJsonCommandBinder, FormatJsonCommandHandler>("core.format.json")
+            .Conversion<IReadOnlyList<string>, string, TextListToTextConversion>();
     }
 
     public void Register(LanguageBuilder language)
