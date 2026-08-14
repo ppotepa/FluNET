@@ -1,6 +1,0 @@
-<Project>
-  <ItemGroup>
-    <Compile Remove="Prompt/ExpressionSyntaxParserTests.cs" />
-    <Compile Remove="Execution/ConditionExpressionCompilerTests.cs" />
-  </ItemGroup>
-</Project>
