@@ -71,6 +71,23 @@ public sealed class TypedAnalysisTests
     }
 
     [Test]
+    public void TypedAnalysisAcceptsLegacyDestructuredTargetsAsRuntimeTypedOutputs()
+    {
+        using FluNETContext context = FluNETContext.Create();
+
+        TypedAnalysisResult result = context.AnalyzeTyped(
+            new ProcessedPrompt(
+                "GET [{firstName, lastName}] FROM {person.json} THEN SAY [firstName]."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsValid, Is.True, result.CompilationError?.Message);
+            Assert.That(result.TypedProgram, Is.Not.Null);
+            Assert.That(result.TypedProgram!.Commands, Has.Count.EqualTo(2));
+        });
+    }
+
+    [Test]
     public void TypedAnalysisAcceptsRegisteredHostVariableThroughConversionGraph()
     {
         using FluNETContext context = FluNETContext.Create();
