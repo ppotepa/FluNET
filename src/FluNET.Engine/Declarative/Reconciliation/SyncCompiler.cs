@@ -4,6 +4,8 @@ using FluNET.Language;
 using FluNET.Language.Resources;
 using FluNET.Prompt;
 using FluNET.Prompt.Surface;
+using System.Security.Cryptography;
+using System.Text;
 
 namespace FluNET.Declarative.Reconciliation;
 
@@ -28,6 +30,17 @@ public sealed record SyncDefinition(
     string SourceVariable)
 {
     public bool IsValid => ReadCompilation.IsValid;
+    public string Id => SyncDefinitionIdentity.Create(Goal);
+}
+
+internal static class SyncDefinitionIdentity
+{
+    public static string Create(SyncGoal goal)
+    {
+        string canonical = $"{goal.Direction}|{ResourceIdentity.Parse(goal.TargetResource)}|{ResourceIdentity.Parse(goal.SourceResource)}|{goal.KeyField.ToLowerInvariant()}";
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant()[..20];
+        return "sync-" + hash;
+    }
 }
 
 public sealed record SyncDiagnostic(string Code, string Message, SourceSpan Span);

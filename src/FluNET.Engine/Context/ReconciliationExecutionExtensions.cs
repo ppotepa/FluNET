@@ -1,17 +1,28 @@
 using FluNET.Declarative.Reconciliation;
 using FluNET.Execution.Planning;
 using FluNET.Variables;
+using Microsoft.Extensions.DependencyInjection;
+using System.Runtime.CompilerServices;
 
 namespace FluNET.Context;
 
 public static class ReconciliationExecutionExtensions
 {
+    private static readonly ConditionalWeakTable<FluNETContext, IReconciliationStateStore> DefaultStateStores = new();
+
     public static ReconciliationMutationPlanner GetReconciliationMutationPlanner(this FluNETContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
         return new ReconciliationMutationPlanner(
             context.GetSurfaceCompiler(),
             context.GetService<IVariableResolver>());
+    }
+
+    public static IReconciliationStateStore GetReconciliationStateStore(this FluNETContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return context.ServiceProvider.GetService<IReconciliationStateStore>()
+            ?? DefaultStateStores.GetValue(context, _ => new InMemoryReconciliationStateStore());
     }
 
     public static ReconciliationRunner GetReconciliationRunner(this FluNETContext context)
@@ -21,7 +32,8 @@ public static class ReconciliationExecutionExtensions
             context.GetResourceObserverRegistry(),
             new ReconciliationDiffEngine(),
             context.GetReconciliationMutationPlanner(),
-            context.GetService<ExecutionPlanExecutor>());
+            context.GetService<ExecutionPlanExecutor>(),
+            context.GetReconciliationStateStore());
     }
 
     public static async ValueTask<IReadOnlyList<ReconciliationRunResult>> ExecuteSyncAsync(

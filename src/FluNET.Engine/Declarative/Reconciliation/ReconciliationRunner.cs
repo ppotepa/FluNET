@@ -92,15 +92,40 @@ public sealed record ReconciliationRunResult(
 }
 
 /// <summary>
-/// Observes source/target concurrently, computes a keyed diff, and delegates any mutation
-/// to the ordinary surface compiler + ExecutionPlanExecutor.
+/// Observes source/target concurrently, computes a keyed diff, persists the last converged
+/// baseline and delegates mutations to the ordinary surface compiler + ExecutionPlanExecutor.
 /// </summary>
-public sealed class ReconciliationRunner(
-    IResourceObserverRegistry observers,
-    ReconciliationDiffEngine diffEngine,
-    ReconciliationMutationPlanner mutationPlanner,
-    ExecutionPlanExecutor executor)
+public sealed class ReconciliationRunner
 {
+    private readonly IResourceObserverRegistry observers;
+    private readonly ReconciliationDiffEngine diffEngine;
+    private readonly ReconciliationMutationPlanner mutationPlanner;
+    private readonly ExecutionPlanExecutor executor;
+    private readonly IReconciliationStateStore stateStore;
+
+    public ReconciliationRunner(
+        IResourceObserverRegistry observers,
+        ReconciliationDiffEngine diffEngine,
+        ReconciliationMutationPlanner mutationPlanner,
+        ExecutionPlanExecutor executor)
+        : this(observers, diffEngine, mutationPlanner, executor, new InMemoryReconciliationStateStore())
+    {
+    }
+
+    public ReconciliationRunner(
+        IResourceObserverRegistry observers,
+        ReconciliationDiffEngine diffEngine,
+        ReconciliationMutationPlanner mutationPlanner,
+        ExecutionPlanExecutor executor,
+        IReconciliationStateStore stateStore)
+    {
+        this.observers = observers ?? throw new ArgumentNullException(nameof(observers));
+        this.diffEngine = diffEngine ?? throw new ArgumentNullException(nameof(diffEngine));
+        this.mutationPlanner = mutationPlanner ?? throw new ArgumentNullException(nameof(mutationPlanner));
+        this.executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        this.stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
+    }
+
     public async ValueTask<ReconciliationRunResult> RunAsync(
         SyncDefinition definition,
         ResourceStateSnapshot? baseline = null,
@@ -119,6 +144,15 @@ public sealed class ReconciliationRunner(
 
         try
         {
+            ResourceStateSnapshot? effectiveBaseline = baseline;
+            if (effectiveBaseline is null)
+            {
+                ReconciliationBaselineState? stored = await stateStore
+                    .GetAsync(definition.Id, cancellationToken)
+                    .ConfigureAwait(false);
+                effectiveBaseline = stored?.ToSnapshot();
+            }
+
             Task<ObservedStateSnapshot> targetTask = ObserveTargetAsync(definition, cancellationToken).AsTask();
             Task<ObservedStateSnapshot> sourceTask = observers.ObserveAsync(
                 new ResourceObservationRequest(
@@ -135,19 +169,23 @@ public sealed class ReconciliationRunner(
                 definition.Goal.KeyField,
                 source.Records.Select(record => record.Value),
                 source.CapturedAt);
-            diff = diffEngine.Compare(desired, observed, baseline);
+            diff = diffEngine.Compare(desired, observed, effectiveBaseline);
 
             if (diff.HasConflicts)
                 return new(definition, desired, observed, diff, null, mutationSteps, false,
                     new ReconciliationConflictException(diff));
             if (!diff.HasMutations)
+            {
+                await SaveBaselineAsync(definition, desired, cancellationToken).ConfigureAwait(false);
                 return new(definition, desired, observed, diff, null, mutationSteps, false, null);
+            }
 
             mutation = mutationPlanner.Plan(definition, desired, diff);
             await executor.ExecuteAsync(
                 mutation.Compilation.Plan!,
                 mutationSteps,
                 cancellationToken).ConfigureAwait(false);
+            await SaveBaselineAsync(definition, desired, cancellationToken).ConfigureAwait(false);
             return new(definition, desired, observed, diff, mutation, mutationSteps, true, null);
         }
         catch (Exception exception)
@@ -155,6 +193,14 @@ public sealed class ReconciliationRunner(
             return new(definition, desired, observed, diff, mutation, mutationSteps, false, exception);
         }
     }
+
+    private ValueTask SaveBaselineAsync(
+        SyncDefinition definition,
+        DesiredStateSnapshot converged,
+        CancellationToken cancellationToken) =>
+        stateStore.SetAsync(
+            ReconciliationBaselineState.From(definition, converged),
+            cancellationToken);
 
     private async ValueTask<ObservedStateSnapshot> ObserveTargetAsync(
         SyncDefinition definition,
