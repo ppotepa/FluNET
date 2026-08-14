@@ -4,6 +4,15 @@ public sealed partial class ExpressionSyntaxParser
 {
     private ExpressionSyntax ParsePrimary()
     {
+        if (StartsCall("LIST"))
+        {
+            return ParseList();
+        }
+        if (StartsCall("OBJECT"))
+        {
+            return ParseObject();
+        }
+
         if (MatchPunctuation("("))
         {
             ExpressionToken opening = Previous;
