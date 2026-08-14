@@ -69,4 +69,20 @@ public sealed class TypedAnalysisTests
             Assert.That(result.CompilationError?.Code, Is.EqualTo("FLN150"));
         });
     }
+
+    [Test]
+    public void TypedAnalysisRejectsUnresolvedConditionVariable()
+    {
+        using FluNETContext context = FluNETContext.Create();
+
+        TypedAnalysisResult result = context.AnalyzeTyped(
+            new ProcessedPrompt("SAY guarded IF [missing]."));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.IsValid, Is.False);
+            Assert.That(result.TypedProgram, Is.Null);
+            Assert.That(result.CompilationError?.Code, Is.EqualTo("FLN150"));
+        });
+    }
 }
