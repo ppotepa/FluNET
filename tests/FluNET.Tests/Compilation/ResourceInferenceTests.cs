@@ -35,4 +35,22 @@ public sealed class ResourceInferenceTests
             Assert.That(trace.Items, Has.Count.EqualTo(4));
         });
     }
+
+    [Test]
+    public void JsonGlobInfersListTypeWithoutEnumeratingFiles()
+    {
+        LanguageSnapshot language = StandardLanguage.CreateSnapshot();
+        const string source = "data/*.json";
+        SurfaceValueSyntax value = new(source, new FluNET.Prompt.SourceSpan(0, source.Length));
+
+        ResourceDescriptor descriptor = new InferenceEngine().InferResource(value, language);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(descriptor.Reference, Is.TypeOf<FileResourceReference>());
+            Assert.That(((FileResourceReference)descriptor.Reference).IsPattern, Is.True);
+            Assert.That(descriptor.Type, Is.SameAs(language.Types.List(language.Types.Json)));
+            Assert.That(descriptor.SuggestedVariableName, Is.EqualTo("data"));
+        });
+    }
 }

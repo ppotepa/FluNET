@@ -11,27 +11,23 @@ public sealed class ResourceClassifier
         string text = value.UnquotedText.Trim();
         if (text.StartsWith("env:", StringComparison.OrdinalIgnoreCase))
         {
-            string name = RequiredSuffix(text, "env:");
-            return new EnvironmentResourceReference(name);
+            return new EnvironmentResourceReference(RequiredSuffix(text, "env:"));
         }
         if (text.StartsWith("secret:", StringComparison.OrdinalIgnoreCase))
         {
-            string name = RequiredSuffix(text, "secret:");
-            return new SecretResourceReference(name);
+            return new SecretResourceReference(RequiredSuffix(text, "secret:"));
         }
         if (text.StartsWith("sql:", StringComparison.OrdinalIgnoreCase))
         {
             string query = RequiredSuffix(text, "sql:").Trim('"', '\'');
             return new SqlResourceReference(query);
         }
-        if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) &&
-            uri.Scheme is "http" or "https")
+        if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) && uri.Scheme is "http" or "https")
         {
             return new HttpResourceReference(uri);
         }
 
-        bool relative = !Path.IsPathRooted(text);
-        return new FileResourceReference(text, relative);
+        return new FileResourceReference(text, !Path.IsPathRooted(text));
     }
 
     private static string RequiredSuffix(string text, string prefix)
@@ -55,23 +51,23 @@ public sealed class FormatInference
         _ => ResourceFormat.Unknown
     };
 
-    private static ResourceFormat FromExtension(string extension) =>
-        extension.ToLowerInvariant() switch
-        {
-            ".json" => ResourceFormat.Json,
-            ".csv" => ResourceFormat.Csv,
-            ".xml" => ResourceFormat.Xml,
-            ".txt" or ".md" or ".log" => ResourceFormat.Text,
-            ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" => ResourceFormat.Image,
-            ".bin" or ".dat" => ResourceFormat.Binary,
-            _ => ResourceFormat.Unknown
-        };
+    private static ResourceFormat FromExtension(string extension) => extension.ToLowerInvariant() switch
+    {
+        ".json" => ResourceFormat.Json,
+        ".csv" => ResourceFormat.Csv,
+        ".xml" => ResourceFormat.Xml,
+        ".txt" or ".md" or ".log" => ResourceFormat.Text,
+        ".png" or ".jpg" or ".jpeg" or ".gif" or ".webp" => ResourceFormat.Image,
+        ".bin" or ".dat" => ResourceFormat.Binary,
+        _ => ResourceFormat.Unknown
+    };
 }
 
 public sealed class VariableNameInference
 {
     public string Infer(ResourceReference reference) => reference switch
     {
+        FileResourceReference file when file.IsPattern => PatternName(file.Path),
         FileResourceReference file => Normalize(Path.GetFileNameWithoutExtension(file.Path)),
         HttpResourceReference http => Normalize(HttpName(http.Uri)),
         EnvironmentResourceReference environment => Normalize(environment.Name),
@@ -79,6 +75,15 @@ public sealed class VariableNameInference
         SqlResourceReference => "result",
         _ => "value"
     };
+
+    private static string PatternName(string pattern)
+    {
+        string? directory = Path.GetDirectoryName(pattern)?.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        string candidate = string.IsNullOrWhiteSpace(directory)
+            ? "items"
+            : Path.GetFileName(directory);
+        return Normalize(candidate);
+    }
 
     private static string HttpName(Uri uri)
     {
@@ -89,13 +94,10 @@ public sealed class VariableNameInference
 
     private static string Normalize(string value)
     {
-        string normalized = new(value
-            .Trim()
-            .Select(character => char.IsLetterOrDigit(character) || character == '_'
+        string normalized = new(value.Trim().Select(character =>
+            char.IsLetterOrDigit(character) || character == '_'
                 ? char.ToLowerInvariant(character)
-                : '_')
-            .ToArray());
-        normalized = normalized.Trim('_');
+                : '_').ToArray()).Trim('_');
         if (normalized.Length == 0) return "value";
         return char.IsDigit(normalized[0]) ? $"value_{normalized}" : normalized;
     }

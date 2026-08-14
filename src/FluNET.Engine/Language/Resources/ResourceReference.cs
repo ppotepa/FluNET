@@ -24,7 +24,10 @@ public enum ResourceFormat
 public abstract record ResourceReference(ResourceKind Kind, string DisplayName);
 
 public sealed record FileResourceReference(string Path, bool IsRelative)
-    : ResourceReference(ResourceKind.LocalFile, Path);
+    : ResourceReference(ResourceKind.LocalFile, Path)
+{
+    public bool IsPattern => Path.IndexOfAny(['*', '?']) >= 0;
+}
 
 public sealed record HttpResourceReference(Uri Uri)
     : ResourceReference(ResourceKind.Http, Uri.ToString());

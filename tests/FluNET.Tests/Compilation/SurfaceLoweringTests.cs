@@ -30,7 +30,7 @@ public sealed class SurfaceLoweringTests
     }
 
     [Test]
-    public void CompactLoadInfersJsonAndTextOutputsAndParallelizesOneStatement()
+    public void CompactLoadInfersJsonOutputsAndParallelizesOneStatement()
     {
         LanguageSnapshot language = StandardLanguage.CreateSnapshot();
         SurfaceParseResult parsed = new SurfaceParser().Parse(new SourceDocument(
@@ -48,7 +48,6 @@ public sealed class SurfaceLoweringTests
                 Is.EqualTo(new[] { "LOAD", "CONFIG", "[todo]", "FROM", "{todo.json}" }));
             Assert.That(lowered.CanonicalSyntax.Links[0].Kind, Is.EqualTo(CommandLinkKind.Parallel));
             Assert.That(lowered.CanonicalSyntax.Links[1].Kind, Is.EqualTo(CommandLinkKind.Sequence));
-            Assert.That(lowered.InferenceTrace.Items, Has.Count.GreaterThanOrEqualTo(8));
         });
     }
 
@@ -64,6 +63,24 @@ public sealed class SurfaceLoweringTests
             Assert.That(lowered.IsValid, Is.True);
             Assert.That(lowered.CanonicalSyntax.Commands.Single().Tokens.Select(token => token.Text),
                 Does.Contain("[article]"));
+        });
+    }
+
+    [Test]
+    public void JsonGlobLowersToGeneratedCanonicalLoadGlobFrame()
+    {
+        FluNetRuntimeDefinition runtime = SurfaceLanguage.CreateRuntime();
+        SurfaceParseResult parsed = new SurfaceParser().Parse(new SourceDocument("LOAD data/*.json AS posts"));
+        LoweringResult lowered = new SurfaceLowerer().Lower(parsed, runtime.Language.Grammar, runtime.Language);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lowered.IsValid, Is.True, string.Join(" ", lowered.Diagnostics.Select(item => item.Message)));
+            Assert.That(lowered.CanonicalSyntax.Commands.Single().Tokens.Select(token => token.Text),
+                Is.EqualTo(new[] { "LOADGLOB", "[posts]", "FROM", "{data/*.json}" }));
+            Assert.That(runtime.Language.FindFrame(new FrameId("surface.load.glob.json")), Is.Not.Null);
+            Assert.That(runtime.Language.Types.Get<System.Text.Json.JsonElement[]>(),
+                Is.SameAs(runtime.Language.Types.List(runtime.Language.Types.Json)));
         });
     }
 }

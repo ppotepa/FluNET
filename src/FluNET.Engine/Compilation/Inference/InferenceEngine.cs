@@ -27,30 +27,15 @@ public sealed class InferenceEngine(
         TypeSymbol type = InferredType(language.Types, reference, format);
         string variable = names.Infer(reference);
 
-        trace?.Add(new InferenceDecision(
-            InferenceKind.Resource,
-            value.Text,
-            reference.Kind.ToString(),
-            "resource-prefix-or-uri-shape",
-            value.Span));
-        trace?.Add(new InferenceDecision(
-            InferenceKind.Format,
-            value.Text,
-            format.ToString(),
-            "resource-extension-or-scheme",
-            value.Span));
-        trace?.Add(new InferenceDecision(
-            InferenceKind.Type,
-            value.Text,
-            type.Name,
-            "format-to-language-type",
-            value.Span));
-        trace?.Add(new InferenceDecision(
-            InferenceKind.VariableName,
-            value.Text,
-            variable,
-            "resource-name",
-            value.Span));
+        trace?.Add(new InferenceDecision(InferenceKind.Resource, value.Text,
+            reference is FileResourceReference file && file.IsPattern ? "LocalFilePattern" : reference.Kind.ToString(),
+            "resource-prefix-or-uri-shape", value.Span));
+        trace?.Add(new InferenceDecision(InferenceKind.Format, value.Text, format.ToString(),
+            "resource-extension-or-scheme", value.Span));
+        trace?.Add(new InferenceDecision(InferenceKind.Type, value.Text, type.Name,
+            "format-to-language-type", value.Span));
+        trace?.Add(new InferenceDecision(InferenceKind.VariableName, value.Text, variable,
+            "resource-name", value.Span));
 
         return new ResourceDescriptor(reference, format, type, variable);
     }
@@ -58,12 +43,18 @@ public sealed class InferenceEngine(
     private static TypeSymbol InferredType(
         LanguageTypeSystem types,
         ResourceReference reference,
-        ResourceFormat format) => format switch
+        ResourceFormat format)
     {
-        ResourceFormat.Json => types.Json,
-        ResourceFormat.Text or ResourceFormat.Csv or ResourceFormat.Xml => types.Text,
-        ResourceFormat.Binary or ResourceFormat.Image => types.File,
-        ResourceFormat.Unknown when reference is EnvironmentResourceReference or SecretResourceReference => types.Text,
-        _ => types.Object
-    };
+        TypeSymbol element = format switch
+        {
+            ResourceFormat.Json => types.Json,
+            ResourceFormat.Text or ResourceFormat.Csv or ResourceFormat.Xml => types.Text,
+            ResourceFormat.Binary or ResourceFormat.Image => types.File,
+            ResourceFormat.Unknown when reference is EnvironmentResourceReference or SecretResourceReference => types.Text,
+            _ => types.Object
+        };
+        return reference is FileResourceReference file && file.IsPattern
+            ? types.List(element)
+            : element;
+    }
 }

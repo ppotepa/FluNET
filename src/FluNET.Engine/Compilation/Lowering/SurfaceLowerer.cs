@@ -163,6 +163,26 @@ public sealed class SurfaceLowerer
                     InferenceConfidence.Explicit));
             }
 
+            if (file.IsPattern)
+            {
+                if (descriptor.Format != ResourceFormat.Json)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic(
+                        "FLN225",
+                        $"Glob LOAD currently supports JSON patterns; '{descriptor.Format}' needs a collection codec.",
+                        value.Span));
+                    continue;
+                }
+                result.Add(new CommandSyntax(
+                [
+                    Token("LOADGLOB", PromptTokenKind.Word, command.Span.Start, Math.Min(8, command.Span.Length)),
+                    Token($"[{variable}]", PromptTokenKind.Variable, value.Span.Start, value.Span.Length),
+                    Token("FROM", PromptTokenKind.Word, value.Span.Start, 0),
+                    Token($"{{{file.Path}}}", PromptTokenKind.Reference, value.Span.Start, value.Span.Length)
+                ], grammar));
+                continue;
+            }
+
             string qualifier = descriptor.Format switch
             {
                 ResourceFormat.Json => "CONFIG",
