@@ -6,14 +6,16 @@
 
 FluNET is an experimental external DSL and execution engine for small,
 English-like automation commands. It is a proof of concept, not a sandbox or a
-general-purpose language. The current focus is predictable parsing, typed
-semantic binding, explicit capabilities, and useful diagnostics.
+general-purpose language. The current compiler work focuses on predictable
+parsing, typed semantic binding, explicit value conversions, typed variables,
+side-effect-free analysis, and useful diagnostics.
 
 ```text
 GET [text] FROM {input.txt} THEN SAVE [text] TO {copy.txt}.
 SAY "Hello from FluNET!"
 DOWNLOAD [file] FROM {https://example.com/file.txt} TO {file.txt}.
 SET BOOLEAN [enabled] TO true THEN SAY enabled IF [enabled] ELSE SAY disabled.
+SAY ready IF ([enabled] AND NOT [blocked]).
 ```
 
 ## Quick start
@@ -53,8 +55,8 @@ Use `--root` and `--host` more than once to allow multiple roots or hosts.
 | `{value}` | An inline reference such as a path, URL, or JSON object. Spaces are preserved. |
 | `"text"` or `'text'` | A quoted literal. Spaces, newlines, and escaped quotes are preserved. |
 | `THEN` | Starts the next dependency stage after the preceding stage finishes. |
-| `AND` | Adds an independent command to the current stage; ready branches run concurrently. |
-| `IF value ... ELSE ...` | Selects one of two command branches. Variables, booleans, numbers, and text can be conditions. |
+| `AND` | Adds an independent command to the current stage; ready branches run concurrently. Inside parenthesized `IF (...)` it is a Boolean operator. |
+| `IF expression ... ELSE ...` | Selects one of two command branches from a compiled expression. |
 | `WITH RETRY {n}` | Retries a failed command up to `n` additional times. |
 | `WITH TIMEOUT {duration}` | Applies a cooperative timeout such as `250ms`, `5s`, `2m`, or `1h`. |
 | `ON ERROR CONTINUE` | Records a failed step and allows the remaining graph to continue. The default is fail-fast. |
@@ -71,9 +73,16 @@ Examples:
 SET JSON [config] TO {"enabled":true} THEN FORMAT JSON [pretty] FROM [config].
 SAY primary WITH RETRY {2} WITH TIMEOUT {5s} ON ERROR CONTINUE THEN SAY finished.
 GET [left] FROM {a.txt} AND GET [right] FROM {b.txt} THEN SAY [left] [right].
+SET NUMBER [count] TO 3 THEN SAY positive IF ([count] > 0).
 ```
 
-## Type system
+Condition expressions have explicit precedence for `OR`, `AND`, equality,
+ordering, arithmetic, unary operators and postfix access. The expression AST
+also supports `LIST(...)`, `OBJECT(...)`, property access and indexing.
+Parentheses are recommended whenever `AND`/`OR` appears in a command condition,
+so the boundary between command links and Boolean operators remains explicit.
+
+## Type and value system
 
 `TypeSymbol` is a FluNET language type, not a CLR type alias. Every symbol has a
 stable `TypeId`, `TypeKind`, and nullability. CLR types are runtime mappings only;
@@ -83,7 +92,7 @@ the same canonical `List<Text>` symbol.
 
 Built-in language types include `Unit`, `Text`, `Boolean`, `Number`, `File`,
 `Directory`, `Uri`, `Json`, and `Object`. `LanguageTypeSystem` also interns
-structural `List<T>`, `Map<K,V>`, `Optional<T>`, union, and object-field types:
+structural `List<T>`, `Map<K,V>`, `Optional<T>`, unions, and object-field types:
 
 ```csharp
 LanguageTypeSystem types = StandardLanguage.CreateSnapshot().Types;
@@ -100,14 +109,22 @@ TypeSymbol person = types.ObjectType(
     ]);
 ```
 
-A module can continue to register a domain CLR mapping with
-`LanguageBuilder.Type<T>("LanguageName")`; its `TypeId` is derived from the
-language name rather than the CLR class name. Undeclared custom CLR types remain
-supported through a `legacy.clr.*` compatibility identity, but published module
-APIs should declare their domain types explicitly. Assignability is evaluated
-from language structure. The historical conversion of arbitrary values to
-`Text` remains temporarily compatible and will move to the explicit conversion
-registry in the next compiler batch.
+`TypeSymbol.IsAssignableFrom` is purely structural. Text/Number/File/Uri/Json and
+other boundary conversions are explicit edges in `IValueCodecRegistry`; the
+runtime does not use arbitrary CLR `ToString()` as a canonical conversion.
+The standard language also declares `List<Text> -> Text` so line-producing
+commands such as `GET` and `LOAD` can feed a text consumer such as `SAY`.
+
+A module can register a stable domain type and its value boundary explicitly:
+
+```csharp
+module.Language.Type<Slug>("Slug");
+module.Codec<Slug, SlugCodec>();
+module.Conversion<Slug, string, SlugToTextConversion>();
+```
+
+Undeclared CLR types remain available only through compatibility identities;
+published module contracts should declare their language types and codecs.
 
 ## Embedding
 
@@ -120,8 +137,13 @@ using FluNET.Prompt;
 using FluNETContext context = FluNETContext.Create();
 Engine engine = context.GetEngine();
 
+// Source-compatible parse/bind/semantic/plan analysis.
 CompilationResult analysis = engine.Analyze(
     new ProcessedPrompt("GET [text] FROM {input.txt}."));
+
+// 0.4 freeze-candidate typed analysis: compile + type-check, no handlers run.
+TypedAnalysisResult typed = context.AnalyzeTyped(
+    new ProcessedPrompt("SET NUMBER [count] TO 42 THEN SAY [count]."));
 
 ExecutionResult execution = await engine.ExecuteAsync(
     new ProcessedPrompt("SAY 'Hello'."),
@@ -155,11 +177,6 @@ process. Register `JsonFileWorkflowStateStore` (or an application-specific
 prevents a run identifier from being resumed with changed commands. Extensions
 with non-JSON result types can replace `IWorkflowValueSerializer`.
 
-`Analyze` is side-effect free and returns the canonical `CompilationResult`.
-`ExecuteAsync` returns structured syntax, validation, activation, capability,
-cancellation, or execution errors; an operation failure is never represented
-as a successful validation plus an unexplained `null`.
-
 Hosts can replace `IFluNetFileSystem`, `IHttpTransport`, `ITextOutput`,
 `IEmailTransport`, and `IExecutionPolicy` through
 `FluNETContext.Create(services => ...)`. The CLI uses
@@ -170,37 +187,37 @@ as a backward-compatible default, so production hosts should replace it.
 
 1. `ProcessedPrompt` performs quote-aware lexical analysis and emits stable
    diagnostics (`FLN001` and later) with source positions.
-2. `PromptSyntax` is the canonical syntax tree for commands, language-defined
-   clause markers, connectors, and execution modifiers.
-3. An immutable `LanguageSnapshot` is the single definition of constructions,
-   stable `CommandId`/`FrameId`/`TypeId` values, aliases, typed frames,
-   extensible frame roles, structural language types, and keywords.
-4. `SemanticCommandBinder` selects one frame and labels its arguments by role.
-   Prepositions are frame-sensitive, so `FROM` is a marker in `GET` but remains
-   message text in `SEND Hello from FluNET TO ...`.
-5. `SemanticProgramValidator` validates the selected frames and slots before
-   planning. It does not use `WordFactory`, `IWord`, or `SentenceValidator`.
-6. Every argument is compiled to a typed `IExpression<T>` tree (literal,
-   variable, list, conversion, JSON, or extension-defined expression).
-7. `ExecutionPlanner` turns the bound program into a typed DAG with explicit
-   sequence, parallel-stage, condition, variable-flow, and result-storage edges.
-8. `ExecutionPlanExecutor` schedules ready nodes concurrently, persists
-   append-only workflow events, restores completed outputs on resume, and
-   applies retry, timeout, condition, and error policies.
-9. Each node dispatches through generic `ICommandHandler<TCommand, TResult>`
-   routes selected by stable `FrameId`. Typed dispatch and effect execution do
-   not use the legacy word-chain.
+2. `PromptSyntax` is the command tree for language-defined clauses, connectors,
+   and execution modifiers. Parenthesis depth protects command connectors inside
+   condition expressions.
+3. `ExpressionSyntaxParser` builds a separate expression AST with Boolean,
+   comparison, arithmetic, collection and access nodes.
+4. An immutable `LanguageSnapshot` is the definition of stable
+   `CommandId`/`FrameId`/`TypeId` values, aliases, typed frames, extensible roles,
+   structural types and keywords.
+5. `SemanticCommandBinder` selects a frame and labels its arguments by role;
+   `SemanticProgramValidator` checks the selected frame/slots.
+6. `ExpressionBinder` and `CommandBindingContext` compile bound arguments to
+   typed `IExpression<T>` trees through `IValueCodecRegistry`.
+7. `TypedProgramCompiler` binds each module command once to `CompiledCommand`.
+8. `TypedProgramTypeValidator` checks producer/consumer flow, host variables,
+   implicit conversions, condition dependencies and parallel-write conflicts.
+9. `ExecutionPlanner` builds only the orchestration DAG: sequence/data edges,
+   policies and result bindings.
+10. `ExecutionPlanExecutor` schedules ready nodes, evaluates cached typed
+    conditions, persists workflow events and dispatches typed handlers by
+    stable `FrameId`.
 
-The standard execution path is:
+The canonical standard execution path is:
 
 ```text
-Parse -> Bind -> Validate -> Plan -> Execute
+Parse -> Bind -> Validate -> Compile -> TypeCheck -> Plan -> Execute
 ```
 
-`ISentence`, `SentenceValidator`, old verb objects, and token trees are retained
-only behind `LegacySentenceAdapter` for source compatibility. `Engine.Run` and
-`ISentence` are deprecated; new code should use `Analyze`, `CompilationResult`,
-and `ExecuteAsync`. See [the 0.3 migration guide](docs/legacy-api-migration.md).
+`ISentence`, `SentenceValidator`, old verb objects, token trees and historical
+scalar/text/JSON expression helpers remain only as compatibility APIs. Module
+execution uses the typed compiler path; direct-DI typed route registration is
+retained for 0.3 source compatibility.
 
 Language extensions are explicit modules rather than an ambient scan of all
 loaded assemblies. Native modules declare a typed command, semantic frame,
@@ -234,30 +251,36 @@ FluNetRuntimeDefinition runtime = new FluNetModuleBuilder()
 using FluNETContext context = FluNETContext.CreateWithRuntime(runtime);
 ```
 
-The runtime validates command, synonym, keyword, type, frame, and typed-handler
-route collisions atomically before the host starts. Custom `FrameRoleId` and
-`TypeSymbol` values let extensions add domain roles and types without changing
-engine enums. Handlers may run concurrently when their DAG nodes are ready, so
-extension-owned mutable state must be synchronized.
-Add executable examples and tests for every frame's grammar, activation,
-success path, and failure path.
+The runtime validates command, synonym, keyword, type, frame, typed-handler,
+codec and conversion registrations before the host starts. Handlers may run
+concurrently when their DAG nodes are ready, so extension-owned mutable state
+must be synchronized.
 
 ## Tests
 
+Release verification for the compiler freeze candidate is:
+
 ```bash
-dotnet test FluNET.sln --configuration Release
+dotnet restore FluNET.sln
+dotnet build FluNET.sln --configuration Release --no-restore
+dotnet test FluNET.sln --configuration Release --no-build
 ```
 
 HTTP behavior is tested with an injected in-memory transport; no manual test
-server or public network connection is required. CI builds and tests on Linux,
+server or public network connection is required. CI is configured for Linux,
 Windows, and macOS.
 
 ## Status and limitations
 
+- The source tree is a **0.4 compiler freeze candidate**, but the published
+  `StandardLanguageIdentity.Version` intentionally remains `0.3` until a real
+  Release build/test run verifies the exact tree.
 - The grammar is intentionally controlled rather than an attempt at unrestricted
   natural-language understanding. New surface forms belong in language modules.
 - Every built-in frame executes through a typed command and handler. The old
   word-chain remains only as a deprecated compatibility projection.
+- `Engine.Analyze` remains source-compatible; use `FluNETContext.AnalyzeTyped`
+  when typed compilation/type-check validity is required without execution.
 - The default `IEmailTransport` is diagnostic-only; production hosts should
   inject an SMTP or API-backed implementation.
 - This project does not make untrusted prompts safe by itself. Configure a
@@ -265,4 +288,5 @@ Windows, and macOS.
 - JSON-lines workflow persistence targets a single host. Distributed execution
   needs a transactional `IWorkflowStateStore` with cross-process coordination.
 
-Author: Paweł Potępa. Licensed under the [MIT License](LICENSE).
+See [compiler 0.4 freeze readiness](docs/compiler-0.4-freeze-readiness.md) for
+the release gate. Author: Paweł Potępa. Licensed under the [MIT License](LICENSE).
