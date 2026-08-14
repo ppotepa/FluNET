@@ -1,26 +1,21 @@
 using FluNET.Capabilities;
 using FluNET.Language;
-using FluNET.Variables;
 using FluNET.Language.Binding;
+using FluNET.Language.Values;
 using FluNET.Syntax.Verbs;
+using FluNET.Variables;
 
 namespace FluNET.Execution.Commands;
 
-public sealed record SayCommand(TextExpression Message) : ICommand<string>;
+public sealed record SayCommand(IExpression<string> Message) : ICommand<string>;
 
-public sealed class SayCommandBinder(LanguageSnapshot language)
-    : ICommandBinder<SayCommand, string>
+public sealed class SayCommandBinder(
+    LanguageSnapshot language,
+    IValueCodecRegistry values) :
+    FrameCommandBinder<SayCommand, string, SayText>(language, values)
 {
-    public SayCommand? TryBind(BoundCommand command)
-    {
-        ArgumentNullException.ThrowIfNull(command);
-        if (command.Frame.ImplementationType != typeof(SayText))
-        {
-            return null;
-        }
-
-        return new SayCommand(TextExpression.Bind(command[SemanticRole.Theme], language));
-    }
+    protected override SayCommand Bind(BoundCommand command) =>
+        new(Context(command).RequireText(SemanticRole.Theme));
 }
 
 public sealed class SayCommandHandler(
