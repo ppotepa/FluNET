@@ -10,12 +10,20 @@ public static class ReconciliationExecutionExtensions
 {
     private static readonly ConditionalWeakTable<FluNETContext, IReconciliationStateStore> DefaultStateStores = new();
 
+    public static IReconciliationMutatorRegistry GetReconciliationMutatorRegistry(this FluNETContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        IReconciliationMutator[] custom = context.ServiceProvider.GetServices<IReconciliationMutator>().ToArray();
+        IReconciliationMutator builtIn = new LocalJsonFileReconciliationMutator(
+            context.GetSurfaceCompiler(),
+            context.GetService<IVariableResolver>());
+        return new ReconciliationMutatorRegistry(custom.Append(builtIn));
+    }
+
     public static ReconciliationMutationPlanner GetReconciliationMutationPlanner(this FluNETContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
-        return new ReconciliationMutationPlanner(
-            context.GetSurfaceCompiler(),
-            context.GetService<IVariableResolver>());
+        return new ReconciliationMutationPlanner(context.GetReconciliationMutatorRegistry());
     }
 
     public static IReconciliationStateStore GetReconciliationStateStore(this FluNETContext context)

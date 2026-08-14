@@ -1,47 +1,49 @@
 using FluNET.Compilation;
 using FluNET.Execution.Planning;
 using FluNET.Language.Resources;
-using FluNET.Prompt.Surface;
-using FluNET.Variables;
-using System.Security.Cryptography;
-using System.Text;
 
 namespace FluNET.Declarative.Reconciliation;
 
-public sealed record ReconciliationMutationPlan(SurfaceCompilationResult Compilation, string PayloadVariable, string Payload)
+public sealed record ReconciliationMutationPlan(
+    SurfaceCompilationResult Compilation,
+    string PayloadVariable,
+    string Payload)
 {
     public bool IsValid => Compilation.IsValid && Compilation.Plan is not null;
+    public string? MutatorId { get; init; }
 }
 
-public sealed class ReconciliationMutationPlanner(SurfaceCompiler compiler, IVariableResolver variables)
+public sealed class ReconciliationMutationPlanner
 {
-    public ReconciliationMutationPlan Plan(SyncDefinition definition, DesiredStateSnapshot desired, ReconciliationDiff diff)
-    {
-        ArgumentNullException.ThrowIfNull(definition);
-        ArgumentNullException.ThrowIfNull(desired);
-        ArgumentNullException.ThrowIfNull(diff);
-        if (diff.HasConflicts) throw new ReconciliationConflictException(diff);
-        if (!diff.HasMutations) throw new InvalidOperationException("A reconciliation mutation plan requires at least one create/update/delete change.");
-        if (definition.TargetDescriptor.Reference is not FileResourceReference file || file.IsPattern || definition.TargetDescriptor.Format != ResourceFormat.Json)
-            throw new ReconciliationMutationNotSupportedException($"SYNC mutation currently supports a single local JSON target; '{definition.Goal.TargetResource}' is not supported.");
-        if (UnsafeSurfaceTarget(file.Path))
-            throw new ReconciliationMutationNotSupportedException("The local target path contains compact-syntax separators; use a host mutation provider for this target.");
+    private readonly IReconciliationMutatorRegistry registry;
 
-        string payload = "[" + string.Join(",", desired.Records.Select(record => Encoding.UTF8.GetString(StateCanonicalizer.CanonicalBytes(record.Value)))) + "]";
-        string variable = "__reconcile_payload_" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(definition.Goal.TargetResource + "|" + definition.Goal.SourceResource))).ToLowerInvariant()[..12];
-        variables.Register(variable, payload);
-        SurfaceCompilationResult compilation = compiler.Compile(new SourceDocument($"SAVE {variable} TO {file.Path}", SourceSyntaxKind.Compact));
-        if (!compilation.IsValid || compilation.Plan is null) throw new InvalidOperationException("Synthesized reconciliation SAVE plan did not compile.");
-        return new(compilation, variable, payload);
+    public ReconciliationMutationPlanner(
+        SurfaceCompiler compiler,
+        FluNET.Variables.IVariableResolver variables)
+        : this(new ReconciliationMutatorRegistry(
+            [new LocalJsonFileReconciliationMutator(compiler, variables)]))
+    {
     }
 
-    private static bool UnsafeSurfaceTarget(string path) => path.Contains(';') || path.Contains('\n') || path.Contains('\r') || path.Contains(" AS ", StringComparison.OrdinalIgnoreCase);
+    public ReconciliationMutationPlanner(IReconciliationMutatorRegistry registry) =>
+        this.registry = registry ?? throw new ArgumentNullException(nameof(registry));
+
+    public ReconciliationMutationPlan Plan(
+        SyncDefinition definition,
+        DesiredStateSnapshot desired,
+        ReconciliationDiff diff)
+    {
+        IReconciliationMutator mutator = registry.Resolve(definition);
+        ReconciliationMutationPlan plan = mutator.Plan(new(definition, desired, diff));
+        return plan.MutatorId is null ? plan with { MutatorId = mutator.Id } : plan;
+    }
 }
 
 public sealed class ReconciliationMutationNotSupportedException(string message) : NotSupportedException(message);
 public sealed class ReconciliationConflictException : InvalidOperationException
 {
-    public ReconciliationConflictException(ReconciliationDiff diff) : base($"Reconciliation contains {diff.Conflicts} conflict(s); no mutation was applied.") => Diff = diff;
+    public ReconciliationConflictException(ReconciliationDiff diff)
+        : base($"Reconciliation contains {diff.Conflicts} conflict(s); no mutation was applied.") => Diff = diff;
     public ReconciliationDiff Diff { get; }
 }
 
@@ -96,7 +98,8 @@ public sealed class ReconciliationRunner
                 effectiveBaseline = (await stateStore.GetAsync(definition.Id, cancellationToken).ConfigureAwait(false))?.ToSnapshot();
 
             Task<ObservedStateSnapshot> targetTask = ObserveTargetAsync(definition, cancellationToken).AsTask();
-            Task<ObservedStateSnapshot> sourceTask = observers.ObserveAsync(new ResourceObservationRequest(definition.Goal.SourceResource, definition.Goal.KeyField, ResourceIdentity.Parse(definition.Goal.SourceResource)), cancellationToken).AsTask();
+            Task<ObservedStateSnapshot> sourceTask = observers.ObserveAsync(
+                new ResourceObservationRequest(definition.Goal.SourceResource, definition.Goal.KeyField, ResourceIdentity.Parse(definition.Goal.SourceResource)), cancellationToken).AsTask();
             await Task.WhenAll(targetTask, sourceTask).ConfigureAwait(false);
 
             observed = await targetTask.ConfigureAwait(false);
@@ -157,7 +160,8 @@ public sealed class ReconciliationRunner
     {
         try
         {
-            return await observers.ObserveAsync(new ResourceObservationRequest(definition.Goal.TargetResource, definition.Goal.KeyField, ResourceIdentity.Parse(definition.Goal.TargetResource)), cancellationToken).ConfigureAwait(false);
+            return await observers.ObserveAsync(
+                new ResourceObservationRequest(definition.Goal.TargetResource, definition.Goal.KeyField, ResourceIdentity.Parse(definition.Goal.TargetResource)), cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (definition.TargetDescriptor.Reference is FileResourceReference && exception is FileNotFoundException or DirectoryNotFoundException)
         {
