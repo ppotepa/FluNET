@@ -14,12 +14,22 @@ public enum SyncDirection
     SourceToTarget
 }
 
+public enum ReconciliationConflictPolicy
+{
+    Fail,
+    KeepTarget,
+    KeepSource
+}
+
 public sealed record SyncGoal(
     string TargetResource,
     string SourceResource,
     string KeyField,
     SyncDirection Direction,
-    SourceSpan Span);
+    SourceSpan Span)
+{
+    public ReconciliationConflictPolicy ConflictPolicy { get; init; } = ReconciliationConflictPolicy.Fail;
+}
 
 public sealed record SyncDefinition(
     SyncGoal Goal,
@@ -53,9 +63,8 @@ public sealed record SyncCompilationResult(
 }
 
 /// <summary>
-/// Compiles `SYNC target WITH source BY key`. The right side is the desired/source-of-truth;
-/// the left side is the observed mutation target. The generated read graph is analysis-only
-/// metadata for the definition; runtime reconciliation uses the resource-observation boundary.
+/// Compiles `SYNC target WITH source BY key [ON CONFLICT policy]`. The right side is the
+/// desired/source-of-truth; the left side is the observed mutation target.
 /// </summary>
 public sealed class SyncCompiler(
     SurfaceCompiler surfaceCompiler,
@@ -91,7 +100,10 @@ public sealed class SyncCompiler(
 
             string target = body[..with].Trim();
             string desired = body[(with + 6)..by].Trim();
-            string key = body[(by + 4)..].Trim();
+            string keyAndPolicy = body[(by + 4)..].Trim();
+            int onConflict = FindTopLevel(keyAndPolicy, " ON CONFLICT ");
+            string key = (onConflict < 0 ? keyAndPolicy : keyAndPolicy[..onConflict]).Trim();
+            string? policySource = onConflict < 0 ? null : keyAndPolicy[(onConflict + 13)..].Trim();
             if (target.Length == 0 || desired.Length == 0)
             {
                 diagnostics.Add(new("FLN340", "SYNC target and source cannot be empty.", statement.Span));
@@ -100,6 +112,11 @@ public sealed class SyncCompiler(
             if (!IsKeyField(key))
             {
                 diagnostics.Add(new("FLN341", $"Invalid SYNC key field '{key}'. Use one top-level field name.", statement.Span));
+                continue;
+            }
+            if (!TryConflictPolicy(policySource, out ReconciliationConflictPolicy conflictPolicy))
+            {
+                diagnostics.Add(new("FLN344", $"Unknown SYNC conflict policy '{policySource}'. Expected FAIL, KEEP TARGET or KEEP SOURCE.", statement.Span));
                 continue;
             }
 
@@ -122,32 +139,37 @@ public sealed class SyncCompiler(
             SurfaceCompilationResult read = surfaceCompiler.Compile(
                 new SourceDocument(readSource, SourceSyntaxKind.Compact));
             if (!read.IsValid)
-            {
-                diagnostics.Add(new(
-                    "FLN343",
-                    $"SYNC read graph does not compile for '{target}' and '{desired}'.",
-                    statement.Span));
-            }
+                diagnostics.Add(new("FLN343", $"SYNC read graph does not compile for '{target}' and '{desired}'.", statement.Span));
 
-            SyncGoal goal = new(
-                target,
-                desired,
-                key,
-                SyncDirection.SourceToTarget,
-                statement.Span);
-            definitions.Add(new(
-                goal,
-                targetDescriptor,
-                sourceDescriptor,
-                read,
-                targetVariable,
-                sourceVariable));
+            SyncGoal goal = new(target, desired, key, SyncDirection.SourceToTarget, statement.Span)
+            {
+                ConflictPolicy = conflictPolicy
+            };
+            definitions.Add(new(goal, targetDescriptor, sourceDescriptor, read, targetVariable, sourceVariable));
             index++;
         }
 
         if (definitions.Count == 0 && diagnostics.Count == 0)
             diagnostics.Add(new("FLN340", "SYNC source contains no definitions.", default));
         return new(definitions, diagnostics);
+    }
+
+    private static bool TryConflictPolicy(string? source, out ReconciliationConflictPolicy policy)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            policy = ReconciliationConflictPolicy.Fail;
+            return true;
+        }
+        string normalized = string.Join(' ', source.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)).ToUpperInvariant();
+        policy = normalized switch
+        {
+            "FAIL" => ReconciliationConflictPolicy.Fail,
+            "KEEP TARGET" => ReconciliationConflictPolicy.KeepTarget,
+            "KEEP SOURCE" => ReconciliationConflictPolicy.KeepSource,
+            _ => default
+        };
+        return normalized is "FAIL" or "KEEP TARGET" or "KEEP SOURCE";
     }
 
     private static bool IsKeyField(string value) =>
@@ -173,8 +195,7 @@ public sealed class SyncCompiler(
             if (current is '"' or '\'') { quote = current; continue; }
             if (current is '(' or '[' or '{') { depth++; continue; }
             if (current is ')' or ']' or '}') { depth = Math.Max(0, depth - 1); continue; }
-            if (depth == 0 && source.AsSpan(index).StartsWith(keyword, StringComparison.OrdinalIgnoreCase))
-                return index;
+            if (depth == 0 && source.AsSpan(index).StartsWith(keyword, StringComparison.OrdinalIgnoreCase)) return index;
         }
         return -1;
     }
