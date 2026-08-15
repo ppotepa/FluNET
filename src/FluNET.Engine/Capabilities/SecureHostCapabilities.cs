@@ -50,17 +50,31 @@ public sealed class SecureExecutionPolicy : IExecutionPolicy
         if (!options.AllowHttp && uri.Scheme != "https") throw new CapabilityDeniedException($"Plain HTTP is disabled by secure host policy: {uri}");
         string host = NormalizeHost(uri.DnsSafeHost);
         if (!hosts.Contains(host)) throw new CapabilityDeniedException($"Network host is not allow-listed: {host}");
-        if (IPAddress.TryParse(host, out IPAddress? literal) && !options.AllowPrivateAddresses && IsPrivate(literal))
-            throw new CapabilityDeniedException($"Private or loopback network address is disabled: {host}");
+        if (IPAddress.TryParse(host, out IPAddress? literal)) EnsureAddressAccess(host, literal);
     }
 
     public async ValueTask EnsureNetworkEndpointAsync(Uri uri, CancellationToken cancellationToken = default)
     {
         EnsureNetworkAccess(uri);
-        if (options.AllowPrivateAddresses || IPAddress.TryParse(uri.DnsSafeHost, out _)) return;
-        IPAddress[] addresses = await Dns.GetHostAddressesAsync(uri.DnsSafeHost, cancellationToken).ConfigureAwait(false);
-        if (addresses.Length == 0) throw new CapabilityDeniedException($"Network host did not resolve: {uri.DnsSafeHost}");
-        if (addresses.Any(IsPrivate)) throw new CapabilityDeniedException($"Network host resolves to a private or loopback address: {uri.DnsSafeHost}");
+        if (options.AllowPrivateAddresses) return;
+        string host = NormalizeHost(uri.DnsSafeHost);
+        if (IPAddress.TryParse(host, out IPAddress? literal))
+        {
+            EnsureAddressAccess(host, literal);
+            return;
+        }
+        IPAddress[] addresses = await Dns.GetHostAddressesAsync(host, cancellationToken).ConfigureAwait(false);
+        if (addresses.Length == 0) throw new CapabilityDeniedException($"Network host did not resolve: {host}");
+        foreach (IPAddress address in addresses) EnsureAddressAccess(host, address);
+    }
+
+    /// <summary>Validates an already-resolved address at the actual connection boundary.</summary>
+    public void EnsureAddressAccess(string host, IPAddress address)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(host);
+        ArgumentNullException.ThrowIfNull(address);
+        if (!options.AllowPrivateAddresses && IsPrivateOrNonPublic(address))
+            throw new CapabilityDeniedException($"Private or non-public network address is disabled for '{host}': {address}");
     }
 
     private static string CanonicalizePath(string path)
@@ -83,23 +97,32 @@ public sealed class SecureExecutionPolicy : IExecutionPolicy
         return Path.GetFullPath(current).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
     }
 
-    private static bool IsPrivate(IPAddress address)
+    private static bool IsPrivateOrNonPublic(IPAddress address)
     {
+        if (address.IsIPv4MappedToIPv6) address = address.MapToIPv4();
         if (IPAddress.IsLoopback(address)) return true;
         if (address.AddressFamily == AddressFamily.InterNetwork)
         {
             byte[] b = address.GetAddressBytes();
-            return b[0] == 0 || b[0] == 10 || b[0] == 127 ||
+            return b[0] == 0 ||
+                   b[0] == 10 ||
+                   b[0] == 100 && b[1] is >= 64 and <= 127 ||
+                   b[0] == 127 ||
                    b[0] == 169 && b[1] == 254 ||
                    b[0] == 172 && b[1] is >= 16 and <= 31 ||
-                   b[0] == 192 && b[1] == 168;
+                   b[0] == 192 && b[1] == 0 && b[2] == 0 ||
+                   b[0] == 192 && b[1] == 168 ||
+                   b[0] == 198 && b[1] is 18 or 19 ||
+                   b[0] >= 224;
         }
         if (address.AddressFamily == AddressFamily.InterNetworkV6)
         {
             byte[] b = address.GetAddressBytes();
-            return address.Equals(IPAddress.IPv6Loopback) ||
+            return address.Equals(IPAddress.IPv6Any) ||
+                   address.Equals(IPAddress.IPv6Loopback) ||
+                   address.IsIPv6Multicast ||
                    (b[0] & 0xFE) == 0xFC ||
-                   b[0] == 0xFE && (b[1] & 0xC0) == 0x80;
+                   b[0] == 0xFE && (b[1] & 0xC0) is 0x80 or 0xC0;
         }
         return true;
     }
@@ -109,23 +132,17 @@ public sealed class SecureExecutionPolicy : IExecutionPolicy
 }
 
 /// <summary>
-/// HTTP capability with redirects disabled at the handler. Every redirect target is re-authorized
-/// and DNS-checked before a new request is sent. Authenticated redirects may not change origin.
+/// HTTP capability with redirects disabled at the handler. Every redirect target is re-authorized,
+/// and the production handler validates DNS results again at the socket connection boundary.
 /// </summary>
 public sealed class SecureHttpTransport : IHttpTransport, IAuthenticatedHttpTransport, IDisposable
 {
     private readonly SecureExecutionPolicy policy;
     private readonly IHttpAuthenticationScheme authentication;
     private readonly HttpMessageInvoker invoker;
-    private readonly bool ownsHandler;
 
     public SecureHttpTransport(SecureExecutionPolicy policy, IHttpAuthenticationScheme authentication)
-        : this(policy, authentication, new SocketsHttpHandler
-        {
-            AllowAutoRedirect = false,
-            UseCookies = false,
-            AutomaticDecompression = DecompressionMethods.All
-        }, ownsHandler: true)
+        : this(policy, authentication, CreateDefaultHandler(policy), ownsHandler: true)
     {
     }
 
@@ -134,7 +151,6 @@ public sealed class SecureHttpTransport : IHttpTransport, IAuthenticatedHttpTran
         this.policy = policy ?? throw new ArgumentNullException(nameof(policy));
         this.authentication = authentication ?? throw new ArgumentNullException(nameof(authentication));
         invoker = new HttpMessageInvoker(handler ?? throw new ArgumentNullException(nameof(handler)), disposeHandler: ownsHandler);
-        this.ownsHandler = ownsHandler;
     }
 
     public async Task<byte[]> GetBytesAsync(Uri uri, CancellationToken cancellationToken = default) =>
@@ -187,6 +203,53 @@ public sealed class SecureHttpTransport : IHttpTransport, IAuthenticatedHttpTran
             MediaTypeHeaderValue? type = response.Content.Headers.ContentType;
             return new(content, (int)response.StatusCode, type?.MediaType, type?.CharSet, headers);
         }
+    }
+
+    private static SocketsHttpHandler CreateDefaultHandler(SecureExecutionPolicy policy)
+    {
+        ArgumentNullException.ThrowIfNull(policy);
+        return new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false,
+            AutomaticDecompression = DecompressionMethods.All,
+            ConnectCallback = (context, cancellationToken) => ConnectValidatedAsync(policy, context.DnsEndPoint, cancellationToken)
+        };
+    }
+
+    private static async ValueTask<Stream> ConnectValidatedAsync(
+        SecureExecutionPolicy policy,
+        DnsEndPoint endpoint,
+        CancellationToken cancellationToken)
+    {
+        IPAddress[] addresses;
+        if (IPAddress.TryParse(endpoint.Host, out IPAddress? literal)) addresses = [literal];
+        else addresses = await Dns.GetHostAddressesAsync(endpoint.Host, cancellationToken).ConfigureAwait(false);
+        if (addresses.Length == 0) throw new CapabilityDeniedException($"Network host did not resolve at connect time: {endpoint.Host}");
+
+        foreach (IPAddress address in addresses) policy.EnsureAddressAccess(endpoint.Host, address);
+
+        Exception? lastFailure = null;
+        foreach (IPAddress address in addresses)
+        {
+            Socket socket = new(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp);
+            try
+            {
+                await socket.ConnectAsync(new IPEndPoint(address, endpoint.Port), cancellationToken).ConfigureAwait(false);
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (OperationCanceledException)
+            {
+                socket.Dispose();
+                throw;
+            }
+            catch (SocketException exception)
+            {
+                socket.Dispose();
+                lastFailure = exception;
+            }
+        }
+        throw new HttpRequestException($"Unable to connect to any validated address for '{endpoint.Host}'.", lastFailure);
     }
 
     private static Uri? RedirectTarget(Uri current, Uri? location) => location is null ? null : location.IsAbsoluteUri ? location : new Uri(current, location);

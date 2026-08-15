@@ -19,6 +19,23 @@ public sealed class SecureHostCapabilityTests
     }
 
     [Test]
+    public void Ipv4MappedLoopbackAndCarrierGradeNatAreDenied()
+    {
+        string root = Path.GetTempPath();
+        SecureExecutionPolicy policy = new(new SecureHostOptions(
+            [root],
+            ["::ffff:127.0.0.1", "100.64.0.1"]));
+
+        Assert.Multiple(() =>
+        {
+            Assert.Throws<CapabilityDeniedException>(() =>
+                policy.EnsureAddressAccess("mapped-loopback", IPAddress.Parse("::ffff:127.0.0.1")));
+            Assert.Throws<CapabilityDeniedException>(() =>
+                policy.EnsureNetworkAccess(new Uri("https://100.64.0.1/")));
+        });
+    }
+
+    [Test]
     public void ParentTraversalOutsideRootIsDenied()
     {
         string root = Path.Combine(Path.GetTempPath(), "FluNET_Secure_" + Guid.NewGuid().ToString("N"));
