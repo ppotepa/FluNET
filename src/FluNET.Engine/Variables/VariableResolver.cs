@@ -13,6 +13,11 @@ namespace FluNET.Variables
         private readonly IVariableStore _store;
         private readonly LanguageSnapshot _language;
 
+        public VariableResolver()
+            : this(new MatcherResolver([]))
+        {
+        }
+
         public VariableResolver(MatcherResolver matcherResolver)
             : this(
                 matcherResolver,

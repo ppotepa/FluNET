@@ -51,7 +51,7 @@ public sealed class ReconciliationDiffEngine
         Dictionary<string, StateRecord>? previous = baseline?.Records.ToDictionary(item => item.Key, StringComparer.Ordinal);
         string[] keys = wanted.Keys
             .Concat(current.Keys)
-            .Concat(previous?.Keys ?? Array.Empty<string>())
+            .Concat(previous is null ? Array.Empty<string>() : previous.Keys)
             .Distinct(StringComparer.Ordinal)
             .OrderBy(key => key, StringComparer.Ordinal)
             .ToArray();

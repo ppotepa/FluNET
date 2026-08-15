@@ -1,5 +1,4 @@
 using FluNET.Capabilities;
-using FluNET.Execution.Compensation;
 using FluNET.Execution.Planning;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.Concurrent;
@@ -138,7 +137,7 @@ public sealed record EnsureRunResult(
 }
 
 public sealed class EnsureRunner(
-    CompensationCoordinator coordinator,
+    ExecutionPlanExecutor executor,
     IFluNetFileSystem files,
     IEnsureVersionStore versions,
     IDesiredStateNotifier notifier)
@@ -167,7 +166,7 @@ public sealed class EnsureRunner(
 
         try
         {
-            object? result = await coordinator.ExecuteAsync(
+            object? result = await executor.ExecuteAsync(
                 plan.Compilation.Plan,
                 steps,
                 cancellationToken).ConfigureAwait(false);

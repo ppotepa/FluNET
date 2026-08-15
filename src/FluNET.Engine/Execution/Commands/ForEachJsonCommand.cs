@@ -10,7 +10,22 @@ using System.Text.Json;
 
 namespace FluNET.Execution.Commands;
 
-public sealed record ForEachJsonCommand(IExpression<JsonElement[]> Source,string ItemName,int MaxConcurrency,CompiledActionTemplate Template):ICommand<JsonElement[]>;
+public interface IForEachJsonAction : ICompiledAction
+{
+    string ICompiledAction.Kind => "legacy.foreach";
+}
+
+public sealed record ForEachJsonCommand(IExpression<JsonElement[]> Source,string ItemName,int MaxConcurrency,CompiledActionTemplate Template):ICommand<JsonElement[]>
+{
+    public ForEachJsonCommand(
+        IExpression<JsonElement[]> source,
+        string itemName,
+        int maxConcurrency,
+        IReadOnlyList<IForEachJsonAction> actions)
+        : this(source, itemName, maxConcurrency, new CompiledActionTemplate(actions.Cast<ICompiledAction>().ToArray()))
+    {
+    }
+}
 
 public sealed class ForEachJsonCommandBinder(
     LanguageSnapshot language,IValueCodecRegistry values,ITextOutput output,IExecutionPolicy policy,IFluNetFileSystem files,

@@ -49,7 +49,7 @@ public sealed class CronSchedule
     {
         TimeZoneInfo zone = AutomationScheduleCalculator.ResolveZone(timeZoneId);
         DateTimeOffset local = TimeZoneInfo.ConvertTime(instant, zone);
-        DateTime candidate = new(local.Year,local.Month,local.Day,local.Hour,local.Minute,0,DateTimeKind.Unspecified).AddMinutes(1);
+        DateTime candidate = new DateTime(local.Year,local.Month,local.Day,local.Hour,local.Minute,0,DateTimeKind.Unspecified).AddMinutes(1);
         DateTime limit = candidate.AddYears(5);
         while (candidate < limit)
         {

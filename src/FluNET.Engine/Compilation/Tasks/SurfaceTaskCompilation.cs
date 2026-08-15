@@ -188,7 +188,7 @@ public sealed class SurfaceTaskCompiler(LanguageSnapshot language)
             if (statement is SurfaceCommandSyntax command && command.Alias is string alias) aliases.TryAdd(alias, prefix + alias);
             if (statement is SurfacePipelineSyntax pipeline)
                 foreach (SurfaceCommandSyntax stage in pipeline.Stages)
-                    if (stage.Alias is string alias) aliases.TryAdd(alias, prefix + alias);
+                    if (stage.Alias is string stageAlias) aliases.TryAdd(stageAlias, prefix + stageAlias);
             if (statement is SurfaceContextSyntax context)
                 foreach ((string key, string value) in CollectAliases(context.Statements, prefix)) aliases.TryAdd(key, value);
         }

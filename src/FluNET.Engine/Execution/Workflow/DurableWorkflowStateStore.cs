@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace FluNET.Execution.Workflow;
 
@@ -14,6 +15,7 @@ public sealed record DurableWorkflowStoreOptions(string Directory);
 /// </summary>
 public sealed class DurableWorkflowStateStore : IWorkflowStateStore
 {
+    private static readonly JsonSerializerOptions EventJsonOptions = CreateEventJsonOptions();
     private readonly string _directory;
     private readonly IExecutionPolicy _policy;
     private readonly ConcurrentDictionary<Guid, SemaphoreSlim> _locks = [];
@@ -34,7 +36,7 @@ public sealed class DurableWorkflowStateStore : IWorkflowStateStore
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            string eventJson = JsonSerializer.Serialize(item);
+            string eventJson = JsonSerializer.Serialize(item, EventJsonOptions);
             JournalEnvelope envelope = new(eventJson, Checksum(eventJson));
             byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(envelope) + "\n");
             await using FileStream stream = new(
@@ -74,7 +76,7 @@ public sealed class DurableWorkflowStateStore : IWorkflowStateStore
                         Convert.FromHexString(Checksum(envelope.EventJson))))
                     throw Corrupt(path, index + 1, "checksum mismatch");
                 WorkflowEvent item;
-                try { item = JsonSerializer.Deserialize<WorkflowEvent>(envelope.EventJson) ?? throw new JsonException("Null event."); }
+                try { item = JsonSerializer.Deserialize<WorkflowEvent>(envelope.EventJson, EventJsonOptions) ?? throw new JsonException("Null event."); }
                 catch (JsonException exception) { throw Corrupt(path, index + 1, "invalid workflow event", exception); }
                 if (item.RunId != runId) throw Corrupt(path, index + 1, $"run id {item.RunId} does not match file run id {runId}");
                 result.Add(item);
@@ -85,6 +87,12 @@ public sealed class DurableWorkflowStateStore : IWorkflowStateStore
     }
 
     private string PathFor(Guid runId) => Path.Combine(_directory, $"{runId:N}.journal.jsonl");
+    private static JsonSerializerOptions CreateEventJsonOptions()
+    {
+        JsonSerializerOptions options = new();
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
     private static string Checksum(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
     private static InvalidDataException Corrupt(string path, int line, string reason, Exception? inner = null) =>
         new($"Workflow journal '{path}' is corrupt at line {line}: {reason}.", inner);

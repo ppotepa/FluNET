@@ -1,0 +1,21 @@
+TASK fetch collection -> Json
+    GET https://jsonplaceholder.typicode.com/{collection} CACHE 10m AS response
+
+POLICY resilient
+    RETRY 3
+    TIMEOUT 20s
+
+WITH resilient
+    RUN fetch posts AS posts
+    RUN fetch users AS users
+
+JOIN posts WITH users ON posts.userId = users.id AS enriched
+FILTER userId <= 3 AS selected
+SORT BY title AS sorted
+TAKE 10 AS top
+SELECT id, title, name, email AS report
+
+FOR EACH item PARALLEL 4
+    SAY "#{item.id}: {item.title} — {item.name} <{item.email}>"
+
+SAY "Processed the 10-row joined report"

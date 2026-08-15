@@ -77,7 +77,7 @@ public sealed class VariableNameInference
     }
     private static string Normalize(string value)
     {
-        string normalized = new(value.Trim().Select(character => char.IsLetterOrDigit(character) || character == '_' ? char.ToLowerInvariant(character) : '_').ToArray()).Trim('_');
+        string normalized = new string(value.Trim().Select(character => char.IsLetterOrDigit(character) || character == '_' ? char.ToLowerInvariant(character) : '_').ToArray()).Trim('_');
         if (normalized.Length == 0) return "value";
         return char.IsDigit(normalized[0]) ? $"value_{normalized}" : normalized;
     }
