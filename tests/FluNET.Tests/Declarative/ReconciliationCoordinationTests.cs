@@ -34,6 +34,29 @@ public sealed class ReconciliationCoordinationTests
         Assert.That((await first).IsSuccess, Is.True);
     }
 
+    [Test]
+    public async Task CompletedRunIsRejectedWhenFinalOwnershipCannotBeConfirmed()
+    {
+        using FluNETContext context = SurfaceCompilationExtensions.CreateSurfaceContext();
+        SyncDefinition definition = context.CompileSync("SYNC target.json WITH desired.json BY id").Definitions.Single();
+        ImmediateExecutor inner = new();
+        LoseOnRenewLeaseStore leases = new();
+        ReconciliationCoordinator coordinator = new(
+            inner,
+            leases,
+            new ReconciliationLeaseContextAccessor(),
+            new ReconciliationCoordinationOptions(TimeSpan.FromSeconds(30)));
+
+        ReconciliationRunResult result = await coordinator.RunAsync(definition);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(inner.Calls, Is.EqualTo(1));
+            Assert.That(result.IsSuccess, Is.False);
+            Assert.That(result.Error, Is.TypeOf<ReconciliationLeaseLostException>());
+        });
+    }
+
     private sealed class BlockingExecutor : IReconciliationExecutor
     {
         public TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -43,7 +66,64 @@ public sealed class ReconciliationCoordinationTests
         {
             Started.TrySetResult();
             await Release.Task.WaitAsync(cancellationToken);
-            return new(definition, null, null, null, null, Array.Empty<FluNET.Execution.Planning.ExecutionStepResult>(), false, null);
+            return Success(definition);
         }
     }
+
+    private sealed class ImmediateExecutor : IReconciliationExecutor
+    {
+        public int Calls { get; private set; }
+        public ValueTask<ReconciliationRunResult> RunAsync(
+            SyncDefinition definition,
+            ResourceStateSnapshot? baseline = null,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            Calls++;
+            return ValueTask.FromResult(Success(definition));
+        }
+    }
+
+    private sealed class LoseOnRenewLeaseStore : IReconciliationLeaseStore
+    {
+        public ValueTask<ReconciliationLease?> TryAcquireAsync(
+            string resourceIdentity,
+            string ownerId,
+            TimeSpan ttl,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<ReconciliationLease?>(new(
+                resourceIdentity,
+                ownerId,
+                17,
+                DateTimeOffset.UtcNow.Add(ttl)));
+        }
+
+        public ValueTask<ReconciliationLease?> RenewAsync(
+            ReconciliationLease lease,
+            TimeSpan ttl,
+            CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.FromResult<ReconciliationLease?>(null);
+        }
+
+        public ValueTask ReleaseAsync(ReconciliationLease lease, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return ValueTask.CompletedTask;
+        }
+    }
+
+    private static ReconciliationRunResult Success(SyncDefinition definition) =>
+        new(
+            definition,
+            null,
+            null,
+            null,
+            null,
+            Array.Empty<FluNET.Execution.Planning.ExecutionStepResult>(),
+            false,
+            null);
 }

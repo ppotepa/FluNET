@@ -280,17 +280,35 @@ public sealed class ReconciliationCoordinator(
         try
         {
             Task completed = await Task.WhenAny(run, heartbeat).ConfigureAwait(false);
-            if (completed == heartbeat)
+            if (completed == heartbeat && heartbeat.IsFaulted)
             {
-                if (heartbeat.IsFaulted)
-                {
-                    linked.Cancel();
-                    try { await run.ConfigureAwait(false); } catch { }
-                    Exception error = heartbeat.Exception?.GetBaseException() ?? new ReconciliationLeaseLostException(identity, lease.FencingToken);
-                    return Failure(definition, error);
-                }
+                linked.Cancel();
+                try { await run.ConfigureAwait(false); } catch { }
+                Exception error = heartbeat.Exception?.GetBaseException() ?? new ReconciliationLeaseLostException(identity, lease.FencingToken);
+                return Failure(definition, error);
             }
-            return await run.ConfigureAwait(false);
+
+            ReconciliationRunResult result = await run.ConfigureAwait(false);
+            linked.Cancel();
+            try { await heartbeat.ConfigureAwait(false); }
+            catch (OperationCanceledException) { }
+            catch (Exception error) { return result with { Error = error }; }
+
+            if (result.IsSuccess)
+            {
+                ReconciliationLease? confirmed;
+                try
+                {
+                    confirmed = await leases.RenewAsync(lease, ttl, CancellationToken.None).ConfigureAwait(false);
+                }
+                catch (Exception error)
+                {
+                    return result with { Error = error };
+                }
+                if (confirmed is null)
+                    return result with { Error = new ReconciliationLeaseLostException(identity, lease.FencingToken) };
+            }
+            return result;
         }
         finally
         {
