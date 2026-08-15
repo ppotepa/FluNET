@@ -4,6 +4,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace FluNET.Declarative.Reconciliation;
 
@@ -67,6 +68,7 @@ public sealed class DurableReconciliationCheckpointStore(
     DurableReconciliationCheckpointOptions options,
     IExecutionPolicy policy) : IReconciliationCheckpointStore
 {
+    private static readonly JsonSerializerOptions CheckpointJson = CreateCheckpointJson();
     private readonly string directory = Path.GetFullPath(options?.Directory ?? throw new ArgumentNullException(nameof(options)));
     private readonly ConcurrentDictionary<string, SemaphoreSlim> gates = new(StringComparer.Ordinal);
 
@@ -79,7 +81,7 @@ public sealed class DurableReconciliationCheckpointStore(
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            string payload = JsonSerializer.Serialize(checkpoint);
+            string payload = JsonSerializer.Serialize(checkpoint, CheckpointJson);
             string line = JsonSerializer.Serialize(new Envelope(payload, Checksum(payload))) + "\n";
             byte[] bytes = Encoding.UTF8.GetBytes(line);
             await using FileStream stream = new(path, FileMode.Append, FileAccess.Write, FileShare.Read, 16 * 1024, FileOptions.Asynchronous | FileOptions.WriteThrough);
@@ -109,7 +111,7 @@ public sealed class DurableReconciliationCheckpointStore(
                     Envelope envelope = JsonSerializer.Deserialize<Envelope>(lines[index]) ?? throw new JsonException("Null envelope.");
                     if (!FixedEquals(envelope.Checksum, Checksum(envelope.Payload)))
                         throw new InvalidDataException($"Reconciliation checkpoint '{path}' failed checksum validation at line {index + 1}.");
-                    ReconciliationCheckpoint item = JsonSerializer.Deserialize<ReconciliationCheckpoint>(envelope.Payload) ?? throw new JsonException("Null checkpoint.");
+                    ReconciliationCheckpoint item = JsonSerializer.Deserialize<ReconciliationCheckpoint>(envelope.Payload, CheckpointJson) ?? throw new JsonException("Null checkpoint.");
                     if (!item.DefinitionId.Equals(definitionId, StringComparison.Ordinal))
                         throw new InvalidDataException($"Reconciliation checkpoint '{path}' contains another definition id.");
                     result.Add(item);
@@ -129,6 +131,14 @@ public sealed class DurableReconciliationCheckpointStore(
         string name = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(definitionId))).ToLowerInvariant();
         return Path.Combine(directory, name + ".checkpoint.jsonl");
     }
+
+    private static JsonSerializerOptions CreateCheckpointJson()
+    {
+        JsonSerializerOptions options = new();
+        options.Converters.Add(new JsonStringEnumConverter());
+        return options;
+    }
+
     private static string Checksum(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value))).ToLowerInvariant();
     private static bool FixedEquals(string left, string right)
     {

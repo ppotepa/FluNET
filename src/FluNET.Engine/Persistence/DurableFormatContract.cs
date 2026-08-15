@@ -21,8 +21,8 @@ public sealed record DurableFormatContractManifest(
         [
             new("workflow-journal", 1, "*.journal.jsonl", "append-only JSONL envelope", "SHA-256 checksum per event", "single-host"),
             new("reconciliation-baseline", 1, "*.reconciliation.json", "atomic JSON envelope replace", "SHA-256 payload checksum", "single-host"),
-            new("reconciliation-checkpoint", 1, "*.checkpoint.jsonl", "append-only JSONL envelope", "SHA-256 checksum per checkpoint", "single-host"),
-            new("reconciliation-lease", 1, "*.lease.json", "exclusive shared-file snapshot", "exclusive ownership + monotonic fencing token", "shared-filesystem"),
+            new("reconciliation-checkpoint", 1, "*.checkpoint.jsonl", "append-only JSONL envelope with named phase", "SHA-256 checksum per checkpoint", "single-host"),
+            new("reconciliation-lease", 1, "*.lease.json + *.lock", "dedicated exclusive lock + atomic state replace", "corrupt state rejected + monotonic fencing token", "shared-filesystem"),
             new("automation-schedule", 1, "host-selected JSON file", "atomic snapshot replace", "host filesystem policy", "single-host"),
             new("execution-cache", 1, "host-selected JSON file", "atomic snapshot replace", "runtime type envelope", "single-host"),
             new("idempotency", 1, "host-selected JSON file", "atomic snapshot replace", "runtime type envelope", "single-host")
