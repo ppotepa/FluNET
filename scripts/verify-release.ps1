@@ -1,4 +1,5 @@
 $ErrorActionPreference = 'Stop'
+$PSNativeCommandUseErrorActionPreference = $true
 $Artifacts = Join-Path ([System.IO.Path]::GetTempPath()) ("flunet-release-" + [Guid]::NewGuid().ToString('N'))
 $Packages = Join-Path $Artifacts 'packages'
 $ToolHome = Join-Path $Artifacts 'tool-home'
