@@ -2,8 +2,10 @@
 set -euo pipefail
 
 ARTIFACTS="${TMPDIR:-/tmp}/flunet-release-$RANDOM-$RANDOM"
+PACKAGES="$ARTIFACTS/packages"
 TOOL_HOME="$ARTIFACTS/tool-home"
-mkdir -p "$ARTIFACTS/packages" "$TOOL_HOME"
+NUGET_CONFIG="$ARTIFACTS/NuGet.Config"
+mkdir -p "$PACKAGES" "$TOOL_HOME"
 trap 'rm -rf "$ARTIFACTS"' EXIT
 
 dotnet restore FluNET.sln
@@ -14,6 +16,29 @@ dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release 
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- contract
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- --help
 
-dotnet pack src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build --output "$ARTIFACTS/packages"
-dotnet tool install FluNET.Tool --tool-path "$TOOL_HOME" --add-source "$ARTIFACTS/packages" --version 0.3.0-preview
+dotnet pack src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build --output "$PACKAGES"
+PACKAGE="$(find "$PACKAGES" -maxdepth 1 -type f -name 'FluNET.Tool.*.nupkg' ! -name '*.symbols.nupkg' -print -quit)"
+if [[ -z "$PACKAGE" ]]; then
+  echo "FluNET.Tool package was not produced by dotnet pack." >&2
+  exit 1
+fi
+PACKAGE_NAME="$(basename "$PACKAGE")"
+VERSION="${PACKAGE_NAME#FluNET.Tool.}"
+VERSION="${VERSION%.nupkg}"
+if [[ -z "$VERSION" || "$VERSION" == "$PACKAGE_NAME" ]]; then
+  echo "Cannot determine FluNET.Tool package version from '$PACKAGE_NAME'." >&2
+  exit 1
+fi
+
+cat > "$NUGET_CONFIG" <<EOF
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <packageSources>
+    <clear />
+    <add key="local" value="$PACKAGES" />
+  </packageSources>
+</configuration>
+EOF
+
+dotnet tool install FluNET.Tool --tool-path "$TOOL_HOME" --configfile "$NUGET_CONFIG" --version "$VERSION"
 "$TOOL_HOME/flunet" --help
