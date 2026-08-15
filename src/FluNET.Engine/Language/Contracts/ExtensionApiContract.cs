@@ -31,7 +31,7 @@ public sealed record ExtensionApiContractManifest(
             new("command", Name(typeof(ICommand<>)), "stable-candidate", "typed command value contract"),
             new("command", Name(typeof(ICommandBinder<,>)), "stable-candidate", "compile a bound frame into a typed command"),
             new("command", Name(typeof(ICommandHandler<,>)), "stable-candidate", "execute a typed command through host capabilities"),
-            new("value", Name(typeof(IValueCodec<>)), "stable-candidate", "language value parse/format boundary"),
+            new("value", Name(typeof(FluNET.Language.Values.IValueCodec<>)), "stable-candidate", "language value parse/format boundary"),
             new("value", Name(typeof(IValueConversion<,>)), "stable-candidate", "explicit typed conversion edge"),
             new("resource", Name(typeof(IResourceProvider)), "stable-candidate", "lower a resource descriptor into canonical read operations"),
             new("resource", Name(typeof(IResourceDecoder)), "stable-candidate", "decode resource payload bytes into a typed language value"),

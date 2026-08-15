@@ -30,6 +30,11 @@ public sealed partial class TypedProgramTypeValidator
                         continue;
                     }
 
+                    if (token.Kind == PromptTokenKind.Reference)
+                    {
+                        continue;
+                    }
+
                     foreach (string name in InterpolationVariableNames(token.Text))
                     {
                         ValidateInterpolationVariable(name, token.Span, stages[index], producers);

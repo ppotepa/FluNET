@@ -159,7 +159,7 @@ public static class SurfacePolicyApplicationPass
 
 public static class SurfaceAdvancedPolicyPass
 {
-    public static void Attach(FluNET.Language.Binding.BoundProgram program,SourceMap sourceMap,IReadOnlyDictionary<SourceSpan,SurfacePolicyProfile> assignments)
+    public static void Attach(BoundProgram program,SourceMap sourceMap,IReadOnlyDictionary<SourceSpan,SurfacePolicyProfile> assignments)
     {
         foreach(SourceMapEntry entry in sourceMap.Entries.Where(item=>item.NodeKind=="command")){if(!assignments.TryGetValue(entry.SourceSpan,out SurfacePolicyProfile? profile))continue;AdvancedExecutionPolicy advanced=new(profile.Backoff,profile.RetryOn,profile.ContinueOn,profile.FailOn);if(!advanced.IsEmpty)CommandExecutionArtifactStore.SetAdvancedPolicy(program.Commands[entry.CommandIndex],advanced);}
     }

@@ -1,5 +1,5 @@
 using FluNET.Declarative;
-using FluNET.Execution.Compensation;
+using FluNET.Execution.Planning;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context;
@@ -16,7 +16,7 @@ public static class EnsureExecutionExtensions
             ?? new TextOutputDesiredStateNotifier(
                 services.GetRequiredService<FluNET.Capabilities.ITextOutput>());
         return new EnsureRunner(
-            services.GetRequiredService<CompensationCoordinator>(),
+            services.GetRequiredService<ExecutionPlanExecutor>(),
             services.GetRequiredService<FluNET.Capabilities.IFluNetFileSystem>(),
             versions,
             notifier);
