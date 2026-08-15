@@ -36,7 +36,7 @@ SAY "{post.title} — {todo.title}"
     }
 
     [Test]
-    public void CheckReportsProviderRequirementWithoutExecution()
+    public void CheckCompilesSecretReadWithoutAccessingSecretStore()
     {
         using FluNETContext context = SurfaceCompilationExtensions.CreateSurfaceContext();
         SurfaceCompilationResult result = new SurfaceCheckService(context.GetSurfaceCompiler())
@@ -44,9 +44,10 @@ SAY "{post.title} — {todo.title}"
 
         Assert.Multiple(() =>
         {
-            Assert.That(result.IsValid, Is.False);
-            Assert.That(result.Lowering.Diagnostics.Select(item => item.Code), Does.Contain("FLN234"));
-            Assert.That(result.Plan, Is.Null);
+            Assert.That(result.IsValid, Is.True, Diagnostics(result));
+            Assert.That(result.Plan, Is.Not.Null);
+            Assert.That(result.BoundProgram!.Commands.Single().Frame.Id.Value,
+                Is.EqualTo("surface.get.secret"));
         });
     }
 

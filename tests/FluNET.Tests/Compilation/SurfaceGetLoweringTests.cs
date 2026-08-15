@@ -1,5 +1,7 @@
 using FluNET.Compilation.Lowering;
+using FluNET.Context;
 using FluNET.Language;
+using FluNET.Language.Resources;
 using FluNET.Prompt.Surface;
 
 namespace FluNET.Tests.Compilation;
@@ -14,11 +16,15 @@ public sealed class SurfaceGetLoweringTests
         SurfaceParseResult parsed = new SurfaceParser().Parse(new SourceDocument(
             "GET https://api.example.test/posts/1 AS post"));
 
-        LoweringResult lowered = new SurfaceLowerer().Lower(parsed, runtime.Language.Grammar, runtime.Language);
+        LoweringResult lowered = new SurfaceLowerer().Lower(
+            parsed,
+            runtime.Language.Grammar,
+            runtime.Language);
 
         Assert.Multiple(() =>
         {
-            Assert.That(lowered.IsValid, Is.True, string.Join(" | ", lowered.Diagnostics.Select(item => item.Message)));
+            Assert.That(lowered.IsValid, Is.True,
+                string.Join(" | ", lowered.Diagnostics.Select(item => item.Message)));
             Assert.That(lowered.CanonicalSyntax.Commands.Single().Tokens.Select(token => token.Text),
                 Is.EqualTo(new[] { "GETHTTP", "[post]", "FROM", "{https://api.example.test/posts/1}" }));
             Assert.That(runtime.Language.FindFrame(new FrameId("surface.get.http.json")), Is.Not.Null);
@@ -31,7 +37,10 @@ public sealed class SurfaceGetLoweringTests
         FluNetRuntimeDefinition runtime = SurfaceLanguage.CreateRuntime();
         SurfaceParseResult parsed = new SurfaceParser().Parse(new SourceDocument("GET env:DATABASE_URL"));
 
-        LoweringResult lowered = new SurfaceLowerer().Lower(parsed, runtime.Language.Grammar, runtime.Language);
+        LoweringResult lowered = new SurfaceLowerer().Lower(
+            parsed,
+            runtime.Language.Grammar,
+            runtime.Language);
 
         Assert.Multiple(() =>
         {
@@ -42,24 +51,29 @@ public sealed class SurfaceGetLoweringTests
     }
 
     [Test]
-    public void LocalGetReusesLoadInferenceAndSecretRequiresProvider()
+    public void LocalGetAndSecretUseBuiltInRuntimeProviders()
     {
-        FluNetRuntimeDefinition runtime = SurfaceLanguage.CreateRuntime();
-        LoweringResult file = new SurfaceLowerer().Lower(
+        using FluNETContext context = SurfaceCompilationExtensions.CreateSurfaceContext();
+        LanguageSnapshot language = context.GetService<LanguageSnapshot>();
+        SurfaceLowerer lowerer = new(context.GetService<IResourceProviderRegistry>());
+
+        LoweringResult file = lowerer.Lower(
             new SurfaceParser().Parse(new SourceDocument("GET settings.json")),
-            runtime.Language.Grammar,
-            runtime.Language);
-        LoweringResult secret = new SurfaceLowerer().Lower(
+            language.Grammar,
+            language);
+        LoweringResult secret = lowerer.Lower(
             new SurfaceParser().Parse(new SourceDocument("GET secret:github-token")),
-            runtime.Language.Grammar,
-            runtime.Language);
+            language.Grammar,
+            language);
 
         Assert.Multiple(() =>
         {
             Assert.That(file.IsValid, Is.True);
             Assert.That(file.CanonicalSyntax.Commands.Single().Verb.Text, Is.EqualTo("LOAD"));
-            Assert.That(secret.IsValid, Is.False);
-            Assert.That(secret.Diagnostics.Select(item => item.Code), Does.Contain("FLN234"));
+            Assert.That(secret.IsValid, Is.True,
+                string.Join(" | ", secret.Diagnostics.Select(item => item.Message)));
+            Assert.That(secret.CanonicalSyntax.Commands.Single().Tokens.Select(token => token.Text),
+                Is.EqualTo(new[] { "GETSECRET", "[github_token]", "FROM", "{github-token}" }));
         });
     }
 }
