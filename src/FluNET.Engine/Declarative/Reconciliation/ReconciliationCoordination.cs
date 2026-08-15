@@ -103,8 +103,8 @@ public sealed class InMemoryReconciliationLeaseStore : IReconciliationLeaseStore
 public sealed record DurableReconciliationLeaseOptions(string Directory);
 
 /// <summary>
-/// Shared-filesystem lease store. Exclusive file ownership serializes acquire/renew/release and
-/// the persisted counter provides monotonic fencing tokens across process restarts.
+/// Shared-filesystem lease store. A dedicated lock file serializes state transitions, while the
+/// lease/counter state itself is replaced atomically so a crash cannot reset the fencing counter.
 /// </summary>
 public sealed class DurableReconciliationLeaseStore(
     DurableReconciliationLeaseOptions options,
@@ -156,49 +156,84 @@ public sealed class DurableReconciliationLeaseStore(
         Func<LeaseFileState, (LeaseFileState State, T Result)> operation)
     {
         string path = PathFor(resourceIdentity);
+        string lockPath = path + ".lock";
         policy.EnsureFileAccess(path);
+        policy.EnsureFileAccess(lockPath);
         Directory.CreateDirectory(directory);
         SemaphoreSlim local = localGates.GetOrAdd(resourceIdentity, _ => new SemaphoreSlim(1, 1));
         await local.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            FileStream? stream = null;
+            FileStream? lockStream;
             try
             {
-                stream = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.WriteThrough);
+                lockStream = new FileStream(
+                    lockPath,
+                    FileMode.OpenOrCreate,
+                    FileAccess.ReadWrite,
+                    FileShare.None,
+                    1,
+                    FileOptions.WriteThrough);
             }
             catch (IOException)
             {
                 return default!;
             }
-            await using (stream)
+
+            await using (lockStream)
             {
-                LeaseFileState state = await ReadAsync(stream, cancellationToken).ConfigureAwait(false);
+                LeaseFileState state = await ReadStateAsync(path, cancellationToken).ConfigureAwait(false);
                 (LeaseFileState next, T result) = operation(state);
-                await WriteAsync(stream, next, cancellationToken).ConfigureAwait(false);
+                await WriteStateAsync(path, next, cancellationToken).ConfigureAwait(false);
                 return result;
             }
         }
         finally { local.Release(); }
     }
 
-    private static async ValueTask<LeaseFileState> ReadAsync(FileStream stream, CancellationToken cancellationToken)
+    private async ValueTask<LeaseFileState> ReadStateAsync(string path, CancellationToken cancellationToken)
     {
-        if (stream.Length == 0) return new(0, null, null);
-        stream.Position = 0;
-        using StreamReader reader = new(stream, Encoding.UTF8, detectEncodingFromByteOrderMarks: true, bufferSize: 1024, leaveOpen: true);
-        string json = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<LeaseFileState>(json) ?? new(0, null, null);
+        policy.EnsureFileAccess(path);
+        if (!File.Exists(path)) return new(0, null, null);
+        try
+        {
+            string json = await File.ReadAllTextAsync(path, cancellationToken).ConfigureAwait(false);
+            return JsonSerializer.Deserialize<LeaseFileState>(json)
+                ?? throw new InvalidDataException($"Reconciliation lease state '{path}' is empty.");
+        }
+        catch (JsonException exception)
+        {
+            throw new InvalidDataException($"Reconciliation lease state '{path}' is corrupt.", exception);
+        }
     }
 
-    private static async ValueTask WriteAsync(FileStream stream, LeaseFileState state, CancellationToken cancellationToken)
+    private async ValueTask WriteStateAsync(string path, LeaseFileState state, CancellationToken cancellationToken)
     {
-        stream.Position = 0;
-        stream.SetLength(0);
-        await using StreamWriter writer = new(stream, new UTF8Encoding(false), 1024, leaveOpen: true);
-        await writer.WriteAsync(JsonSerializer.Serialize(state).AsMemory(), cancellationToken).ConfigureAwait(false);
-        await writer.FlushAsync(cancellationToken).ConfigureAwait(false);
-        stream.Flush(flushToDisk: true);
+        policy.EnsureFileAccess(path);
+        string temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        policy.EnsureFileAccess(temporary);
+        try
+        {
+            byte[] bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(state));
+            await using (FileStream stream = new(
+                temporary,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                4096,
+                FileOptions.Asynchronous | FileOptions.WriteThrough))
+            {
+                await stream.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
+                await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
+                stream.Flush(flushToDisk: true);
+            }
+            cancellationToken.ThrowIfCancellationRequested();
+            File.Move(temporary, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
     }
 
     private string PathFor(string identity)

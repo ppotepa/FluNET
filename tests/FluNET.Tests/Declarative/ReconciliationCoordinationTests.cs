@@ -1,3 +1,4 @@
+using FluNET.Capabilities;
 using FluNET.Context;
 using FluNET.Declarative.Reconciliation;
 
@@ -14,6 +15,49 @@ public sealed class ReconciliationCoordinationTests
         await store.ReleaseAsync(first);
         ReconciliationLease second = (await store.TryAcquireAsync("file:target", "two", TimeSpan.FromSeconds(5)))!;
         Assert.That(second.FencingToken, Is.GreaterThan(first.FencingToken));
+    }
+
+    [Test]
+    public async Task DurableFencingTokenSurvivesStoreRestart()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "FluNET_Lease_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            DurableReconciliationLeaseOptions options = new(directory);
+            AllowAllExecutionPolicy policy = new();
+            DurableReconciliationLeaseStore firstStore = new(options, policy);
+            ReconciliationLease first = (await firstStore.TryAcquireAsync("file:target", "one", TimeSpan.FromSeconds(5)))!;
+            await firstStore.ReleaseAsync(first);
+
+            DurableReconciliationLeaseStore secondStore = new(options, policy);
+            ReconciliationLease second = (await secondStore.TryAcquireAsync("file:target", "two", TimeSpan.FromSeconds(5)))!;
+
+            Assert.That(second.FencingToken, Is.GreaterThan(first.FencingToken));
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Test]
+    public async Task CorruptDurableLeaseStateIsRejectedInsteadOfResettingFence()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "FluNET_LeaseCorrupt_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            DurableReconciliationLeaseOptions options = new(directory);
+            AllowAllExecutionPolicy policy = new();
+            DurableReconciliationLeaseStore store = new(options, policy);
+            ReconciliationLease lease = (await store.TryAcquireAsync("file:target", "one", TimeSpan.FromSeconds(5)))!;
+            await store.ReleaseAsync(lease);
+            string statePath = Directory.EnumerateFiles(directory, "*.lease.json").Single();
+            await File.WriteAllTextAsync(statePath, "{");
+
+            DurableReconciliationLeaseStore restarted = new(options, policy);
+            Assert.ThrowsAsync<InvalidDataException>(async () =>
+                await restarted.TryAcquireAsync("file:target", "two", TimeSpan.FromSeconds(5)));
+        }
+        finally { Directory.Delete(directory, true); }
     }
 
     [Test]

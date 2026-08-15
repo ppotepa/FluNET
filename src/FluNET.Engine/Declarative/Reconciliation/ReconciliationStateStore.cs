@@ -146,6 +146,7 @@ public sealed class DurableReconciliationStateStore(
         SemaphoreSlim gate = gates.GetOrAdd(state.DefinitionId, _ => new SemaphoreSlim(1, 1));
         await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
         string temporary = path + ".tmp-" + Guid.NewGuid().ToString("N");
+        policy.EnsureFileAccess(temporary);
         try
         {
             string payload = JsonSerializer.Serialize(state);
@@ -162,6 +163,7 @@ public sealed class DurableReconciliationStateStore(
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 stream.Flush(flushToDisk: true);
             }
+            cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporary, path, overwrite: true);
         }
         finally
