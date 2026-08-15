@@ -16,7 +16,7 @@ See [0.9 freeze readiness](compiler-0.9-freeze-readiness.md).
 
 ## 1.0 — Production Readiness
 
-Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 has implemented the release-gate policy and recorded the current absence of verification evidence; release remains blocked.
+Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 has implemented the release-gate policy. CI is wired to the canonical .NET 9 gate, but current GitHub jobs are blocked before checkout by an account billing issue, so release verification remains unavailable.
 
 | Batch | Scope | Status |
 | --- | --- | --- |
@@ -33,8 +33,8 @@ Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 ha
 | 86 | Tool packaging + compatibility CLI boundary | IMPLEMENTED |
 | 87 | upgrade/backward-compatibility contracts | IMPLEMENTED source tests |
 | 88 | RC source-readiness ledger | IMPLEMENTED / NOT VERIFIED |
-| 89 | release-promotion gate policy + evidence decision | GATE IMPLEMENTED / RELEASE BLOCKED |
+| 89 | release-promotion gate policy + exact-tree evidence decision | GATE IMPLEMENTED / VERIFICATION ENV BLOCKED |
 
 See [1.0 RC source readiness](1.0-rc-readiness.md), [verification gate](1.0-verification.md), and [release gate](1.0-release-gate.md).
 
-The next action is not another feature batch. It is to run the canonical gate in a .NET 9 environment, fix any failures, rerun it, promote the public version only after green pre-promotion evidence, and rerun again before an explicit release/tag.
+The next action is not another feature batch. It is to make a .NET 9 runner available, execute the canonical gate, fix any real compiler/test/package failures, rerun it, promote the public version only after green pre-promotion evidence, and rerun again before an explicit release/tag.
