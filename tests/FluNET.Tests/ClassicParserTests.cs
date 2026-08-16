@@ -6,28 +6,26 @@ namespace FluNET.Tests;
 
 public class ClassicParserTests
 {
-    [Fact]
+    [Test]
     public void Parser_preserves_classic_sentence_shape_and_then_pipeline()
     {
         var parser = new ClassicParser(new LanguageRegistry().Snapshot);
-
         ParseResult result = parser.Parse("GET TEXT [data] FROM {input.txt} THEN SAY [data]");
-
-        Assert.True(result.Success);
-        PipelineNode pipeline = Assert.Single(result.Script!.Pipelines);
-        Assert.Equal(2, pipeline.Sentences.Count);
-        Assert.Equal("GET", pipeline.Sentences[0].Verb);
-        Assert.Equal("TEXT", pipeline.Sentences[0].Qualifier);
-        Assert.Contains(pipeline.Sentences[0].Clauses, x => x.Kind == ClauseKind.What && x.Value is VariableExpression);
-        Assert.Contains(pipeline.Sentences[0].Clauses, x => x.Kind == ClauseKind.From && x.Value is ReferenceExpression);
+        Assert.That(result.Success, Is.True);
+        PipelineNode pipeline = result.Script!.Pipelines.Single();
+        Assert.That(pipeline.Sentences.Count, Is.EqualTo(2));
+        Assert.That(pipeline.Sentences[0].Verb, Is.EqualTo("GET"));
+        Assert.That(pipeline.Sentences[0].Qualifier, Is.EqualTo("TEXT"));
+        Assert.That(pipeline.Sentences[0].Clauses.Any(x => x.Kind == ClauseKind.What && x.Value is VariableExpression), Is.True);
+        Assert.That(pipeline.Sentences[0].Clauses.Any(x => x.Kind == ClauseKind.From && x.Value is ReferenceExpression), Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Parser_keeps_multiple_values_for_the_same_role()
     {
         var parser = new ClassicParser(new LanguageRegistry().Snapshot);
         ParseResult result = parser.Parse("GET [data] FROM a.txt b.txt c.txt");
-        SentenceNode sentence = Assert.Single(Assert.Single(result.Script!.Pipelines).Sentences);
-        Assert.Equal(3, sentence.Clauses.Count(x => x.Kind == ClauseKind.From));
+        SentenceNode sentence = result.Script!.Pipelines.Single().Sentences.Single();
+        Assert.That(sentence.Clauses.Count(x => x.Kind == ClauseKind.From), Is.EqualTo(3));
     }
 }

@@ -6,36 +6,26 @@ namespace FluNET.Tests;
 
 public class SemanticBinderTests
 {
-    [Fact]
+    [Test]
     public void Binder_binds_classic_get_using_compiled_role_and_constructor_metadata()
     {
         var registry = new LanguageRegistry();
         var binder = new SemanticBinder(registry.Snapshot);
-        var sentence = new SentenceNode(
-            "GET",
-            [
-                new ClauseNode(ClauseKind.What, new VariableExpression("text")),
-                new ClauseNode(ClauseKind.From, new ReferenceExpression("input.txt"))
-            ]);
-
+        var sentence = new SentenceNode("GET", [new ClauseNode(ClauseKind.What, new VariableExpression("text")), new ClauseNode(ClauseKind.From, new ReferenceExpression("input.txt"))]);
         BindingResult<BoundSentence> result = binder.BindSentence(sentence);
-
-        Assert.True(result.Success);
-        Assert.NotNull(result.Value);
-        Assert.Equal("GET", result.Value!.Verb.Text, ignoreCase: true);
-        Assert.Equal(typeof(string[]), result.Value.ResultType);
-        Assert.Contains(result.Value.Roles, x => x.Descriptor.Kind == ClauseKind.From);
+        Assert.That(result.Success, Is.True);
+        Assert.That(result.Value, Is.Not.Null);
+        Assert.That(result.Value!.Verb.Text, Is.EqualTo("GET").IgnoreCase);
+        Assert.That(result.Value.ResultType, Is.EqualTo(typeof(string[])));
+        Assert.That(result.Value.Roles.Any(x => x.Descriptor.Kind == ClauseKind.From), Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Binder_reports_unknown_verbs_without_execution()
     {
         var binder = new SemanticBinder(new LanguageRegistry().Snapshot);
-        var sentence = new SentenceNode("DOES_NOT_EXIST", []);
-
-        BindingResult<BoundSentence> result = binder.BindSentence(sentence);
-
-        Assert.False(result.Success);
-        Assert.Contains(result.Diagnostics, x => x.Code == "FLU2001");
+        BindingResult<BoundSentence> result = binder.BindSentence(new SentenceNode("DOES_NOT_EXIST", []));
+        Assert.That(result.Success, Is.False);
+        Assert.That(result.Diagnostics.Any(x => x.Code == "FLU2001"), Is.True);
     }
 }

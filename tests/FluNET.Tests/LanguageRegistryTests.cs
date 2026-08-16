@@ -4,33 +4,30 @@ namespace FluNET.Tests;
 
 public class LanguageRegistryTests
 {
-    [Fact]
+    [Test]
     public void Registry_discovers_standard_verbs_and_builds_sentence_patterns()
     {
         var registry = new LanguageRegistry();
-
-        Assert.True(registry.TryGetVerb("GET", out VerbDescriptor? get));
-        Assert.NotNull(get);
-        Assert.Contains(get!.Pattern.Clauses, x => x.Kind == ClauseKind.What);
-        Assert.Contains(get.Pattern.Clauses, x => x.Kind == ClauseKind.From);
+        Assert.That(registry.TryGetVerb("GET", out VerbDescriptor? get), Is.True);
+        Assert.That(get, Is.Not.Null);
+        Assert.That(get!.Pattern.Clauses.Any(x => x.Kind == ClauseKind.What), Is.True);
+        Assert.That(get.Pattern.Clauses.Any(x => x.Kind == ClauseKind.From), Is.True);
     }
 
-    [Theory]
-    [InlineData("TEXT")]
-    [InlineData("JSON")]
-    [InlineData("BINARY")]
+    [TestCase("TEXT")]
+    [TestCase("JSON")]
+    [TestCase("BINARY")]
     public void Standard_qualifiers_are_registry_entries(string qualifier)
     {
         var registry = new LanguageRegistry();
-        Assert.True(registry.IsQualifier(qualifier));
+        Assert.That(registry.IsQualifier(qualifier), Is.True);
     }
 
-    [Fact]
+    [Test]
     public void Modules_can_extend_qualifiers_without_changing_word_factory()
     {
         var registry = new LanguageRegistry();
         registry.RegisterQualifier("PARQUET");
-
-        Assert.True(registry.IsQualifier("PARQUET"));
+        Assert.That(registry.IsQualifier("PARQUET"), Is.True);
     }
 }

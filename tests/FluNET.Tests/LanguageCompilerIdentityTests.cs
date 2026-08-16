@@ -6,36 +6,28 @@ namespace FluNET.Tests;
 
 public class LanguageCompilerIdentityTests
 {
-    [Fact]
+    [Test]
     public void Verb_attribute_defines_identity_without_instantiating_the_type()
     {
         var compiler = new LanguageCompiler();
-
         VerbIdentity? identity = compiler.DescribeVerbIdentity(typeof(AbstractAttributedVerb));
-
-        Assert.NotNull(identity);
-        Assert.Equal("CUSTOM", identity!.Text);
-        Assert.Contains("ALT", identity.Synonyms);
+        Assert.That(identity, Is.Not.Null);
+        Assert.That(identity!.Text, Is.EqualTo("CUSTOM"));
+        Assert.That(identity.Synonyms, Does.Contain("ALT"));
     }
 
-    [Fact]
+    [Test]
     public void Semantic_family_marker_defines_standard_keyword()
     {
         var compiler = new LanguageCompiler();
-
         VerbIdentity? identity = compiler.DescribeVerbIdentity(typeof(AbstractGetVerb));
-
-        Assert.NotNull(identity);
-        Assert.Equal("GET", identity!.Text);
+        Assert.That(identity, Is.Not.Null);
+        Assert.That(identity!.Text, Is.EqualTo("GET"));
     }
 
     [Verb("CUSTOM")]
     [Alias("ALT")]
-    private abstract class AbstractAttributedVerb : IVerb
-    {
-    }
+    private abstract class AbstractAttributedVerb : IVerb { }
 
-    private abstract class AbstractGetVerb : IGet
-    {
-    }
+    private abstract class AbstractGetVerb : IGet { }
 }

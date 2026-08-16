@@ -4,14 +4,16 @@ namespace FluNET.Tests;
 
 public class ValueConversionRegistryTests
 {
-    [Fact]
+    [Test]
     public void Numeric_conversion_has_higher_cost_than_exact_match()
     {
         var conversions = new ValueConversionRegistry();
-        Assert.True(conversions.TryGet(typeof(int), typeof(int), out ValueConversion? exact));
-        Assert.True(conversions.TryGet(typeof(int), typeof(long), out ValueConversion? numeric));
-        Assert.Equal(0, exact!.Cost);
-        Assert.True(numeric!.Cost > exact.Cost);
-        Assert.Equal(42L, numeric.Apply(42));
+        Assert.That(conversions.TryGet(typeof(int), typeof(int), out ValueConversion? exact), Is.True);
+        Assert.That(conversions.TryGet(typeof(int), typeof(long), out ValueConversion? numeric), Is.True);
+        Assert.That(exact, Is.Not.Null);
+        Assert.That(numeric, Is.Not.Null);
+        Assert.That(exact!.Cost, Is.EqualTo(0));
+        Assert.That(numeric!.Cost, Is.GreaterThan(exact.Cost));
+        Assert.That(numeric.Apply(42), Is.EqualTo(42L));
     }
 }

@@ -6,19 +6,14 @@ namespace FluNET.Tests;
 
 public class LanguagePatternTests
 {
-    [Fact]
+    [Test]
     public void Compiler_creates_distinct_sentence_patterns_from_role_constructors()
     {
         var compiler = new LanguageCompiler();
-        VerbDescriptor descriptor = compiler.DescribeVerb(
-            typeof(MultiPatternVerb),
-            "CUSTOM",
-            [],
-            () => null);
-
-        Assert.Equal(2, descriptor.Patterns.Count);
-        Assert.Contains(descriptor.Patterns, x => x.Pattern.Clauses.Count == 1);
-        Assert.Contains(descriptor.Patterns, x => x.Pattern.Clauses.Count == 2);
+        VerbDescriptor descriptor = compiler.DescribeVerb(typeof(MultiPatternVerb), "CUSTOM", [], () => null);
+        Assert.That(descriptor.Patterns.Count, Is.EqualTo(2));
+        Assert.That(descriptor.Patterns.Any(x => x.Pattern.Clauses.Count == 1), Is.True);
+        Assert.That(descriptor.Patterns.Any(x => x.Pattern.Clauses.Count == 2), Is.True);
     }
 
     [Verb("CUSTOM")]
@@ -26,7 +21,6 @@ public class LanguagePatternTests
     {
         public MultiPatternVerb([What] string what) { }
         public MultiPatternVerb([What] string what, [From] FileInfo from) { }
-
         public string Text => "CUSTOM";
         public IWord? Next { get; set; }
         public IWord? Previous { get; set; }
