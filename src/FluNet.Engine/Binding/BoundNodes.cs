@@ -10,19 +10,11 @@ public sealed record BoundValue(
     Type ExpectedType,
     Type ActualType,
     object? ConstantValue,
-    int ConversionCost);
+    int ConversionCost,
+    ValueConversion? Conversion = null);
 
-public sealed record BoundRole(
-    ClauseDescriptor Descriptor,
-    IReadOnlyList<BoundValue> Values);
-
-public sealed record BoundSentence(
-    VerbDescriptor Verb,
-    ConstructorDescriptor? Constructor,
-    IReadOnlyList<BoundRole> Roles,
-    Type? ResultType,
-    int BindingCost);
-
+public sealed record BoundRole(ClauseDescriptor Descriptor, IReadOnlyList<BoundValue> Values);
+public sealed record BoundSentence(VerbDescriptor Verb, ConstructorDescriptor? Constructor, IReadOnlyList<BoundRole> Roles, Type? ResultType, int BindingCost);
 public sealed record BoundPipeline(IReadOnlyList<BoundSentence> Sentences, Type? ResultType);
 
 public sealed record BindingResult<T>(T? Value, IReadOnlyList<Diagnostic> Diagnostics)

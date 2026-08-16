@@ -10,18 +10,22 @@ public sealed class SemanticBinder
 {
     private readonly LanguageSnapshot _language;
     private readonly ValueResolverRegistry _resolvers;
+    private readonly ValueConversionRegistry _conversions;
 
-    public SemanticBinder(LanguageSnapshot language, ValueResolverRegistry? resolvers = null)
+    public SemanticBinder(LanguageSnapshot language, ValueResolverRegistry? resolvers = null, ValueConversionRegistry? conversions = null)
     {
         _language = language;
         _resolvers = resolvers ?? new ValueResolverRegistry();
+        _conversions = conversions ?? new ValueConversionRegistry();
     }
 
     public BindingResult<BoundSentence> BindSentence(SentenceNode sentence, BindingContext? context = null)
     {
         context ??= new BindingContext();
-        IReadOnlyList<VerbDescriptor> overloads = _language.GetVerbOverloads(sentence.Verb);
-        if (overloads.Count == 0) return Failure("FLU2001", $"Unknown verb '{sentence.Verb}'.");
+        IReadOnlyList<VerbDescriptor> overloads = _language.GetVerbOverloads(sentence.Verb)
+            .Where(x => QualifierMatches(sentence.Qualifier, x))
+            .ToArray();
+        if (overloads.Count == 0) return Failure("FLU2001", $"Unknown verb or qualifier combination '{sentence.Verb}{(sentence.Qualifier is null ? "" : " " + sentence.Qualifier)}'.");
 
         var candidates = new List<BoundSentence>();
         foreach (VerbDescriptor overload in overloads)
@@ -47,29 +51,39 @@ public sealed class SemanticBinder
         context ??= new BindingContext();
         var bound = new List<BoundSentence>();
         var diagnostics = new List<Diagnostic>();
-        var variableTypes = context.VariableTypes != null
-            ? new Dictionary<string, Type>(context.VariableTypes, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
+        var variableTypes = context.VariableTypes != null ? new Dictionary<string, Type>(context.VariableTypes, StringComparer.OrdinalIgnoreCase) : new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
         Type? pipelineType = context.PipelineType;
 
         foreach (SentenceNode sentence in pipeline.Sentences)
         {
-            BindingContext sentenceContext = context with { PipelineType = pipelineType, VariableTypes = variableTypes };
-            BindingResult<BoundSentence> result = BindSentence(sentence, sentenceContext);
+            BindingResult<BoundSentence> result = BindSentence(sentence, context with { PipelineType = pipelineType, VariableTypes = variableTypes });
             diagnostics.AddRange(result.Diagnostics);
             if (!result.Success || result.Value == null) return new(null, diagnostics);
-
             bound.Add(result.Value);
             pipelineType = result.Value.ResultType;
-
             foreach (BoundRole role in result.Value.Roles.Where(x => x.Descriptor.Direction is RoleDirection.Output or RoleDirection.InputOutput))
-            {
                 foreach (BoundValue value in role.Values)
                     if (value.Source is VariableExpression variable) variableTypes[variable.Name] = role.Descriptor.ValueType;
-            }
         }
-
         return new(new BoundPipeline(bound, pipelineType), diagnostics);
+    }
+
+    private bool QualifierMatches(string? qualifierText, VerbDescriptor verb)
+    {
+        if (qualifierText == null) return true;
+        if (!_language.TryGetQualifier(qualifierText, out QualifierDescriptor? qualifier) || qualifier == null) return false;
+        if (qualifier.ValueType == null) return true;
+
+        IEnumerable<Type> candidateTypes = verb.Pattern.Clauses.Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType);
+        if (verb.ResultType != null) candidateTypes = candidateTypes.Prepend(verb.ResultType);
+        return candidateTypes.Any(type => TypeMatchesQualifier(type, qualifier.ValueType));
+    }
+
+    private static bool TypeMatchesQualifier(Type candidate, Type qualifier)
+    {
+        if (candidate == qualifier || qualifier.IsAssignableFrom(candidate) || candidate.IsAssignableFrom(qualifier)) return true;
+        if (candidate.IsArray && candidate.GetElementType() == qualifier) return true;
+        return false;
     }
 
     private BoundSentence? TryBindOverload(SentenceNode sentence, VerbDescriptor verb, BindingContext context)
@@ -77,13 +91,11 @@ public sealed class SemanticBinder
         var remaining = sentence.Clauses.GroupBy(x => x.Kind).ToDictionary(x => x.Key, x => new Queue<ClauseNode>(x));
         var roles = new List<BoundRole>();
         int cost = 0;
-
         foreach (ClauseDescriptor expected in verb.Pattern.Clauses)
         {
             int minimum = expected.Cardinality is RoleCardinality.One or RoleCardinality.OneOrMore ? 1 : 0;
             bool repeated = expected.Cardinality is RoleCardinality.ZeroOrMore or RoleCardinality.OneOrMore;
             var values = new List<BoundValue>();
-
             if (remaining.TryGetValue(expected.Kind, out Queue<ClauseNode>? queue) && queue.Count > 0)
             {
                 if (repeated && expected.ElementType != null)
@@ -94,23 +106,19 @@ public sealed class SemanticBinder
                 }
                 else
                 {
-                    ClauseNode actual = queue.Dequeue();
-                    BoundValue? value = TryBindValue(actual.Value, expected, verb, context);
+                    BoundValue? value = TryBindValue(queue.Dequeue().Value, expected, verb, context);
                     if (value == null) return null;
                     values.Add(value); cost += value.ConversionCost;
                 }
             }
-
             if (values.Count < minimum)
             {
                 BoundValue? implicitPipeline = TryBindPipelineValue(expected, context);
                 if (implicitPipeline != null) { values.Add(implicitPipeline); cost += implicitPipeline.ConversionCost; }
             }
-
             if (values.Count < minimum) return null;
             roles.Add(new BoundRole(expected, values));
         }
-
         if (remaining.Values.Any(queue => queue.Count > 0)) return null;
         ConstructorDescriptor? constructor = verb.Constructors.FirstOrDefault(x => x.RoleParameterCount > 0) ?? verb.Constructors.FirstOrDefault();
         return new BoundSentence(verb, constructor, roles, verb.ResultType, cost);
@@ -144,18 +152,16 @@ public sealed class SemanticBinder
         return null;
     }
 
-    private static BoundValue? TryBindPipelineValue(ClauseDescriptor expected, BindingContext context)
+    private BoundValue? TryBindPipelineValue(ClauseDescriptor expected, BindingContext context)
     {
         if (expected.Direction == RoleDirection.Output || context.PipelineType == null) return null;
         return BindKnownType(new PipelineValueExpression(), context.PipelineType, expected.ValueType, null);
     }
 
-    private static BoundValue? BindKnownType(ExpressionNode source, Type? actualType, Type expectedType, object? value)
+    private BoundValue? BindKnownType(ExpressionNode source, Type? actualType, Type expectedType, object? value)
     {
-        if (actualType == null) return null;
-        if (expectedType == actualType) return new(source, expectedType, actualType, value, 0);
-        if (expectedType.IsAssignableFrom(actualType)) return new(source, expectedType, actualType, value, 1);
-        return null;
+        if (actualType == null || !_conversions.TryGet(actualType, expectedType, out ValueConversion? conversion) || conversion == null) return null;
+        return new(source, expectedType, actualType, value, conversion.Cost, conversion);
     }
 
     private static BindingResult<BoundSentence> Failure(string code, string message) => new(null, [Diagnostic.Error(code, message)]);
