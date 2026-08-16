@@ -3,6 +3,7 @@ using FluNET.Language;
 using FluNET.Language.Metadata;
 using FluNET.Syntax.Ast;
 using FluNET.Syntax.Core;
+using System.Reflection;
 
 namespace FluNET.Binding;
 
@@ -14,174 +15,104 @@ public sealed class SemanticBinder
 
     public SemanticBinder(LanguageSnapshot language, ValueResolverRegistry? resolvers = null, ValueConversionRegistry? conversions = null)
     {
-        _language = language;
-        _resolvers = resolvers ?? new ValueResolverRegistry();
-        _conversions = conversions ?? new ValueConversionRegistry();
+        _language = language; _resolvers = resolvers ?? new ValueResolverRegistry(); _conversions = conversions ?? new ValueConversionRegistry();
     }
 
     public BindingResult<BoundSentence> BindSentence(SentenceNode sentence, BindingContext? context = null)
     {
         context ??= new BindingContext();
-        IReadOnlyList<VerbDescriptor> overloads = _language.GetVerbOverloads(sentence.Verb)
-            .Where(x => QualifierMatches(sentence.Qualifier, x))
-            .ToArray();
-        if (overloads.Count == 0) return Failure("FLU2001", $"Unknown verb or qualifier combination '{sentence.Verb}{(sentence.Qualifier is null ? "" : " " + sentence.Qualifier)}'.");
+        IReadOnlyList<VerbDescriptor> overloads = _language.GetVerbOverloads(sentence.Verb).Where(x => QualifierMatches(sentence.Qualifier, x)).ToArray();
+        if (overloads.Count == 0) return Failure("FLU2001", $"Unknown verb or qualifier combination '{sentence.Verb}{(sentence.Qualifier is null ? "" : " " + sentence.Qualifier)}'.", sentence.Span);
 
         var candidates = new List<BoundSentence>();
         foreach (VerbDescriptor overload in overloads)
         {
-            IReadOnlyList<VerbPatternDescriptor> patterns = overload.Patterns.Count > 0
-                ? overload.Patterns
-                : [new VerbPatternDescriptor(overload.Pattern, overload.Constructors.FirstOrDefault())];
-
-            foreach (VerbPatternDescriptor pattern in patterns)
-            {
-                BoundSentence? candidate = TryBindPattern(sentence, overload, pattern, context);
-                if (candidate != null) candidates.Add(candidate);
-            }
+            IReadOnlyList<VerbPatternDescriptor> patterns = overload.Patterns.Count > 0 ? overload.Patterns : [new VerbPatternDescriptor(overload.Pattern, overload.Constructors.FirstOrDefault())];
+            foreach (VerbPatternDescriptor pattern in patterns) { BoundSentence? candidate = TryBindPattern(sentence, overload, pattern, context); if (candidate != null) candidates.Add(candidate); }
         }
 
-        if (candidates.Count == 0)
-        {
-            string signatures = string.Join(", ", overloads.SelectMany(FormatSignatures));
-            return Failure("FLU2101", $"No overload of '{sentence.Verb}' matches this sentence. Available: {signatures}.");
-        }
-
-        int bestCost = candidates.Min(x => x.BindingCost);
-        BoundSentence[] best = candidates.Where(x => x.BindingCost == bestCost).ToArray();
-        if (best.Length > 1)
-        {
-            string matches = string.Join(", ", best.Select(x => FormatSignature(x.Verb.Text, x.Roles.Select(r => r.Descriptor))));
-            return Failure("FLU2102", $"Ambiguous '{sentence.Verb}' sentence. Matching overloads: {matches}.");
-        }
+        if (candidates.Count == 0) return Failure("FLU2101", $"No overload of '{sentence.Verb}' matches this sentence. Available: {string.Join(", ", overloads.SelectMany(FormatSignatures))}.", sentence.Span);
+        int bestCost = candidates.Min(x => x.BindingCost); BoundSentence[] best = candidates.Where(x => x.BindingCost == bestCost).ToArray();
+        if (best.Length > 1) return Failure("FLU2102", $"Ambiguous '{sentence.Verb}' sentence. Matching overloads: {string.Join(", ", best.Select(x => FormatSignature(x.Verb.Text, x.Roles.Select(r => r.Descriptor))))}.", sentence.Span);
         return new(best[0], []);
     }
 
     public BindingResult<BoundPipeline> BindPipeline(PipelineNode pipeline, BindingContext? context = null)
     {
-        context ??= new BindingContext();
-        var bound = new List<BoundSentence>();
-        var diagnostics = new List<Diagnostic>();
+        context ??= new BindingContext(); var bound = new List<BoundSentence>(); var diagnostics = new List<Diagnostic>();
         var variableTypes = context.VariableTypes != null ? new Dictionary<string, Type>(context.VariableTypes, StringComparer.OrdinalIgnoreCase) : new Dictionary<string, Type>(StringComparer.OrdinalIgnoreCase);
         Type? pipelineType = context.PipelineType;
-
         foreach (SentenceNode sentence in pipeline.Sentences)
         {
-            BindingResult<BoundSentence> result = BindSentence(sentence, context with { PipelineType = pipelineType, VariableTypes = variableTypes });
-            diagnostics.AddRange(result.Diagnostics);
-            if (!result.Success || result.Value == null) return new(null, diagnostics);
-            bound.Add(result.Value);
-            pipelineType = result.Value.ResultType;
+            BindingResult<BoundSentence> result = BindSentence(sentence, context with { PipelineType = pipelineType, VariableTypes = variableTypes }); diagnostics.AddRange(result.Diagnostics); if (!result.Success || result.Value == null) return new(null, diagnostics);
+            bound.Add(result.Value); pipelineType = result.Value.ResultType;
             foreach (BoundRole role in result.Value.Roles.Where(x => x.Descriptor.Direction is RoleDirection.Output or RoleDirection.InputOutput))
-                foreach (BoundValue value in role.Values)
-                    if (value.Source is VariableExpression variable) variableTypes[variable.Name] = role.Descriptor.ValueType;
+                foreach (BoundValue value in role.Values) if (value.Source is VariableExpression variable) variableTypes[variable.Name] = role.Descriptor.ValueType;
         }
         return new(new BoundPipeline(bound, pipelineType), diagnostics);
     }
 
     private BoundSentence? TryBindPattern(SentenceNode sentence, VerbDescriptor verb, VerbPatternDescriptor patternDescriptor, BindingContext context)
     {
-        SentencePattern pattern = patternDescriptor.Pattern;
-        var remaining = sentence.Clauses.GroupBy(x => x.Kind).ToDictionary(x => x.Key, x => new Queue<ClauseNode>(x));
-        var roles = new List<BoundRole>();
-        int cost = 0;
-
+        SentencePattern pattern = patternDescriptor.Pattern; var remaining = sentence.Clauses.GroupBy(x => x.Kind).ToDictionary(x => x.Key, x => new Queue<ClauseNode>(x)); var roles = new List<BoundRole>(); int cost = 0;
         foreach (ClauseDescriptor expected in pattern.Clauses)
         {
-            int minimum = expected.Cardinality is RoleCardinality.One or RoleCardinality.OneOrMore ? 1 : 0;
-            bool repeated = expected.Cardinality is RoleCardinality.ZeroOrMore or RoleCardinality.OneOrMore;
-            var values = new List<BoundValue>();
+            int minimum = expected.Cardinality is RoleCardinality.One or RoleCardinality.OneOrMore ? 1 : 0; bool repeated = expected.Cardinality is RoleCardinality.ZeroOrMore or RoleCardinality.OneOrMore; var values = new List<BoundValue>();
             if (remaining.TryGetValue(expected.Kind, out Queue<ClauseNode>? queue) && queue.Count > 0)
             {
-                if (repeated && expected.ElementType != null)
-                {
-                    BoundValue? collection = TryBindRepeatedValues(queue, expected, verb, context);
-                    if (collection == null) return null;
-                    values.Add(collection); cost += collection.ConversionCost;
-                }
-                else
-                {
-                    BoundValue? value = TryBindValue(queue.Dequeue().Value, expected, verb, context);
-                    if (value == null) return null;
-                    values.Add(value); cost += value.ConversionCost;
-                }
+                if (repeated && expected.ElementType != null) { BoundValue? collection = TryBindRepeatedValues(queue, expected, verb, context); if (collection == null) return null; values.Add(collection); cost += collection.ConversionCost; }
+                else { BoundValue? value = TryBindValue(queue.Dequeue().Value, expected, verb, context); if (value == null) return null; values.Add(value); cost += value.ConversionCost; }
             }
-            if (values.Count < minimum)
-            {
-                BoundValue? implicitPipeline = TryBindPipelineValue(expected, context);
-                if (implicitPipeline != null) { values.Add(implicitPipeline); cost += implicitPipeline.ConversionCost; }
-            }
-            if (values.Count < minimum) return null;
-            roles.Add(new BoundRole(expected, values));
+            if (values.Count < minimum) { BoundValue? implicitPipeline = TryBindPipelineValue(expected, context); if (implicitPipeline != null) { values.Add(implicitPipeline); cost += implicitPipeline.ConversionCost; } }
+            if (values.Count < minimum) return null; roles.Add(new BoundRole(expected, values));
         }
-
         if (remaining.Values.Any(queue => queue.Count > 0)) return null;
         return new BoundSentence(verb, patternDescriptor.Constructor, roles, verb.ResultType, cost);
     }
 
     private bool QualifierMatches(string? qualifierText, VerbDescriptor verb)
     {
-        if (qualifierText == null) return true;
-        if (!_language.TryGetQualifier(qualifierText, out QualifierDescriptor? qualifier) || qualifier == null) return false;
-        if (qualifier.ValueType == null) return true;
-        IEnumerable<Type> candidateTypes = verb.Patterns.SelectMany(p => p.Pattern.Clauses).Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType);
-        if (!candidateTypes.Any()) candidateTypes = verb.Pattern.Clauses.Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType);
-        if (verb.ResultType != null) candidateTypes = candidateTypes.Prepend(verb.ResultType);
-        return candidateTypes.Any(type => TypeMatchesQualifier(type, qualifier.ValueType));
-    }
-
-    private static bool TypeMatchesQualifier(Type candidate, Type qualifier)
-    {
-        if (candidate == qualifier || qualifier.IsAssignableFrom(candidate) || candidate.IsAssignableFrom(qualifier)) return true;
-        return candidate.IsArray && candidate.GetElementType() == qualifier;
+        if (qualifierText == null) return true; if (!_language.TryGetQualifier(qualifierText, out QualifierDescriptor? qualifier) || qualifier == null) return false; if (qualifier.ValueType == null) return true;
+        IEnumerable<Type> candidateTypes = verb.Patterns.SelectMany(p => p.Pattern.Clauses).Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType); if (!candidateTypes.Any()) candidateTypes = verb.Pattern.Clauses.Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType); if (verb.ResultType != null) candidateTypes = candidateTypes.Prepend(verb.ResultType);
+        return candidateTypes.Any(type => type == qualifier.ValueType || qualifier.ValueType.IsAssignableFrom(type) || type.IsAssignableFrom(qualifier.ValueType) || (type.IsArray && type.GetElementType() == qualifier.ValueType));
     }
 
     private BoundValue? TryBindRepeatedValues(Queue<ClauseNode> queue, ClauseDescriptor expected, VerbDescriptor verb, BindingContext context)
     {
-        ClauseNode[] clauses = queue.ToArray(); queue.Clear();
-        string[] texts = clauses.Select(x => x.Value switch { LiteralExpression l => l.Value, ReferenceExpression r => r.Reference, _ => null }).Where(x => x != null).Cast<string>().ToArray();
-        if (texts.Length != clauses.Length) return null;
-        ResolutionContext resolution = new(expected.ValueType, expected.Kind, verb, Qualifier: null, Services: context.Services);
-        if (!_resolvers.TryResolveMany(texts, expected.ValueType, resolution, out object? collection)) return null;
-        ExpressionNode source = clauses.Length == 1 ? clauses[0].Value : new InterpolatedStringExpression(string.Join(" ", texts));
-        return new(source, expected.ValueType, collection?.GetType() ?? expected.ValueType, collection, 2);
+        ClauseNode[] clauses = queue.ToArray(); queue.Clear(); string[] texts = clauses.Select(x => x.Value switch { LiteralExpression l => l.Value, ReferenceExpression r => r.Reference, _ => null }).Where(x => x != null).Cast<string>().ToArray(); if (texts.Length != clauses.Length) return null;
+        if (!_resolvers.TryResolveMany(texts, expected.ValueType, new ResolutionContext(expected.ValueType, expected.Kind, verb, Services: context.Services), out object? collection)) return null;
+        ExpressionNode source = clauses.Length == 1 ? clauses[0].Value : new InterpolatedStringExpression(string.Join(" ", texts)); return new(source, expected.ValueType, collection?.GetType() ?? expected.ValueType, collection, 2);
     }
 
     private BoundValue? TryBindValue(ExpressionNode expression, ClauseDescriptor expected, VerbDescriptor verb, BindingContext context)
     {
         if (expected.Direction == RoleDirection.Output && expression is VariableExpression output) return new(output, expected.ValueType, expected.ValueType, null, 0);
         if (expression is PipelineValueExpression) return BindKnownType(expression, context.PipelineType, expected.ValueType, null);
-        if (expression is VariableExpression variable)
+        if (expression is VariableExpression or PropertyExpression)
         {
-            Type? actualType = null; context.VariableTypes?.TryGetValue(variable.Name, out actualType);
-            return BindKnownType(expression, actualType, expected.ValueType, null);
+            Type? actualType = InferExpressionType(expression, context); return BindKnownType(expression, actualType, expected.ValueType, null);
         }
         if (expression is InterpolatedStringExpression interpolated && expected.ValueType == typeof(string)) return new(interpolated, typeof(string), typeof(string), null, 0);
-        string? text = expression switch { LiteralExpression l => l.Value, ReferenceExpression r => r.Reference, _ => null };
-        if (text == null) return null;
-        ResolutionContext resolution = new(expected.ValueType, expected.Kind, verb, Qualifier: null, Services: context.Services);
-        if (_resolvers.TryResolve(text, expected.ValueType, resolution, out object? value)) return new(expression, expected.ValueType, value?.GetType() ?? expected.ValueType, value, expected.ValueType == typeof(string) ? 0 : 2);
+        string? text = expression switch { LiteralExpression l => l.Value, ReferenceExpression r => r.Reference, _ => null }; if (text == null) return null;
+        if (_resolvers.TryResolve(text, expected.ValueType, new ResolutionContext(expected.ValueType, expected.Kind, verb, Services: context.Services), out object? value)) return new(expression, expected.ValueType, value?.GetType() ?? expected.ValueType, value, expected.ValueType == typeof(string) ? 0 : 2);
         return null;
     }
 
-    private BoundValue? TryBindPipelineValue(ClauseDescriptor expected, BindingContext context)
+    private Type? InferExpressionType(ExpressionNode expression, BindingContext context)
     {
-        if (expected.Direction == RoleDirection.Output || context.PipelineType == null) return null;
-        return BindKnownType(new PipelineValueExpression(), context.PipelineType, expected.ValueType, null);
+        if (expression is VariableExpression variable) { context.VariableTypes?.TryGetValue(variable.Name, out Type? type); return type; }
+        if (expression is PipelineValueExpression) return context.PipelineType;
+        if (expression is PropertyExpression property)
+        {
+            Type? targetType = InferExpressionType(property.Target, context); if (targetType == null) return null;
+            PropertyInfo? info = targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance).FirstOrDefault(x => x.Name.Equals(property.Property, StringComparison.OrdinalIgnoreCase)); return info?.PropertyType;
+        }
+        return null;
     }
 
-    private BoundValue? BindKnownType(ExpressionNode source, Type? actualType, Type expectedType, object? value)
-    {
-        if (actualType == null || !_conversions.TryGet(actualType, expectedType, out ValueConversion? conversion) || conversion == null) return null;
-        return new(source, expectedType, actualType, value, conversion.Cost, conversion);
-    }
-
-    private static BindingResult<BoundSentence> Failure(string code, string message) => new(null, [Diagnostic.Error(code, message)]);
-    private static IEnumerable<string> FormatSignatures(VerbDescriptor verb)
-    {
-        IReadOnlyList<VerbPatternDescriptor> patterns = verb.Patterns.Count > 0 ? verb.Patterns : [new VerbPatternDescriptor(verb.Pattern, null)];
-        return patterns.Select(x => FormatSignature(verb.Text, x.Pattern.Clauses));
-    }
-    private static string FormatSignature(string verb, IEnumerable<ClauseDescriptor> clauses) => $"{verb} {string.Join(" ", clauses.Select(x => $"{x.Kind.ToString().ToUpperInvariant()}<{FriendlyName(x.ValueType)}>"))}".TrimEnd();
-    private static string FriendlyName(Type type) => type.IsArray ? $"{FriendlyName(type.GetElementType()!)}[]" : type.Name;
+    private BoundValue? TryBindPipelineValue(ClauseDescriptor expected, BindingContext context) => expected.Direction == RoleDirection.Output || context.PipelineType == null ? null : BindKnownType(new PipelineValueExpression(), context.PipelineType, expected.ValueType, null);
+    private BoundValue? BindKnownType(ExpressionNode source, Type? actualType, Type expectedType, object? value) { if (actualType == null || !_conversions.TryGet(actualType, expectedType, out ValueConversion? conversion) || conversion == null) return null; return new(source, expectedType, actualType, value, conversion.Cost, conversion); }
+    private static BindingResult<BoundSentence> Failure(string code, string message, TextSpan? span = null) => new(null, [Diagnostic.Error(code, message, span)]);
+    private static IEnumerable<string> FormatSignatures(VerbDescriptor verb) { IReadOnlyList<VerbPatternDescriptor> patterns = verb.Patterns.Count > 0 ? verb.Patterns : [new VerbPatternDescriptor(verb.Pattern, null)]; return patterns.Select(x => FormatSignature(verb.Text, x.Pattern.Clauses)); }
+    private static string FormatSignature(string verb, IEnumerable<ClauseDescriptor> clauses) => $"{verb} {string.Join(" ", clauses.Select(x => $"{x.Kind.ToString().ToUpperInvariant()}<{(x.ValueType.IsArray ? x.ValueType.GetElementType()!.Name + "[]" : x.ValueType.Name)}>"))}".TrimEnd();
 }

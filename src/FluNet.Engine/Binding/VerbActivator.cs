@@ -8,6 +8,8 @@ public sealed record ActivationContext(IReadOnlyDictionary<string, object?>? Var
 
 public sealed class VerbActivator
 {
+    private readonly ExpressionRuntimeEvaluator _expressions = new();
+
     public IVerb Create(BoundSentence sentence, ActivationContext? context = null)
     {
         context ??= new ActivationContext(); ConstructorDescriptor? constructor = sentence.Constructor;
@@ -24,12 +26,18 @@ public sealed class VerbActivator
             BoundRole? role = FindRole(p, remainingRoles); if (role == null) { if (p.IsOptional) { arguments[i] = p.Parameter.HasDefaultValue ? p.Parameter.DefaultValue : DefaultValue(p.ParameterType); continue; } throw new InvalidOperationException($"Missing bound role '{p.Role}' for constructor parameter '{p.Name}'."); }
             remainingRoles.Remove(role); arguments[i] = MaterializeRole(p, role, context);
         }
-        object instance = constructor.Activator(arguments);
-        return instance as IVerb ?? throw new InvalidOperationException($"Constructed type '{instance.GetType().FullName}' is not an IVerb.");
+        object instance = constructor.Activator(arguments); return instance as IVerb ?? throw new InvalidOperationException($"Constructed type '{instance.GetType().FullName}' is not an IVerb.");
     }
 
     private static BoundRole? FindRole(ParameterDescriptor p, IReadOnlyList<BoundRole> roles) { BoundRole? named = roles.FirstOrDefault(x => x.Descriptor.Kind == p.Role && !string.IsNullOrWhiteSpace(x.Descriptor.Name) && x.Descriptor.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)); return named ?? roles.FirstOrDefault(x => x.Descriptor.Kind == p.Role); }
-    private static object? MaterializeRole(ParameterDescriptor p, BoundRole r, ActivationContext c) { if (r.Values.Count == 0) return DefaultValue(p.ParameterType); if (r.Values.Count == 1) return MaterializeValue(r.Values[0], p.ParameterType, r.Descriptor.Direction, c); if (p.ParameterType.IsArray) { Type e = p.ParameterType.GetElementType()!; Array a = Array.CreateInstance(e, r.Values.Count); for (int i = 0; i < r.Values.Count; i++) a.SetValue(MaterializeValue(r.Values[i], e, r.Descriptor.Direction, c), i); return a; } throw new InvalidOperationException($"Role '{r.Descriptor.Kind}' produced multiple values for non-collection parameter '{p.Name}'."); }
-    private static object? MaterializeValue(BoundValue v, Type t, RoleDirection d, ActivationContext c) { object? raw; if (v.ConstantValue != null) raw = v.ConstantValue; else raw = v.Source switch { VariableExpression variable when d == RoleDirection.Output => DefaultValue(t), VariableExpression variable when c.Variables != null && c.Variables.TryGetValue(variable.Name, out object? vv) => vv, VariableExpression variable => throw new InvalidOperationException($"Variable '{variable.Name}' has no runtime value."), PipelineValueExpression => c.PipelineValue, InterpolatedStringExpression s when t == typeof(string) => s.Template, _ => DefaultValue(t) }; return v.Conversion?.Apply(raw) ?? raw; }
+    private object? MaterializeRole(ParameterDescriptor p, BoundRole r, ActivationContext c) { if (r.Values.Count == 0) return DefaultValue(p.ParameterType); if (r.Values.Count == 1) return MaterializeValue(r.Values[0], p.ParameterType, r.Descriptor.Direction, c); if (p.ParameterType.IsArray) { Type e = p.ParameterType.GetElementType()!; Array a = Array.CreateInstance(e, r.Values.Count); for (int i = 0; i < r.Values.Count; i++) a.SetValue(MaterializeValue(r.Values[i], e, r.Descriptor.Direction, c), i); return a; } throw new InvalidOperationException($"Role '{r.Descriptor.Kind}' produced multiple values for non-collection parameter '{p.Name}'."); }
+    private object? MaterializeValue(BoundValue v, Type t, RoleDirection d, ActivationContext c)
+    {
+        object? raw;
+        if (v.ConstantValue != null) raw = v.ConstantValue;
+        else if (v.Source is VariableExpression && d == RoleDirection.Output) raw = DefaultValue(t);
+        else raw = _expressions.Evaluate(v.Source, c);
+        return v.Conversion?.Apply(raw) ?? raw;
+    }
     private static object? DefaultValue(Type t) { if (t.IsArray) return Array.CreateInstance(t.GetElementType()!, 0); if (t.IsValueType) return Activator.CreateInstance(t); return null; }
 }
