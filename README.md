@@ -1,13 +1,11 @@
-# FluNET
+# FluNET.Classic
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-8.0+-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 
 **Author:** Paweł Potępa
 
-FluNET is an experimental C#/.NET engine for expressing small programs as English‑like commands instead of method calls. It focuses on language design, internal DSLs, and metaprogramming rather than being a full general‑purpose language.
-
-## Example
+FluNET.Classic is a sentence-oriented, typed and extensible scripting language hosted by .NET. It evolves the original FluNET experiment from the compatibility baseline `55455b46ed84fb447a8d47ba89772538944eb7b3` while preserving its English-like sentence syntax.
 
 ```text
 GET [text] FROM file.txt
@@ -15,39 +13,64 @@ SAVE [content] TO output.txt
 DOWNLOAD [data] FROM https://api.example.com
 ```
 
-Roughly equivalent to:
+The long-term goal is not to clone PowerShell. PowerShell is command/object-pipeline oriented; FluNET.Classic is **sentence/typed-sentence composition oriented**. CLR types, dependency injection and NuGet remain the underlying ecosystem.
 
-```csharp
-var text = File.ReadAllText("file.txt");
-File.WriteAllText("output.txt", content);
-var data = await httpClient.GetAsync("https://api.example.com");
+## Language invariants
+
+1. Existing Classic sentences are compatibility contracts and should not silently change meaning.
+2. Public extension APIs should mirror sentence concepts: verbs, semantic clauses, qualifiers and modules.
+3. `IWhat<T>`, `IFrom<T>`, `ITo<T>`, `IUsing<T>`, `IWith<T>` and `IThen<T>` are language roles, not implementation accidents.
+4. Reflection is allowed during module discovery, but parsing/token lookup must not repeatedly scan assemblies.
+5. FluNET types project CLR types instead of creating an unrelated runtime type universe.
+6. `THEN` evolves into typed composition while preserving the existing explicit variable form.
+
+## Current architecture
+
+```text
+source
+  -> tokenization
+  -> sentence creation
+  -> validation
+  -> execution pipeline
 ```
 
-## Architecture
+Classic now introduces the migration architecture alongside the existing runtime:
 
-Pipeline:
+```text
+source
+  -> lexer/tokenization
+  -> sentence parser
+  -> AST
+  -> binder
+       -> LanguageRegistry
+       -> ValueResolverRegistry
+       -> CLR-backed type system
+  -> bound script
+  -> ExecutionPipeline
+```
 
-1. **Tokenization** – raw input is split into `RawToken` and `Token` objects (`TokenFactory`).
-2. **TokenTree** – tokens are arranged into a small AST‑like structure.
-3. **Sentence building** – `SentenceFactory` + `DiscoveryService` resolve verbs and arguments.
-4. **Validation** – `SentenceValidator` checks that the sentence is syntactically valid.
-5. **Execution** – `SentenceExecutor` runs a strongly‑typed verb instance.
-
-All of this is orchestrated by the `Engine` using an `ExecutionPipeline` composed of small `IExecutionStep` processors (parse, validate, execute, error handling, etc.).
-
-## Keywords
-
-Keywords are first‑class types implementing `IKeyword`/`IWord` (for example `Get`, `Save`, `Post`, `Delete`, `Load`, `Send`, `Transform`). They define the textual surface of verbs (e.g. `"GET"`) and participate in validation. `DiscoveryService` scans assemblies to discover available keywords and verbs.
+`LanguageRegistry` is the single language catalog. It discovers words once, indexes verbs and synonyms, exposes extensible qualifiers and derives a `SentencePattern` directly from the existing typed clause interfaces.
 
 ## Evolving the language
 
-To grow the language, you extend the vocabulary and verbs rather than touching the core engine:
+Language packages should contribute vocabulary instead of modifying the engine:
 
-1. **Add keywords** – create `IKeyword`/`IWord` types for new verbs or prepositions (e.g. `Compress`, `Using`).
-2. **Implement verbs** – add `IVerb<,>` implementations that model real actions in your domain, plus `IWhat<T>`, `IFrom<T>`, `ITo<T>` etc. as needed.
-3. **Load assemblies** – ensure assemblies with your keywords/verbs are loaded so `DiscoveryService` can discover them.
-4. **Document usage** – add example sentences and tests so the new constructs stay stable as the engine evolves.
+```csharp
+public sealed class ParquetModule : IFluNetModule
+{
+    public void Configure(LanguageRegistry language)
+    {
+        language.RegisterQualifier("PARQUET");
+    }
+}
+```
+
+Natural future packages include `FluNET.Classic.Http`, `FluNET.Classic.Json`, `FluNET.Classic.Sql`, `FluNET.Classic.Azure` and domain-specific modules.
+
+Planned surface additions are deliberately orthogonal: `AS`, property access, interpolation, `WHERE`, typed implicit `THEN`, then sentence-shaped `IF/ELSE` and `FOR EACH`. The established `GET/SAVE/... FROM/TO/USING` syntax remains valid throughout that evolution.
+
+See [docs/LANGUAGE.md](docs/LANGUAGE.md) for the language contract and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the migration architecture.
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).
+MIT.
