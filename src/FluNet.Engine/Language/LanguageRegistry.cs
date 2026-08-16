@@ -1,28 +1,12 @@
 using FluNET.Keywords;
 using FluNET.Syntax.Core;
-using FluNET.Syntax.Nouns;
 using System.Reflection;
 
 namespace FluNET.Language;
 
-public sealed record WordDescriptor(
-    Type WordType,
-    string Text,
-    IReadOnlyList<string> Synonyms,
-    Func<IWord?> Factory);
-
-public sealed record VerbDescriptor(
-    Type VerbType,
-    string Text,
-    IReadOnlyList<string> Synonyms,
-    SentencePattern Pattern,
-    Func<IVerb?> Factory);
-
-public sealed record QualifierDescriptor(string Text, Type? ValueType = null);
-
 /// <summary>
-/// The single language catalog for FluNET Classic. Reflection is confined to
-/// registration time; token lookup itself is dictionary based and does not scan assemblies.
+/// Mutable registration facade used while composing a FluNET language. Reflection is
+/// centralized at registration/compilation time; consumers can obtain an immutable snapshot.
 /// </summary>
 public sealed class LanguageRegistry
 {
@@ -30,6 +14,7 @@ public sealed class LanguageRegistry
     private readonly Dictionary<string, VerbDescriptor> _verbs = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, QualifierDescriptor> _qualifiers = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<Assembly> _assemblies = [];
+    private readonly LanguageCompiler _compiler = new();
 
     public LanguageRegistry()
     {
@@ -40,6 +25,8 @@ public sealed class LanguageRegistry
     public IReadOnlyCollection<WordDescriptor> Words => _words.Values.DistinctBy(x => x.WordType).ToArray();
     public IReadOnlyCollection<VerbDescriptor> Verbs => _verbs.Values.DistinctBy(x => x.VerbType).ToArray();
     public IReadOnlyCollection<QualifierDescriptor> Qualifiers => _qualifiers.Values.ToArray();
+
+    public LanguageSnapshot Snapshot => new(Words, Verbs, Qualifiers);
 
     public void RegisterAssemblies(IEnumerable<Assembly> assemblies)
     {
@@ -94,6 +81,8 @@ public sealed class LanguageRegistry
     public bool TryGetVerb(string text, out VerbDescriptor? descriptor) =>
         _verbs.TryGetValue(text, out descriptor);
 
+    public IReadOnlyList<VerbDescriptor> GetVerbOverloads(string text) => Snapshot.GetVerbOverloads(text);
+
     public Type? GetVerbBaseType(string text)
     {
         if (!_verbs.TryGetValue(text, out VerbDescriptor? descriptor))
@@ -124,31 +113,11 @@ public sealed class LanguageRegistry
 
         if (prototype is IVerb)
         {
-            SentencePattern pattern = BuildPattern(type, keyword.Text);
-            var verbDescriptor = new VerbDescriptor(type, keyword.Text, synonyms, pattern, () => factory() as IVerb);
-            _verbs[keyword.Text] = verbDescriptor;
+            VerbDescriptor descriptor = _compiler.DescribeVerb(type, keyword.Text, synonyms, () => factory() as IVerb);
+            _verbs[keyword.Text] = descriptor;
             foreach (string synonym in synonyms)
-                _verbs[synonym] = verbDescriptor;
+                _verbs[synonym] = descriptor;
         }
-    }
-
-    private static SentencePattern BuildPattern(Type verbType, string text)
-    {
-        List<ClauseDescriptor> clauses = [];
-        foreach (Type contract in verbType.GetInterfaces().Where(x => x.IsGenericType))
-        {
-            Type definition = contract.GetGenericTypeDefinition();
-            Type valueType = contract.GetGenericArguments()[0];
-
-            if (definition == typeof(IWhat<>)) clauses.Add(new(ClauseKind.What, valueType));
-            else if (definition == typeof(IFrom<>)) clauses.Add(new(ClauseKind.From, valueType));
-            else if (definition == typeof(ITo<>)) clauses.Add(new(ClauseKind.To, valueType));
-            else if (definition == typeof(IUsing<>)) clauses.Add(new(ClauseKind.Using, valueType));
-            else if (definition == typeof(IWith<>)) clauses.Add(new(ClauseKind.With, valueType));
-            else if (definition == typeof(IThen<>)) clauses.Add(new(ClauseKind.Then, valueType, false));
-        }
-
-        return new SentencePattern(text.ToUpperInvariant(), clauses);
     }
 
     private static object? CreatePrototype(Type type)
@@ -180,7 +149,11 @@ public sealed class LanguageRegistry
 
     private void RegisterStandardQualifiers()
     {
-        foreach (string qualifier in new[] { "TEXT", "JSON", "XML", "BINARY", "CSV", "HTML", "YAML", "IMAGE", "VIDEO", "AUDIO" })
+        RegisterQualifier("TEXT", typeof(string));
+        RegisterQualifier("JSON");
+        RegisterQualifier("XML");
+        RegisterQualifier("BINARY", typeof(byte[]));
+        foreach (string qualifier in new[] { "CSV", "HTML", "YAML", "IMAGE", "VIDEO", "AUDIO" })
             RegisterQualifier(qualifier);
     }
 }
