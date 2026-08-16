@@ -5,8 +5,8 @@ using System.Reflection;
 namespace FluNET.Language;
 
 /// <summary>
-/// Mutable registration facade used while composing a FluNET language. A keyword may
-/// have multiple concrete verb implementations; overload selection belongs to binding.
+/// Mutable registration facade used while composing a FluNET language. New verb descriptors
+/// can be discovered without constructing the verb; legacy word creation still uses prototypes.
 /// </summary>
 public sealed class LanguageRegistry
 {
@@ -25,25 +25,17 @@ public sealed class LanguageRegistry
     public IReadOnlyCollection<WordDescriptor> Words => _words.Values.DistinctBy(x => x.WordType).ToArray();
     public IReadOnlyCollection<VerbDescriptor> Verbs => _verbs.Values.SelectMany(x => x).DistinctBy(x => x.VerbType).ToArray();
     public IReadOnlyCollection<QualifierDescriptor> Qualifiers => _qualifiers.Values.ToArray();
-
     public LanguageSnapshot Snapshot => new(Words, Verbs, Qualifiers);
 
     public void RegisterAssemblies(IEnumerable<Assembly> assemblies)
     {
         foreach (Assembly assembly in assemblies)
         {
-            if (!_assemblies.Add(assembly))
-                continue;
+            if (!_assemblies.Add(assembly)) continue;
 
             Type[] types;
-            try
-            {
-                types = assembly.GetTypes();
-            }
-            catch (ReflectionTypeLoadException ex)
-            {
-                types = ex.Types.Where(x => x != null).Cast<Type>().ToArray();
-            }
+            try { types = assembly.GetTypes(); }
+            catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(x => x != null).Cast<Type>().ToArray(); }
 
             foreach (Type type in types.Where(x => typeof(IWord).IsAssignableFrom(x) && !x.IsAbstract && !x.IsInterface))
                 RegisterWord(type);
@@ -78,9 +70,6 @@ public sealed class LanguageRegistry
         return false;
     }
 
-    /// <summary>
-    /// Legacy single-verb lookup. New binding code should call GetVerbOverloads.
-    /// </summary>
     public bool TryGetVerb(string text, out VerbDescriptor? descriptor)
     {
         IReadOnlyList<VerbDescriptor> overloads = GetVerbOverloads(text);
@@ -96,16 +85,13 @@ public sealed class LanguageRegistry
     public Type? GetVerbBaseType(string text)
     {
         VerbDescriptor? descriptor = GetVerbOverloads(text).FirstOrDefault();
-        if (descriptor == null)
-            return null;
+        if (descriptor == null) return null;
 
         Type? baseType = descriptor.VerbType.BaseType;
         while (baseType != null && !baseType.IsAbstract && baseType != typeof(object))
             baseType = baseType.BaseType;
 
-        if (baseType == null || baseType == typeof(object))
-            return null;
-
+        if (baseType == null || baseType == typeof(object)) return null;
         return baseType.IsGenericType ? baseType.GetGenericTypeDefinition() : baseType;
     }
 
@@ -113,29 +99,41 @@ public sealed class LanguageRegistry
     {
         Func<IWord?> factory = () => CreatePrototype(type) as IWord;
         IWord? prototype = factory();
+
+        if (typeof(IVerb).IsAssignableFrom(type))
+        {
+            IVerb? verbPrototype = prototype as IVerb;
+            VerbIdentity? identity = _compiler.DescribeVerbIdentity(type, verbPrototype);
+            if (identity != null)
+            {
+                VerbDescriptor descriptor = _compiler.DescribeVerb(type, identity.Text, identity.Synonyms, () => factory() as IVerb);
+                RegisterOverload(identity.Text, descriptor);
+                foreach (string synonym in identity.Synonyms)
+                    RegisterOverload(synonym, descriptor);
+
+                if (prototype is IKeyword)
+                {
+                    var word = new WordDescriptor(type, identity.Text, identity.Synonyms, factory);
+                    _words.TryAdd(identity.Text, word);
+                    foreach (string synonym in identity.Synonyms)
+                        _words.TryAdd(synonym, word);
+                }
+            }
+
+            return;
+        }
+
         if (prototype is not IKeyword keyword)
             return;
 
-        string[] synonyms = prototype is IVerb verb ? verb.Synonyms : [];
-        var word = new WordDescriptor(type, keyword.Text, synonyms, factory);
-        _words.TryAdd(keyword.Text, word);
-        foreach (string synonym in synonyms)
-            _words.TryAdd(synonym, word);
-
-        if (prototype is not IVerb)
-            return;
-
-        VerbDescriptor descriptor = _compiler.DescribeVerb(type, keyword.Text, synonyms, () => factory() as IVerb);
-        RegisterOverload(keyword.Text, descriptor);
-        foreach (string synonym in synonyms)
-            RegisterOverload(synonym, descriptor);
+        var nonVerbWord = new WordDescriptor(type, keyword.Text, [], factory);
+        _words.TryAdd(keyword.Text, nonVerbWord);
     }
 
     private void RegisterOverload(string keyword, VerbDescriptor descriptor)
     {
         if (!_verbs.TryGetValue(keyword, out List<VerbDescriptor>? overloads))
             _verbs[keyword] = overloads = [];
-
         if (overloads.All(x => x.VerbType != descriptor.VerbType))
             overloads.Add(descriptor);
     }
@@ -148,23 +146,15 @@ public sealed class LanguageRegistry
             if (parameterless != null)
                 return parameterless.Invoke(null);
 
-            ConstructorInfo? constructor = type.GetConstructors()
-                .OrderBy(x => x.GetParameters().Length)
-                .FirstOrDefault();
-
-            if (constructor == null)
-                return null;
+            ConstructorInfo? constructor = type.GetConstructors().OrderBy(x => x.GetParameters().Length).FirstOrDefault();
+            if (constructor == null) return null;
 
             object?[] arguments = constructor.GetParameters()
                 .Select(p => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null)
                 .ToArray();
-
             return constructor.Invoke(arguments);
         }
-        catch
-        {
-            return null;
-        }
+        catch { return null; }
     }
 
     private void RegisterStandardQualifiers()

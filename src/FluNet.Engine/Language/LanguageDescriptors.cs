@@ -3,6 +3,8 @@ using FluNET.Language.Metadata;
 
 namespace FluNET.Language;
 
+public sealed record VerbIdentity(string Text, IReadOnlyList<string> Synonyms);
+
 public sealed record WordDescriptor(
     Type WordType,
     string Text,

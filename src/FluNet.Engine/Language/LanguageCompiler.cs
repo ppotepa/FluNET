@@ -13,6 +13,26 @@ public sealed class LanguageCompiler
 {
     private readonly NullabilityInfoContext _nullability = new();
 
+    public VerbIdentity? DescribeVerbIdentity(Type verbType, IVerb? prototype = null)
+    {
+        VerbAttribute? explicitVerb = verbType.GetCustomAttribute<VerbAttribute>(true);
+        string? text = explicitVerb?.Text
+            ?? InferFamilyKeyword(verbType)
+            ?? prototype?.Text;
+
+        if (string.IsNullOrWhiteSpace(text))
+            return null;
+
+        string[] synonyms = verbType.GetCustomAttributes<AliasAttribute>(true)
+            .Select(x => x.Value)
+            .Concat(prototype?.Synonyms ?? [])
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        return new VerbIdentity(text.ToUpperInvariant(), synonyms);
+    }
+
     public VerbDescriptor DescribeVerb(
         Type verbType,
         string text,
@@ -97,10 +117,7 @@ public sealed class LanguageCompiler
         return RoleDirection.Input;
     }
 
-    private static SentencePattern BuildPattern(
-        Type verbType,
-        string text,
-        IReadOnlyList<ConstructorDescriptor> constructors)
+    private static SentencePattern BuildPattern(Type verbType, string text, IReadOnlyList<ConstructorDescriptor> constructors)
     {
         ConstructorDescriptor? constructor = constructors.FirstOrDefault(x => x.RoleParameterCount > 0);
         if (constructor != null)
@@ -153,15 +170,74 @@ public sealed class LanguageCompiler
 
     private static Type? InferResultType(Type verbType)
     {
-        Type? genericVerb = verbType.GetInterfaces().FirstOrDefault(x =>
+        Type? resultVerb = verbType.GetInterfaces().FirstOrDefault(x =>
+            x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IVerb<>));
+        if (resultVerb != null)
+            return resultVerb.GetGenericArguments()[0];
+
+        Type? legacyVerb = verbType.GetInterfaces().FirstOrDefault(x =>
             x.IsGenericType && x.GetGenericTypeDefinition() == typeof(IVerb<,>));
-        return genericVerb?.GetGenericArguments()[0];
+        return legacyVerb?.GetGenericArguments()[0];
     }
 
     private static Type? InferFamilyType(Type verbType)
     {
         Type[] families = [typeof(IGet), typeof(ISave), typeof(ILoad), typeof(ISend), typeof(IDelete), typeof(IDownload), typeof(IPost), typeof(ITransform), typeof(ISay)];
-        return families.FirstOrDefault(x => x.IsAssignableFrom(verbType));
+        Type? marker = families.FirstOrDefault(x => x.IsAssignableFrom(verbType));
+        if (marker != null) return marker;
+
+        Type? current = verbType.BaseType;
+        while (current != null && current != typeof(object))
+        {
+            Type candidate = current.IsGenericType ? current.GetGenericTypeDefinition() : current;
+            if (KnownFamilyKeyword(candidate.Name) != null)
+                return candidate;
+            current = current.BaseType;
+        }
+
+        return null;
+    }
+
+    private static string? InferFamilyKeyword(Type verbType)
+    {
+        if (typeof(IGet).IsAssignableFrom(verbType)) return "GET";
+        if (typeof(ISave).IsAssignableFrom(verbType)) return "SAVE";
+        if (typeof(ILoad).IsAssignableFrom(verbType)) return "LOAD";
+        if (typeof(ISend).IsAssignableFrom(verbType)) return "SEND";
+        if (typeof(IDelete).IsAssignableFrom(verbType)) return "DELETE";
+        if (typeof(IDownload).IsAssignableFrom(verbType)) return "DOWNLOAD";
+        if (typeof(IPost).IsAssignableFrom(verbType)) return "POST";
+        if (typeof(ITransform).IsAssignableFrom(verbType)) return "TRANSFORM";
+        if (typeof(ISay).IsAssignableFrom(verbType)) return "SAY";
+
+        Type? current = verbType.BaseType;
+        while (current != null && current != typeof(object))
+        {
+            Type candidate = current.IsGenericType ? current.GetGenericTypeDefinition() : current;
+            string? keyword = KnownFamilyKeyword(candidate.Name);
+            if (keyword != null) return keyword;
+            current = current.BaseType;
+        }
+
+        return null;
+    }
+
+    private static string? KnownFamilyKeyword(string typeName)
+    {
+        string name = typeName.Split('`')[0];
+        return name.ToUpperInvariant() switch
+        {
+            "GET" => "GET",
+            "SAVE" => "SAVE",
+            "LOAD" => "LOAD",
+            "SEND" => "SEND",
+            "DELETE" => "DELETE",
+            "DOWNLOAD" => "DOWNLOAD",
+            "POST" => "POST",
+            "TRANSFORM" => "TRANSFORM",
+            "SAY" => "SAY",
+            _ => null
+        };
     }
 
     private static bool IsFamily(Type verbType, Type marker, string legacyBaseName)
@@ -172,7 +248,7 @@ public sealed class LanguageCompiler
         while (current != null && current != typeof(object))
         {
             Type candidate = current.IsGenericType ? current.GetGenericTypeDefinition() : current;
-            if (candidate.Name.StartsWith(legacyBaseName, StringComparison.OrdinalIgnoreCase))
+            if (candidate.Name.Split('`')[0].Equals(legacyBaseName, StringComparison.OrdinalIgnoreCase))
                 return true;
             current = current.BaseType;
         }
