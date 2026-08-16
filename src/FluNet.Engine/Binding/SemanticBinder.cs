@@ -30,19 +30,30 @@ public sealed class SemanticBinder
         var candidates = new List<BoundSentence>();
         foreach (VerbDescriptor overload in overloads)
         {
-            BoundSentence? candidate = TryBindOverload(sentence, overload, context);
-            if (candidate != null) candidates.Add(candidate);
+            IReadOnlyList<VerbPatternDescriptor> patterns = overload.Patterns.Count > 0
+                ? overload.Patterns
+                : [new VerbPatternDescriptor(overload.Pattern, overload.Constructors.FirstOrDefault())];
+
+            foreach (VerbPatternDescriptor pattern in patterns)
+            {
+                BoundSentence? candidate = TryBindPattern(sentence, overload, pattern, context);
+                if (candidate != null) candidates.Add(candidate);
+            }
         }
 
         if (candidates.Count == 0)
         {
-            string signatures = string.Join(", ", overloads.Select(FormatSignature));
+            string signatures = string.Join(", ", overloads.SelectMany(FormatSignatures));
             return Failure("FLU2101", $"No overload of '{sentence.Verb}' matches this sentence. Available: {signatures}.");
         }
 
         int bestCost = candidates.Min(x => x.BindingCost);
         BoundSentence[] best = candidates.Where(x => x.BindingCost == bestCost).ToArray();
-        if (best.Length > 1) return Failure("FLU2102", $"Ambiguous '{sentence.Verb}' sentence. Matching overloads: {string.Join(", ", best.Select(x => FormatSignature(x.Verb)))}.");
+        if (best.Length > 1)
+        {
+            string matches = string.Join(", ", best.Select(x => FormatSignature(x.Verb.Text, x.Roles.Select(r => r.Descriptor))));
+            return Failure("FLU2102", $"Ambiguous '{sentence.Verb}' sentence. Matching overloads: {matches}.");
+        }
         return new(best[0], []);
     }
 
@@ -68,30 +79,14 @@ public sealed class SemanticBinder
         return new(new BoundPipeline(bound, pipelineType), diagnostics);
     }
 
-    private bool QualifierMatches(string? qualifierText, VerbDescriptor verb)
+    private BoundSentence? TryBindPattern(SentenceNode sentence, VerbDescriptor verb, VerbPatternDescriptor patternDescriptor, BindingContext context)
     {
-        if (qualifierText == null) return true;
-        if (!_language.TryGetQualifier(qualifierText, out QualifierDescriptor? qualifier) || qualifier == null) return false;
-        if (qualifier.ValueType == null) return true;
-
-        IEnumerable<Type> candidateTypes = verb.Pattern.Clauses.Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType);
-        if (verb.ResultType != null) candidateTypes = candidateTypes.Prepend(verb.ResultType);
-        return candidateTypes.Any(type => TypeMatchesQualifier(type, qualifier.ValueType));
-    }
-
-    private static bool TypeMatchesQualifier(Type candidate, Type qualifier)
-    {
-        if (candidate == qualifier || qualifier.IsAssignableFrom(candidate) || candidate.IsAssignableFrom(qualifier)) return true;
-        if (candidate.IsArray && candidate.GetElementType() == qualifier) return true;
-        return false;
-    }
-
-    private BoundSentence? TryBindOverload(SentenceNode sentence, VerbDescriptor verb, BindingContext context)
-    {
+        SentencePattern pattern = patternDescriptor.Pattern;
         var remaining = sentence.Clauses.GroupBy(x => x.Kind).ToDictionary(x => x.Key, x => new Queue<ClauseNode>(x));
         var roles = new List<BoundRole>();
         int cost = 0;
-        foreach (ClauseDescriptor expected in verb.Pattern.Clauses)
+
+        foreach (ClauseDescriptor expected in pattern.Clauses)
         {
             int minimum = expected.Cardinality is RoleCardinality.One or RoleCardinality.OneOrMore ? 1 : 0;
             bool repeated = expected.Cardinality is RoleCardinality.ZeroOrMore or RoleCardinality.OneOrMore;
@@ -119,9 +114,26 @@ public sealed class SemanticBinder
             if (values.Count < minimum) return null;
             roles.Add(new BoundRole(expected, values));
         }
+
         if (remaining.Values.Any(queue => queue.Count > 0)) return null;
-        ConstructorDescriptor? constructor = verb.Constructors.FirstOrDefault(x => x.RoleParameterCount > 0) ?? verb.Constructors.FirstOrDefault();
-        return new BoundSentence(verb, constructor, roles, verb.ResultType, cost);
+        return new BoundSentence(verb, patternDescriptor.Constructor, roles, verb.ResultType, cost);
+    }
+
+    private bool QualifierMatches(string? qualifierText, VerbDescriptor verb)
+    {
+        if (qualifierText == null) return true;
+        if (!_language.TryGetQualifier(qualifierText, out QualifierDescriptor? qualifier) || qualifier == null) return false;
+        if (qualifier.ValueType == null) return true;
+        IEnumerable<Type> candidateTypes = verb.Patterns.SelectMany(p => p.Pattern.Clauses).Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType);
+        if (!candidateTypes.Any()) candidateTypes = verb.Pattern.Clauses.Where(x => x.Kind == ClauseKind.What).Select(x => x.ValueType);
+        if (verb.ResultType != null) candidateTypes = candidateTypes.Prepend(verb.ResultType);
+        return candidateTypes.Any(type => TypeMatchesQualifier(type, qualifier.ValueType));
+    }
+
+    private static bool TypeMatchesQualifier(Type candidate, Type qualifier)
+    {
+        if (candidate == qualifier || qualifier.IsAssignableFrom(candidate) || candidate.IsAssignableFrom(qualifier)) return true;
+        return candidate.IsArray && candidate.GetElementType() == qualifier;
     }
 
     private BoundValue? TryBindRepeatedValues(Queue<ClauseNode> queue, ClauseDescriptor expected, VerbDescriptor verb, BindingContext context)
@@ -165,6 +177,11 @@ public sealed class SemanticBinder
     }
 
     private static BindingResult<BoundSentence> Failure(string code, string message) => new(null, [Diagnostic.Error(code, message)]);
-    private static string FormatSignature(VerbDescriptor verb) { string clauses = string.Join(" ", verb.Pattern.Clauses.Select(x => $"{x.Kind.ToString().ToUpperInvariant()}<{FriendlyName(x.ValueType)}>")); return string.IsNullOrEmpty(clauses) ? verb.Text : $"{verb.Text} {clauses}"; }
+    private static IEnumerable<string> FormatSignatures(VerbDescriptor verb)
+    {
+        IReadOnlyList<VerbPatternDescriptor> patterns = verb.Patterns.Count > 0 ? verb.Patterns : [new VerbPatternDescriptor(verb.Pattern, null)];
+        return patterns.Select(x => FormatSignature(verb.Text, x.Pattern.Clauses));
+    }
+    private static string FormatSignature(string verb, IEnumerable<ClauseDescriptor> clauses) => $"{verb} {string.Join(" ", clauses.Select(x => $"{x.Kind.ToString().ToUpperInvariant()}<{FriendlyName(x.ValueType)}>"))}".TrimEnd();
     private static string FriendlyName(Type type) => type.IsArray ? $"{FriendlyName(type.GetElementType()!)}[]" : type.Name;
 }

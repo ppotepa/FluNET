@@ -13,6 +13,10 @@ public sealed record ExecutionTraitsDescriptor(
     bool LongRunning,
     bool SideEffecting);
 
+public sealed record VerbPatternDescriptor(
+    SentencePattern Pattern,
+    ConstructorDescriptor? Constructor);
+
 public sealed record WordDescriptor(Type WordType, string Text, IReadOnlyList<string> Synonyms, Func<IWord?> Factory) : ILanguageElement
 {
     public string StableId => $"word:{Text.ToLowerInvariant()}:{WordType.FullName}";
@@ -24,6 +28,7 @@ public sealed record VerbDescriptor(Type VerbType, string Text, IReadOnlyList<st
     public string StableId => $"verb:{Text.ToLowerInvariant()}:{VerbType.FullName}";
     public string Name => Text;
     public IReadOnlyList<ConstructorDescriptor> Constructors { get; init; } = [];
+    public IReadOnlyList<VerbPatternDescriptor> Patterns { get; init; } = [];
     public Type? ResultType { get; init; }
     public Type? FamilyType { get; init; }
     public IReadOnlyList<string> Capabilities { get; init; } = [];
@@ -36,11 +41,7 @@ public sealed record QualifierDescriptor(string Text, Type? ValueType = null) : 
     public string Name => Text;
 }
 
-public sealed record ModuleDescriptor(
-    string ModuleName,
-    Version Version,
-    Type ModuleType,
-    IReadOnlyList<Type> Dependencies) : ILanguageElement
+public sealed record ModuleDescriptor(string ModuleName, Version Version, Type ModuleType, IReadOnlyList<Type> Dependencies) : ILanguageElement
 {
     public string StableId => $"module:{ModuleName.ToLowerInvariant()}";
     public string Name => ModuleName;

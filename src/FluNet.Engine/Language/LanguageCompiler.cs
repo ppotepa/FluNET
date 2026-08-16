@@ -27,10 +27,13 @@ public sealed class LanguageCompiler
     public VerbDescriptor DescribeVerb(Type verbType, string text, IReadOnlyList<string> synonyms, Func<IVerb?> factory)
     {
         IReadOnlyList<ConstructorDescriptor> constructors = DescribeConstructors(verbType);
-        SentencePattern pattern = BuildPattern(verbType, text, constructors);
-        return new VerbDescriptor(verbType, text, synonyms, pattern, factory)
+        IReadOnlyList<VerbPatternDescriptor> patterns = BuildPatterns(verbType, text, constructors);
+        SentencePattern compatibilityPattern = patterns.FirstOrDefault()?.Pattern ?? BuildInterfacePattern(verbType, text);
+
+        return new VerbDescriptor(verbType, text, synonyms, compatibilityPattern, factory)
         {
             Constructors = constructors,
+            Patterns = patterns,
             ResultType = InferResultType(verbType),
             FamilyType = InferFamilyType(verbType),
             Capabilities = verbType.GetCustomAttributes<RequiresCapabilityAttribute>(true).Select(x => x.Capability).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
@@ -47,6 +50,55 @@ public sealed class LanguageCompiler
     public IReadOnlyList<ConstructorDescriptor> DescribeConstructors(Type type) => type.GetConstructors(BindingFlags.Public | BindingFlags.Instance)
         .Select(c => new ConstructorDescriptor(c, c.GetParameters().Select(p => DescribeParameter(type, p)).ToArray()))
         .OrderByDescending(x => x.RoleParameterCount).ThenBy(x => x.ServiceParameterCount).ToArray();
+
+    private IReadOnlyList<VerbPatternDescriptor> BuildPatterns(Type verbType, string text, IReadOnlyList<ConstructorDescriptor> constructors)
+    {
+        var patterns = new List<VerbPatternDescriptor>();
+        foreach (ConstructorDescriptor constructor in constructors.Where(x => x.RoleParameterCount > 0))
+        {
+            ClauseDescriptor[] clauses = constructor.Parameters
+                .Where(x => x.Role != null)
+                .Select(ToClause)
+                .ToArray();
+            if (clauses.Length > 0)
+                patterns.Add(new(new SentencePattern(text.ToUpperInvariant(), clauses), constructor));
+        }
+
+        if (patterns.Count == 0)
+            patterns.Add(new(BuildInterfacePattern(verbType, text), constructors.FirstOrDefault()));
+
+        return patterns
+            .DistinctBy(x => PatternKey(x.Pattern), StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+    }
+
+    private static string PatternKey(SentencePattern pattern) => string.Join("|", pattern.Clauses.Select(x =>
+        $"{x.Kind}:{x.Name}:{x.ValueType.FullName}:{x.Cardinality}:{x.Direction}"));
+
+    private static ClauseDescriptor ToClause(ParameterDescriptor parameter) => new(
+        parameter.Role!.Value,
+        parameter.ParameterType,
+        !parameter.IsOptional,
+        parameter.Name,
+        parameter.Direction,
+        parameter.IsParams ? RoleCardinality.ZeroOrMore : (parameter.IsOptional ? RoleCardinality.ZeroOrOne : RoleCardinality.One),
+        parameter.Shape.ElementType);
+
+    private SentencePattern BuildInterfacePattern(Type verbType, string text)
+    {
+        var fallback = new List<ClauseDescriptor>();
+        foreach (Type contract in verbType.GetInterfaces().Where(x => x.IsGenericType))
+        {
+            Type definition = contract.GetGenericTypeDefinition();
+            Type valueType = contract.GetGenericArguments()[0];
+            ClauseKind? kind = RoleKindFor(definition);
+            if (kind == null) continue;
+            TypeShape shape = TypeShape.Analyze(valueType);
+            RoleDirection direction = kind == ClauseKind.What && IsFamily(verbType, typeof(IGet), "Get") ? RoleDirection.Output : RoleDirection.Input;
+            fallback.Add(new(kind.Value, valueType, true, null, direction, RoleCardinality.One, shape.ElementType));
+        }
+        return new SentencePattern(text.ToUpperInvariant(), fallback);
+    }
 
     private ParameterDescriptor DescribeParameter(Type verbType, ParameterInfo parameter)
     {
@@ -70,29 +122,6 @@ public sealed class LanguageCompiler
         if (parameter.GetCustomAttribute<InputOutputAttribute>() != null) return RoleDirection.InputOutput;
         if (parameter.GetCustomAttribute<InputAttribute>() != null) return RoleDirection.Input;
         return role == ClauseKind.What && IsFamily(verbType, typeof(IGet), "Get") ? RoleDirection.Output : RoleDirection.Input;
-    }
-
-    private static SentencePattern BuildPattern(Type verbType, string text, IReadOnlyList<ConstructorDescriptor> constructors)
-    {
-        ConstructorDescriptor? constructor = constructors.FirstOrDefault(x => x.RoleParameterCount > 0);
-        if (constructor != null)
-        {
-            ClauseDescriptor[] clauses = constructor.Parameters.Where(x => x.Role != null).Select(x => new ClauseDescriptor(x.Role!.Value, x.ParameterType, !x.IsOptional, x.Name, x.Direction, x.IsParams ? RoleCardinality.ZeroOrMore : (x.IsOptional ? RoleCardinality.ZeroOrOne : RoleCardinality.One), x.Shape.ElementType)).ToArray();
-            if (clauses.Length > 0) return new SentencePattern(text.ToUpperInvariant(), clauses);
-        }
-
-        var fallback = new List<ClauseDescriptor>();
-        foreach (Type contract in verbType.GetInterfaces().Where(x => x.IsGenericType))
-        {
-            Type definition = contract.GetGenericTypeDefinition();
-            Type valueType = contract.GetGenericArguments()[0];
-            ClauseKind? kind = RoleKindFor(definition);
-            if (kind == null) continue;
-            TypeShape shape = TypeShape.Analyze(valueType);
-            RoleDirection direction = kind == ClauseKind.What && IsFamily(verbType, typeof(IGet), "Get") ? RoleDirection.Output : RoleDirection.Input;
-            fallback.Add(new(kind.Value, valueType, true, null, direction, RoleCardinality.One, shape.ElementType));
-        }
-        return new SentencePattern(text.ToUpperInvariant(), fallback);
     }
 
     private static ClauseKind? RoleKindFor(Type d) => d == typeof(IWhat<>) ? ClauseKind.What : d == typeof(IFrom<>) ? ClauseKind.From : d == typeof(ITo<>) ? ClauseKind.To : d == typeof(IUsing<>) ? ClauseKind.Using : d == typeof(IWith<>) ? ClauseKind.With : d == typeof(IThen<>) ? ClauseKind.Then : null;
