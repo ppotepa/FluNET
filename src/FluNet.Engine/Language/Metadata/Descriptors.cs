@@ -18,8 +18,9 @@ public sealed record ParameterDescriptor(
 
 public sealed record ConstructorDescriptor(
     ConstructorInfo Constructor,
-    IReadOnlyList<ParameterDescriptor> Parameters)
+    IReadOnlyList<ParameterDescriptor> Parameters,
+    Func<object?[], object> Activator)
 {
     public int RoleParameterCount => Parameters.Count(x => x.Role != null);
-    public int ServiceParameterCount => Parameters.Count(x => x.FromServices);
+    public int ServiceParameterCount => Parameters.Count(x => x.FromServices || x.Role == null);
 }
