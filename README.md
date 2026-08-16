@@ -4,7 +4,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 
-<<<<<<< HEAD
 FluNET is an experimental .NET DSL/compiler/runtime for readable local automation and typed data workflows. It supports an explicit **canonical syntax** and a higher-level **compact syntax** that can infer obvious resource types, output names and data dependencies before lowering to the same typed execution engine.
 
 ```text
@@ -19,28 +18,11 @@ The compiler can infer that the two reads are independent, schedule them togethe
 ## Quick start
 
 Requirement: .NET 8 SDK.
-=======
-FluNET is an experimental external DSL and execution engine for small,
-English-like automation commands. It is a proof of concept, not a sandbox or a
-general-purpose language. The current focus is predictable parsing, typed verb
-activation, explicit capabilities, and useful diagnostics.
-
-```text
-GET [text] FROM {input.txt} THEN SAVE [text] TO {copy.txt}.
-SAY "Hello from FluNET!"
-DOWNLOAD [file] FROM {https://example.com/file.txt} TO {file.txt}.
-```
-
-## Quick start
-
-Requirements: .NET 8 SDK.
->>>>>>> origin/agent/stabilize-poc-foundation
 
 ```bash
 git clone https://github.com/ppotepa/FluNET.git
 cd FluNET
 dotnet build FluNET.sln
-<<<<<<< HEAD
 ```
 
 Canonical one-line command:
@@ -347,111 +329,3 @@ dotnet test FluNET.sln --configuration Release --no-build
 This documentation update does not claim that those commands have passed for the exact current tree.
 
 Author: Paweł Potępa. Licensed under the [MIT License](LICENSE).
-=======
-dotnet run --project src/FluNET.Cli -- -- "SAY 'Hello from FluNET'."
-```
-
-Validate without executing:
-
-```bash
-dotnet run --project src/FluNET.Cli -- --analyze -- "GET [text] FROM {input.txt}"
-```
-
-The CLI restricts file access to the current directory by default and denies
-network access by default. Grant only the capabilities a command needs:
-
-```bash
-dotnet run --project src/FluNET.Cli -- \
-  --root ./downloads \
-  --host example.com \
-  -- "DOWNLOAD [file] FROM {https://example.com/file.txt} TO {./downloads/file.txt}."
-```
-
-Use `--root` and `--host` more than once to allow multiple roots or hosts.
-
-## Language surface
-
-| Form | Meaning |
-| --- | --- |
-| `[name]` | A named variable. Retrieval verbs write results to it; other verbs read it. |
-| `{value}` | An inline reference such as a path, URL, or JSON object. Spaces are preserved. |
-| `"text"` or `'text'` | A quoted literal. Spaces, newlines, and escaped quotes are preserved. |
-| `THEN` | Runs another command with the same variable context. |
-| `.`, `?`, `!` | Optional terminators. Attached terminators are tokenized separately. |
-
-Implemented verb families include `GET`, `SAVE`, `LOAD`, `DELETE`, `DOWNLOAD`,
-`POST`, `SAY`, `SEND`, and `TRANSFORM`. Some have synonyms such as `FETCH`,
-`PULL`, and `ECHO`.
-
-## Embedding
-
-```csharp
-using FluNET.Context;
-using FluNET.Execution;
-using FluNET.Prompt;
-
-using FluNETContext context = FluNETContext.Create();
-Engine engine = context.GetEngine();
-
-PromptAnalysis analysis = engine.Analyze(
-    new ProcessedPrompt("GET [text] FROM {input.txt}."));
-
-ExecutionResult execution = await engine.ExecuteAsync(
-    new ProcessedPrompt("SAY 'Hello'."),
-    cancellationToken);
-
-if (!execution.IsSuccess)
-{
-    Console.Error.WriteLine($"{execution.Error!.Code}: {execution.Error.Message}");
-}
-```
-
-`Analyze` is side-effect free. `ExecuteAsync` returns structured syntax,
-validation, activation, capability, cancellation, or execution errors; an
-operation failure is never represented as a successful validation plus an
-unexplained `null`.
-
-Hosts can replace `IFluNetFileSystem`, `IHttpTransport`, `ITextOutput`, and
-`IExecutionPolicy` through `FluNETContext.Create(services => ...)`. The CLI uses
-`RestrictedExecutionPolicy`; the embedding API keeps `AllowAllExecutionPolicy`
-as a backward-compatible default, so production hosts should replace it.
-
-## Architecture
-
-1. `ProcessedPrompt` performs quote-aware lexical analysis and emits stable
-   diagnostics (`FLN001` and later) with source positions.
-2. `PromptSyntax` represents the top-level command sequence; the older linked
-   token/word chain remains an execution compatibility layer.
-3. `LanguageRegistry` performs one deterministic, sorted discovery pass and
-   rejects ambiguous names or synonyms.
-4. `SentenceValidator` validates every command, including commands after
-   `THEN`, before execution starts.
-5. The asynchronous execution pipeline activates typed verbs through one
-   registry and passes cancellation into injected effect capabilities.
-
-To add a verb, implement the appropriate `IVerb`/noun interfaces and ensure its
-assembly is loaded before creating `FluNETContext`. Add executable examples and
-tests for its grammar, activation, success path, and failure path. Name and
-synonym collisions fail registry construction with a clear error.
-
-## Tests
-
-```bash
-dotnet test FluNET.sln --configuration Release
-```
-
-HTTP behavior is tested with an injected in-memory transport; no manual test
-server or public network connection is required. CI builds and tests on Linux,
-Windows, and macOS.
-
-## Status and limitations
-
-- The grammar is intentionally small and still evolving.
-- The typed syntax model currently covers command boundaries; verb arguments
-  still flow through the compatibility word chain.
-- `SEND` is a simulated implementation rather than a real mail transport.
-- This project does not make untrusted prompts safe by itself. Configure a
-  restrictive execution policy and isolate the host process where appropriate.
-
-Author: Paweł Potępa. Licensed under the [MIT License](LICENSE).
->>>>>>> origin/agent/stabilize-poc-foundation

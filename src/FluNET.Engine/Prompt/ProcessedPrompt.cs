@@ -11,7 +11,6 @@ public sealed class ProcessedPrompt
 {
     private readonly string _prompt;
 
-<<<<<<< HEAD
     public ProcessedPrompt(string prompt, PromptGrammar? grammar = null)
     {
         _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
@@ -29,19 +28,6 @@ public sealed class ProcessedPrompt
 
     public PromptGrammar Grammar { get; }
 
-=======
-    public ProcessedPrompt(string prompt)
-    {
-        _prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
-
-        var (tokens, diagnostics) = Tokenize(prompt);
-        LexicalTokens = tokens;
-        Diagnostics = diagnostics;
-        Tokens = tokens.Select(token => token.Text).ToArray();
-        Syntax = BuildSyntax(tokens, diagnostics);
-    }
-
->>>>>>> origin/agent/stabilize-poc-foundation
     /// <summary>Compatibility view containing token text only.</summary>
     public string[] Tokens { get; }
 
@@ -53,7 +39,6 @@ public sealed class ProcessedPrompt
 
     public bool IsValid => Diagnostics.Count == 0;
 
-<<<<<<< HEAD
     /// <summary>Parses the same source using a host-provided language grammar.</summary>
     public ProcessedPrompt WithGrammar(PromptGrammar grammar)
     {
@@ -61,8 +46,6 @@ public sealed class ProcessedPrompt
         return ReferenceEquals(Grammar, grammar) ? this : new ProcessedPrompt(_prompt, grammar);
     }
 
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
     private static (IReadOnlyList<PromptToken> Tokens, List<PromptDiagnostic> Diagnostics) Tokenize(string input)
     {
         List<PromptToken> tokens = [];
@@ -112,11 +95,7 @@ public sealed class ProcessedPrompt
                 continue;
             }
 
-<<<<<<< HEAD
             if (character is '"' or '\'' && (current.Length == 0 || delimiters.Count > 0))
-=======
-            if (character is '\"' or '\'' && (current.Length == 0 || delimiters.Count > 0))
->>>>>>> origin/agent/stabilize-poc-foundation
             {
                 if (tokenStart < 0)
                 {
@@ -228,7 +207,6 @@ public sealed class ProcessedPrompt
 
     private static PromptSyntax BuildSyntax(
         IReadOnlyList<PromptToken> tokens,
-<<<<<<< HEAD
         ICollection<PromptDiagnostic> diagnostics,
         PromptGrammar grammar)
     {
@@ -238,12 +216,6 @@ public sealed class ProcessedPrompt
         PromptToken? pendingConnector = null;
         CommandLinkKind pendingLinkKind = default;
         int parenthesisDepth = 0;
-=======
-        ICollection<PromptDiagnostic> diagnostics)
-    {
-        List<CommandSyntax> commands = [];
-        List<PromptToken> commandTokens = [];
->>>>>>> origin/agent/stabilize-poc-foundation
 
         foreach (PromptToken token in tokens)
         {
@@ -252,41 +224,27 @@ public sealed class ProcessedPrompt
                 continue;
             }
 
-<<<<<<< HEAD
             if (parenthesisDepth == 0 &&
                 token.Kind == PromptTokenKind.Word &&
                 grammar.TryGetLinkKind(token.Text, out CommandLinkKind linkKind))
-=======
-            if (token.Text.Equals("THEN", StringComparison.OrdinalIgnoreCase))
->>>>>>> origin/agent/stabilize-poc-foundation
             {
                 if (commandTokens.Count == 0)
                 {
                     diagnostics.Add(new PromptDiagnostic(
                         "FLN004",
-<<<<<<< HEAD
                         $"{token.Text.ToUpperInvariant()} must separate two non-empty commands.",
-=======
-                        "THEN must separate two non-empty commands.",
->>>>>>> origin/agent/stabilize-poc-foundation
                         token.Start));
                 }
                 else
                 {
-<<<<<<< HEAD
                     commands.Add(new CommandSyntax(commandTokens.ToArray(), grammar));
                     commandTokens.Clear();
                     pendingConnector = token;
                     pendingLinkKind = linkKind;
-=======
-                    commands.Add(new CommandSyntax(commandTokens.ToArray()));
-                    commandTokens.Clear();
->>>>>>> origin/agent/stabilize-poc-foundation
                 }
                 continue;
             }
 
-<<<<<<< HEAD
             if (pendingConnector is not null && commandTokens.Count == 0 && commands.Count > 0)
             {
                 links.Add(new CommandLinkSyntax(
@@ -299,14 +257,10 @@ public sealed class ProcessedPrompt
 
             commandTokens.Add(token);
             parenthesisDepth = UpdateParenthesisDepth(parenthesisDepth, token);
-=======
-            commandTokens.Add(token);
->>>>>>> origin/agent/stabilize-poc-foundation
         }
 
         if (commandTokens.Count > 0)
         {
-<<<<<<< HEAD
             commands.Add(new CommandSyntax(commandTokens.ToArray(), grammar));
         }
         else if (pendingConnector is not null)
@@ -347,20 +301,6 @@ public sealed class ProcessedPrompt
             }
         }
         return depth;
-=======
-            commands.Add(new CommandSyntax(commandTokens.ToArray()));
-        }
-        else if (tokens.Any(token => token.Text.Equals("THEN", StringComparison.OrdinalIgnoreCase)))
-        {
-            PromptToken then = tokens.Last(token => token.Text.Equals("THEN", StringComparison.OrdinalIgnoreCase));
-            diagnostics.Add(new PromptDiagnostic(
-                "FLN004",
-                "THEN must be followed by a command.",
-                then.Start));
-        }
-
-        return new PromptSyntax(commands);
->>>>>>> origin/agent/stabilize-poc-foundation
     }
 
     public override string ToString()

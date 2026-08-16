@@ -9,7 +9,6 @@ namespace FluNET.Syntax.Validation;
 /// <summary>Validates every command in a prompt before execution.</summary>
 public sealed class SentenceValidator(Lexicon.Lexicon lexicon, WordFactory wordFactory)
 {
-<<<<<<< HEAD
     /// <summary>
     /// Validates command trees whose boundaries were established by the parser.
     /// This is the canonical program-validation path.
@@ -38,8 +37,6 @@ public sealed class SentenceValidator(Lexicon.Lexicon lexicon, WordFactory wordF
     /// Compatibility entry point for callers that still provide one flattened
     /// token tree. The engine pipeline uses <see cref="ValidateCommands"/>.
     /// </summary>
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
     public ValidationResult ValidateSentence(TokenTree tokenTree)
     {
         if (tokenTree.Count == 0)
@@ -183,11 +180,7 @@ public sealed class SentenceValidator(Lexicon.Lexicon lexicon, WordFactory wordF
             return ValidationResult.Failure($"{verb} requires a subject before {prepositionName}.");
         }
 
-<<<<<<< HEAD
         if (words[1] is QualifierWord && prepositionIndex == 2 && verb != "LOAD")
-=======
-        if (words[1] is QualifierWord && prepositionIndex == 2)
->>>>>>> origin/agent/stabilize-poc-foundation
         {
             return ValidationResult.Failure(
                 $"{verb} requires a subject after the qualifier and before {prepositionName}.");

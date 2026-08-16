@@ -46,7 +46,6 @@ namespace FluNET.Sentences
         public object? Execute(ISentence sentence) =>
             ExecuteAsync(sentence).AsTask().GetAwaiter().GetResult();
 
-<<<<<<< HEAD
         public ValueTask<object?> ExecuteAsync(
             ISentence sentence,
             CancellationToken cancellationToken = default) =>
@@ -55,16 +54,11 @@ namespace FluNET.Sentences
         public async ValueTask<object?> ExecuteAsync(
             ISentence sentence,
             BoundCommand? boundCommand,
-=======
-        public async ValueTask<object?> ExecuteAsync(
-            ISentence sentence,
->>>>>>> origin/agent/stabilize-poc-foundation
             CancellationToken cancellationToken = default)
         {
             if (sentence?.Root == null)
             {
                 throw new ArgumentException("A sentence with a root verb is required.", nameof(sentence));
-<<<<<<< HEAD
             }
 
             cancellationToken.ThrowIfCancellationRequested();
@@ -78,11 +72,7 @@ namespace FluNET.Sentences
                 {
                     return dispatch.Result;
                 }
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
             }
-
-            cancellationToken.ThrowIfCancellationRequested();
 
             // Debug: Print the sentence structure
             System.Diagnostics.Debug.WriteLine("  Sentence structure:");

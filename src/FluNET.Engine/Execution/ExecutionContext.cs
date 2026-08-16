@@ -1,17 +1,11 @@
-<<<<<<< HEAD
 using FluNET.Compilation;
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
 using FluNET.Prompt;
 using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Tokens.Tree;
-<<<<<<< HEAD
 using FluNET.Language.Binding;
 using FluNET.Execution.Planning;
 using FluNET.Execution.Workflow;
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
 
 namespace FluNET.Execution
 {
@@ -22,7 +16,6 @@ namespace FluNET.Execution
     public class ExecutionContext
     {
         public ProcessedPrompt Prompt { get; }
-<<<<<<< HEAD
         public FluNetProgram? Program { get; internal set; }
         public BoundProgram? BoundProgram { get; internal set; }
         public DiagnosticBag CompilationDiagnostics { get; } = new();
@@ -36,8 +29,6 @@ namespace FluNET.Execution
         /// longer populates these members.
         /// </summary>
         public IReadOnlyList<TokenTree> CommandTrees { get; internal set; } = Array.Empty<TokenTree>();
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
         public TokenTree? TokenTree { get; set; }
         public ValidationResult? ValidationResult { get; set; }
         public ISentence? Sentence { get; set; }
@@ -50,7 +41,6 @@ namespace FluNET.Execution
         /// </summary>
         public Dictionary<string, object> Data { get; } = new();
 
-<<<<<<< HEAD
         public WorkflowRunState Workflow { get; }
 
         public ExecutionContext(
@@ -59,11 +49,6 @@ namespace FluNET.Execution
         {
             Prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
             Workflow = new WorkflowRunState(workflowOptions);
-=======
-        public ExecutionContext(ProcessedPrompt prompt)
-        {
-            Prompt = prompt ?? throw new ArgumentNullException(nameof(prompt));
->>>>>>> origin/agent/stabilize-poc-foundation
         }
 
         /// <summary>

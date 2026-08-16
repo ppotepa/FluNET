@@ -1,1 +1,0 @@
-FluNET Operations Control Tower: local-users=5; active=4; published=4; remote-users=10; healthy=true

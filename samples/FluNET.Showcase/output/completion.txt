@@ -1,1 +1,0 @@
-FluNET Showcase completed at 2026-08-16T14:29:44.2395660+00:00; temp=C:\Users\ppotepa\AppData\Local\Temp\; home=C:\Users\ppotepa; cache=C:\Users\ppotepa\AppData\Local\Cache

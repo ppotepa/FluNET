@@ -2,20 +2,13 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-<<<<<<< HEAD
     <TargetFramework>net9.0</TargetFramework>
-=======
-    <TargetFramework>net8.0</TargetFramework>
->>>>>>> origin/agent/stabilize-poc-foundation
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AssemblyName>flunet</AssemblyName>
     <RootNamespace>FluNET.Cli</RootNamespace>
-<<<<<<< HEAD
     <IsPackable>false</IsPackable>
     <Description>Compatibility FluNET CLI. New tooling is provided by FluNET.Tool.</Description>
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
   </PropertyGroup>
 
   <ItemGroup>

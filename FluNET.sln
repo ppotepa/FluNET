@@ -17,11 +17,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Engine", "src\FluNET.Engine\FluNET.Engine.csproj", "{B9C80DEA-A2E8-4827-9E36-4D1D7432D8B0}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Cli", "src\FluNET.Cli\FluNET.Cli.csproj", "{D3D047A5-AB0C-4C80-AF8B-1381F7028C7A}"
-<<<<<<< HEAD
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FluNET.Tool", "src\FluNET.Tool\FluNET.Tool.csproj", "{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1}"
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -69,7 +66,6 @@ Global
 		{D3D047A5-AB0C-4C80-AF8B-1381F7028C7A}.Release|x64.Build.0 = Release|Any CPU
 		{D3D047A5-AB0C-4C80-AF8B-1381F7028C7A}.Release|x86.ActiveCfg = Release|Any CPU
 		{D3D047A5-AB0C-4C80-AF8B-1381F7028C7A}.Release|x86.Build.0 = Release|Any CPU
-<<<<<<< HEAD
 		{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1}.Debug|x64.ActiveCfg = Debug|Any CPU
@@ -82,8 +78,6 @@ Global
 		{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1}.Release|x64.Build.0 = Release|Any CPU
 		{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1}.Release|x86.ActiveCfg = Release|Any CPU
 		{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1}.Release|x86.Build.0 = Release|Any CPU
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -92,10 +86,7 @@ Global
 		{EFE4823D-21F8-4D60-896C-68CF803A0CD6} = {62553A79-2DF3-4A51-8A5C-6F1331324D97}
 		{B9C80DEA-A2E8-4827-9E36-4D1D7432D8B0} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
 		{D3D047A5-AB0C-4C80-AF8B-1381F7028C7A} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
-<<<<<<< HEAD
 		{E2D19F0E-3A2F-4B0B-9F34-7A6A2D98D4A1} = {A1B2C3D4-E5F6-7890-ABCD-EF1234567890}
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5D07DA40-1B7F-409F-A92E-3C360EBCE8AD}

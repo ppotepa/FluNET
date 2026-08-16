@@ -14,10 +14,7 @@ namespace FluNET.Tokens.Tree
 
         public TokenTree Process(ProcessedPrompt prompt)
         {
-<<<<<<< HEAD
             ArgumentNullException.ThrowIfNull(prompt);
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
             if (!prompt.IsValid)
             {
                 string message = string.Join(" ", prompt.Diagnostics.Select(diagnostic => diagnostic.Message));
@@ -40,7 +37,6 @@ namespace FluNET.Tokens.Tree
 
             return tokenTree;
         }
-<<<<<<< HEAD
 
         /// <summary>
         /// Creates one compatibility token tree for one already parsed command.
@@ -76,7 +72,5 @@ namespace FluNET.Tokens.Tree
 
             return prompt.Syntax.Commands.Select(Process).ToArray();
         }
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
     }
 }

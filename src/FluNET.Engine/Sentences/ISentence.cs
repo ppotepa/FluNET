@@ -1,13 +1,8 @@
-<<<<<<< HEAD
 using FluNET.Syntax.Core;
-=======
-﻿using FluNET.Syntax.Core;
->>>>>>> origin/agent/stabilize-poc-foundation
 
 namespace FluNET.Sentences
 {
     /// <summary>
-<<<<<<< HEAD
     /// Legacy compatibility representation of a validated word chain. Canonical
     /// compilation and execution use BoundProgram and ExecutionPlan instead.
     /// </summary>
@@ -24,27 +19,3 @@ namespace FluNET.Sentences
         bool HasSubSentences { get; }
     }
 }
-=======
-    /// Represents a validated sentence composed of a chain of words.
-    /// Can contain sub-sentences connected by THEN keyword.
-    /// </summary>
-    public interface ISentence
-    {
-        /// <summary>
-        /// The first word in the sentence (typically a verb)
-        /// </summary>
-        IWord? Root { get; }
-
-        /// <summary>
-        /// Sub-sentences chained with THEN keyword.
-        /// These are executed sequentially in the same variable context.
-        /// </summary>
-        IList<ISentence> SubSentences { get; }
-
-        /// <summary>
-        /// Indicates if this sentence has chained sub-sentences.
-        /// </summary>
-        bool HasSubSentences { get; }
-    }
-}
->>>>>>> origin/agent/stabilize-poc-foundation

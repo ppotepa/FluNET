@@ -1,6 +1,5 @@
 namespace FluNET.Prompt;
 
-<<<<<<< HEAD
 /// <summary>A half-open range in the original prompt.</summary>
 public readonly record struct SourceSpan(int Start, int Length)
 {
@@ -10,8 +9,6 @@ public readonly record struct SourceSpan(int Start, int Length)
         new(start, checked(end - start));
 }
 
-=======
->>>>>>> origin/agent/stabilize-poc-foundation
 /// <summary>Kind of lexical element found in a FluNET prompt.</summary>
 public enum PromptTokenKind
 {
@@ -22,21 +19,16 @@ public enum PromptTokenKind
 }
 
 /// <summary>A token together with its location in the original prompt.</summary>
-<<<<<<< HEAD
 public sealed record PromptToken(string Text, PromptTokenKind Kind, int Start, int Length)
 {
     public SourceSpan Span => new(Start, Length);
 }
-=======
-public sealed record PromptToken(string Text, PromptTokenKind Kind, int Start, int Length);
->>>>>>> origin/agent/stabilize-poc-foundation
 
 public enum PromptClauseKind
 {
     Subject,
     From,
     To,
-<<<<<<< HEAD
     Using,
     Marked
 }
@@ -70,25 +62,11 @@ public sealed record ClauseSyntax
         }
     }
 }
-=======
-    Using
-}
-
-/// <summary>A subject or prepositional clause within a command.</summary>
-public sealed record ClauseSyntax(
-    PromptClauseKind Kind,
-    PromptToken? Keyword,
-    IReadOnlyList<PromptToken> Values);
->>>>>>> origin/agent/stabilize-poc-foundation
 
 /// <summary>A hierarchical command node, excluding the THEN separator.</summary>
 public sealed record CommandSyntax
 {
-<<<<<<< HEAD
     public CommandSyntax(IReadOnlyList<PromptToken> tokens, PromptGrammar? grammar = null)
-=======
-    public CommandSyntax(IReadOnlyList<PromptToken> tokens)
->>>>>>> origin/agent/stabilize-poc-foundation
     {
         ArgumentNullException.ThrowIfNull(tokens);
         if (tokens.Count == 0)
@@ -96,7 +74,6 @@ public sealed record CommandSyntax
             throw new ArgumentException("A command must contain a verb.", nameof(tokens));
         }
 
-<<<<<<< HEAD
         PromptToken[] snapshot = tokens.ToArray();
         PromptGrammar activeGrammar = grammar ?? PromptGrammar.Standard;
         Verb = snapshot[0];
@@ -170,19 +147,6 @@ public sealed record CommandSyntax
     private static IReadOnlyList<ClauseSyntax> ParseClauses(
         IEnumerable<PromptToken> tokens,
         PromptGrammar grammar)
-=======
-        Tokens = tokens;
-        Verb = tokens[0];
-        Clauses = ParseClauses(tokens.Skip(1));
-    }
-
-    public IReadOnlyList<PromptToken> Tokens { get; }
-    public PromptToken Verb { get; }
-    public IReadOnlyList<ClauseSyntax> Clauses { get; }
-    public IReadOnlyList<PromptToken> Arguments => Tokens.Skip(1).ToArray();
-
-    private static IReadOnlyList<ClauseSyntax> ParseClauses(IEnumerable<PromptToken> tokens)
->>>>>>> origin/agent/stabilize-poc-foundation
     {
         List<ClauseSyntax> clauses = [];
         PromptClauseKind kind = PromptClauseKind.Subject;
@@ -191,22 +155,10 @@ public sealed record CommandSyntax
 
         foreach (PromptToken token in tokens)
         {
-<<<<<<< HEAD
             PromptClauseKind? nextKind = token.Kind == PromptTokenKind.Word &&
                 grammar.TryGetClauseKind(token.Text, out PromptClauseKind clauseKind)
                     ? clauseKind
                     : null;
-=======
-            PromptClauseKind? nextKind = token.Kind == PromptTokenKind.Word
-                ? token.Text.ToUpperInvariant() switch
-                {
-                    "FROM" => PromptClauseKind.From,
-                    "TO" => PromptClauseKind.To,
-                    "USING" => PromptClauseKind.Using,
-                    _ => null
-                }
-                : null;
->>>>>>> origin/agent/stabilize-poc-foundation
 
             if (nextKind is null)
             {
@@ -225,7 +177,6 @@ public sealed record CommandSyntax
     }
 }
 
-<<<<<<< HEAD
 public sealed record CommandModifierSyntax(
     CommandModifierKind Kind,
     PromptToken Introducer,
@@ -257,10 +208,6 @@ public sealed record PromptSyntax
         ? default
         : SourceSpan.FromBounds(Commands[0].Span.Start, Commands[^1].Span.End);
 }
-=======
-/// <summary>The parsed top-level shape of a prompt.</summary>
-public sealed record PromptSyntax(IReadOnlyList<CommandSyntax> Commands);
->>>>>>> origin/agent/stabilize-poc-foundation
 
 /// <summary>A lexer/parser diagnostic with a stable machine-readable code.</summary>
 public sealed record PromptDiagnostic(string Code, string Message, int Position);
