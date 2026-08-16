@@ -1,0 +1,34 @@
+# Rich collection composition: paging, projection, defaults, groups and joins.
+
+MKDIR "./output" AS output
+MKDIR "./output/collections" AS collections
+LOAD "./fixtures/users.csv" AS users
+LOAD "./fixtures/posts.csv" AS posts
+
+FILTER users WHERE active == true AS activeUsers
+SORT activeUsers BY score DESC AS ranking
+SKIP 1 AS rankingWithoutWinner
+TAKE 2 AS runnersUp
+
+FILTER posts WHERE published == true AS publishedPosts
+DEFAULT title TO "untitled" AS titledPosts
+MAP TO { id, headline: title, owner: userId, score } AS postCards
+
+GROUP posts BY userId AS postsByAuthor
+FILTER users WHERE active == true AS scoreRows | SUM score AS totalScore
+JOIN posts WITH users ON posts.userId = users.id AS joinedPosts
+MATCH posts.userId TO users.id AS matchedPosts
+
+COUNT [runnersUp] AS runnerCount
+COUNT [postCards] AS cardCount
+COUNT [postsByAuthor] AS groupCount
+COUNT [joinedPosts] AS joinCount
+COUNT [matchedPosts] AS matchCount
+
+SAVE JSON [runnersUp] TO "./output/collections/runners-up.json"
+SAVE JSON [postCards] TO "./output/collections/post-cards.json"
+SAVE JSON [postsByAuthor] TO "./output/collections/posts-by-author.json"
+SAVE JSON [joinedPosts] TO "./output/collections/joined-posts.json"
+
+SAY "Runners={runnerCount}; cards={cardCount}; groups={groupCount}."
+SAY "Join={joinCount}; match={matchCount}; active score total={totalScore}."

@@ -1,0 +1,4 @@
+[
+  { "id": 1, "name": "Ada (old)", "email": "ada@example.test", "team": "legacy", "active": true, "score": 80 },
+  { "id": 6, "name": "Obsolete", "email": "obsolete@example.test", "team": "retired", "active": false, "score": 1 }
+]

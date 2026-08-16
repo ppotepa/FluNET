@@ -1,0 +1,4 @@
+TASK make-label value RETURNS Text
+    TRIM "{value}" AS clean
+    UPPER [clean] AS normalized
+    RETURN [normalized]

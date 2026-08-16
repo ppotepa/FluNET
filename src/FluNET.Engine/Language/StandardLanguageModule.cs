@@ -1,7 +1,5 @@
 using FluNET.Execution.Commands;
-using FluNET.Keywords;
 using FluNET.Language.Values;
-using FluNET.Syntax.Verbs;
 using System.Text;
 using System.Text.Json;
 
@@ -18,11 +16,14 @@ public sealed class StandardLanguageModule : IFluNetModule
             .Route<SayCommand, string, SayCommandBinder, SayCommandHandler>("core.say.text")
             .Route<GetTextCommand, string[], GetTextCommandBinder, GetTextCommandHandler>("core.get.text")
             .Route<LoadTextCommand, string[], LoadTextCommandBinder, LoadTextCommandHandler>("core.load.text")
-            .Route<LoadConfigCommand, Dictionary<string, object>, LoadConfigCommandBinder, LoadConfigCommandHandler>("core.load.config")
+            .Route<LoadConfigCommand, object, LoadConfigCommandBinder, LoadConfigCommandHandler>("core.load.config")
             .Route<SaveTextCommand, string, SaveTextCommandBinder, SaveTextCommandHandler>("core.save.text")
             .Route<DeleteFileCommand, string, DeleteFileCommandBinder, DeleteFileCommandHandler>("core.delete.file")
             .Route<DownloadFileCommand, FileInfo, DownloadFileCommandBinder, DownloadFileCommandHandler>("core.download.file")
             .Route<PostJsonCommand, string, PostJsonCommandBinder, PostJsonCommandHandler>("core.post.json")
+            .Route<PutJsonCommand, string, PutJsonCommandBinder, PutJsonCommandHandler>("core.put.json")
+            .Route<PatchJsonCommand, string, PatchJsonCommandBinder, PatchJsonCommandHandler>("core.patch.json")
+            .Route<DeleteHttpCommand, string, DeleteHttpCommandBinder, DeleteHttpCommandHandler>("core.delete.http")
             .Route<SendEmailCommand, string, SendEmailCommandBinder, SendEmailCommandHandler>("core.send.email")
             .Route<TransformEncodingCommand, string, TransformEncodingCommandBinder, TransformEncodingCommandHandler>("core.transform.encoding")
             .Route<SetTextCommand, string, SetTextCommandBinder, SetTextCommandHandler>("core.set.text")
@@ -32,10 +33,30 @@ public sealed class StandardLanguageModule : IFluNetModule
             .Route<ParseJsonCommand, JsonElement, ParseJsonCommandBinder, ParseJsonCommandHandler>("core.parse.json")
             .Route<FormatJsonCommand, string, FormatJsonCommandBinder, FormatJsonCommandHandler>("core.format.json")
             .Conversion<IReadOnlyList<string>, string, TextListToTextConversion>();
+        new SurfaceCollectionLanguageModule().Register(module);
+        new SurfaceSystemLanguageModule().Register(module);
+        new SurfaceStorageLanguageModule().Register(module);
+        new SurfaceBlobStorageLanguageModule().Register(module);
+        new SurfaceProcessLanguageModule().Register(module);
+        new SurfaceArchiveLanguageModule().Register(module);
+        new SurfaceSearchLanguageModule().Register(module);
+        new SurfaceIndexLanguageModule().Register(module);
+        new SurfaceSqlLanguageModule().Register(module);
+        new SurfaceDirectoryLanguageModule().Register(module);
+        new SurfaceMessagingLanguageModule().Register(module);
+        new SurfaceHttpPaginationLanguageModule().Register(module);
+        new SurfaceHttpResponseLanguageModule().Register(module);
+        new SurfaceEventSinkLanguageModule().Register(module);
+        new SurfaceTextLanguageModule().Register(module);
+        new SurfaceWhileLanguageModule().Register(module);
+        module
+            .Route<GetConfigurationCommand, string, GetConfigurationCommandBinder, GetConfigurationCommandHandler>("surface.get.configuration");
+        new SurfaceConfigurationLanguageModule().Register(module);
     }
 
     public void Register(LanguageBuilder language)
     {
+        FrameRoleId credential = new("Credential");
         language
             .Module(StandardLanguageIdentity.Module.Value)
             .Version(StandardLanguageIdentity.Version.Value)
@@ -43,117 +64,150 @@ public sealed class StandardLanguageModule : IFluNetModule
 
         language.ClauseMarker("FROM", Prompt.PromptClauseKind.From)
             .ClauseMarker("TO", Prompt.PromptClauseKind.To)
+            .ClauseMarker("IN", Prompt.PromptClauseKind.From)
+            .ClauseMarker("ENV", Prompt.PromptClauseKind.Using)
             .ClauseMarker("USING", Prompt.PromptClauseKind.Using)
             .CommandConnector("THEN", Prompt.CommandLinkKind.Sequence)
             .CommandConnector("AND", Prompt.CommandLinkKind.Parallel)
+            .CommandConnector("SEQUENCE", Prompt.CommandLinkKind.Sequence)
+            .CommandConnector("PARALLEL", Prompt.CommandLinkKind.Parallel)
             .CommandConnector("ELSE", Prompt.CommandLinkKind.Alternative)
             .CommandModifier("WITH", "RETRY", Prompt.CommandModifierKind.Retry)
             .CommandModifier("WITH", "TIMEOUT", Prompt.CommandModifierKind.Timeout)
             .CommandModifier("ON", "ERROR", Prompt.CommandModifierKind.ErrorPolicy)
             .CommandModifier("IF", null, Prompt.CommandModifierKind.Condition);
 
-        language.Keyword<From>("FROM")
-            .Keyword<To>("TO")
-            .Keyword<Using>("USING")
-            .Keyword<Then>("THEN")
-            .Keyword<And>("AND")
-            .Keyword<Else>("ELSE");
+        language.Keyword("FROM")
+            .Keyword("TO")
+            .Keyword("IN")
+            .Keyword("ENV")
+            .Keyword("USING")
+            .Keyword("THEN")
+            .Keyword("AND")
+            .Keyword("SEQUENCE")
+            .Keyword("PARALLEL")
+            .Keyword("ELSE");
 
-        language.Command<GetText, string[]>("GET", "Text")
+        language.Command<GetTextCommand, string[]>("GET", "Text")
             .FrameId("core.get.text")
             .Aliases("FETCH", "RETRIEVE")
             .Qualifiers("TEXT")
             .Positional<string[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<FileInfo>(SemanticRole.Source, "FROM");
 
-        language.Command<SaveText, string>("SAVE", "Text")
+        language.Command<SaveTextCommand, string>("SAVE", "Text")
             .FrameId("core.save.text")
             .Qualifiers("TEXT")
             .Positional<string>(SemanticRole.Theme)
             .Marked<FileInfo>(SemanticRole.Goal, "TO");
 
-        language.Command<LoadText, string[]>("LOAD", "Text")
+        language.Command<LoadTextCommand, string[]>("LOAD", "Text")
             .FrameId("core.load.text")
             .Default()
             .Qualifiers("TEXT")
             .Positional<string[]>(SemanticRole.Output, SlotDirection.Output)
             .Marked<FileInfo>(SemanticRole.Source, "FROM");
 
-        language.Command<LoadConfig, Dictionary<string, object>>("LOAD", "Config")
+        language.Command<LoadConfigCommand, object>("LOAD", "Config")
             .FrameId("core.load.config")
             .Qualifiers("CONFIG", "JSON")
             .Positional<Dictionary<string, object>>(SemanticRole.Output, SlotDirection.Output)
             .Marked<FileInfo>(SemanticRole.Source, "FROM");
 
-        language.Command<DeleteFile, string>("DELETE", "File")
+        language.Command<DeleteFileCommand, string>("DELETE", "File")
             .FrameId("core.delete.file")
             .Positional<string>(SemanticRole.Theme)
             .Marked<DirectoryInfo>(SemanticRole.Source, "FROM", SlotCardinality.Optional);
 
-        language.Command<DownloadFile, FileInfo>("DOWNLOAD", "File")
+        language.Command<DownloadFileCommand, FileInfo>("DOWNLOAD", "File")
             .FrameId("core.download.file")
             .Aliases("PULL", "GRAB", "OBTAIN")
             .Positional<FileInfo>(SemanticRole.Output, SlotDirection.Output)
             .Marked<Uri>(SemanticRole.Source, "FROM")
             .Marked<FileInfo>(SemanticRole.Goal, "TO", SlotCardinality.Optional);
 
-        language.Command<PostJson, string>("POST", "Json")
+        language.Command<PostJsonCommand, string>("POST", "Json")
             .FrameId("core.post.json")
             .Qualifiers("JSON")
             .Positional<string>(SemanticRole.Theme)
-            .Marked<Uri>(SemanticRole.Goal, "TO");
+            .Marked<Uri>(SemanticRole.Goal, "TO")
+            .Marked<string>(credential, "USING", SlotCardinality.Optional);
 
-        language.Command<SayText, string>("SAY", "Text")
+        language.Command<PutJsonCommand, string>("PUTJSON", "Json")
+            .FrameId("core.put.json")
+            .Qualifiers("JSON")
+            .Positional<string>(SemanticRole.Theme)
+            .Marked<Uri>(SemanticRole.Goal, "TO")
+            .Marked<string>(credential, "USING", SlotCardinality.Optional);
+
+        language.Command<PatchJsonCommand, string>("PATCHJSON", "Json")
+            .FrameId("core.patch.json")
+            .Qualifiers("JSON")
+            .Positional<string>(SemanticRole.Theme)
+            .Marked<Uri>(SemanticRole.Goal, "TO")
+            .Marked<string>(credential, "USING", SlotCardinality.Optional);
+
+        language.Command<DeleteHttpCommand, string>("DELETEHTTP", "Http")
+            .FrameId("core.delete.http")
+            .Positional<string>(SemanticRole.Output, SlotDirection.Output)
+            .Marked<Uri>(SemanticRole.Goal, "FROM")
+            .Marked<string>(credential, "USING", SlotCardinality.Optional);
+
+        language.Command<SayCommand, string>("SAY", "Text")
             .FrameId("core.say.text")
             .Aliases("ECHO", "PRINT", "OUTPUT", "WRITE")
             .Positional<string>(SemanticRole.Theme);
 
-        language.Command<SendEmail, string>("SEND", "Email")
+        language.Command<SendEmailCommand, string>("SEND", "Email")
             .FrameId("core.send.email")
             .Positional<string>(SemanticRole.Theme)
             .Marked<string>(SemanticRole.Recipient, "TO");
 
-        language.Command<TransformEncoding, string>("TRANSFORM", "Encoding")
+        language.Command<TransformEncodingCommand, string>("TRANSFORM", "Encoding")
             .FrameId("core.transform.encoding")
             .Positional<string>(SemanticRole.Theme)
             .Marked<Encoding>(SemanticRole.Instrument, "USING");
 
-        language.Command<SetText, string>("SET", "Text")
+        language.Command<SetTextCommand, string>("SET", "Text")
             .FrameId("core.set.text")
             .Default()
             .Qualifiers("TEXT")
             .Positional<string>(SemanticRole.Output, SlotDirection.Output)
             .Marked<string>(SemanticRole.Theme, "TO", SlotCardinality.Repeated);
 
-        language.Command<SetJson, JsonElement>("SET", "Json")
+        language.Command<SetJsonCommand, JsonElement>("SET", "Json")
             .FrameId("core.set.json")
             .Qualifiers("JSON")
             .Positional<JsonElement>(SemanticRole.Output, SlotDirection.Output)
             .Marked<JsonElement>(SemanticRole.Theme, "TO");
 
-        language.Command<SetNumber, decimal>("SET", "Number")
+        language.Command<SetNumberCommand, decimal>("SET", "Number")
             .FrameId("core.set.number")
             .Qualifiers("NUMBER")
             .Positional<decimal>(SemanticRole.Output, SlotDirection.Output)
             .Marked<decimal>(SemanticRole.Theme, "TO");
 
-        language.Command<SetBoolean, bool>("SET", "Boolean")
+        language.Command<SetBooleanCommand, bool>("SET", "Boolean")
             .FrameId("core.set.boolean")
             .Qualifiers("BOOLEAN", "BOOL")
             .Positional<bool>(SemanticRole.Output, SlotDirection.Output)
             .Marked<bool>(SemanticRole.Theme, "TO");
 
-        language.Command<ParseJson, JsonElement>("PARSE", "Json")
+        language.Command<ParseJsonCommand, JsonElement>("PARSE", "Json")
             .FrameId("core.parse.json")
             .Qualifiers("JSON")
             .Positional<JsonElement>(SemanticRole.Output, SlotDirection.Output)
             .Marked<string>(SemanticRole.Source, "FROM");
 
-        language.Command<FormatJson, string>("FORMAT", "Json")
+        language.Command<FormatJsonCommand, string>("FORMAT", "Json")
             .FrameId("core.format.json")
             .Qualifiers("JSON")
             .Positional<string>(SemanticRole.Output, SlotDirection.Output)
             .Marked<JsonElement>(SemanticRole.Source, "FROM");
+
+        new SurfaceConfigurationLanguageModule().Register(language);
+        new SurfaceTextLanguageModule().Register(language);
+
     }
 }
 

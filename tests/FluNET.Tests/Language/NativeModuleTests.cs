@@ -4,7 +4,6 @@ using FluNET.Execution.Commands;
 using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Prompt;
-using FluNET.Syntax.Core;
 
 namespace FluNET.Tests.Language;
 
@@ -31,9 +30,7 @@ public sealed class NativeModuleTests
             Assert.That(result.Plan, Is.Not.Null);
             Assert.That(result.Plan!.Steps, Has.Count.EqualTo(1));
             Assert.That(result.Plan.Steps[0].Command.Frame.Id, Is.EqualTo(frame.Id));
-            Assert.That(frame.HasLegacyVerbAdapter, Is.False);
             Assert.That(frame.ImplementationType, Is.EqualTo(typeof(CountWordsCommand)));
-            Assert.That(typeof(IVerb).IsAssignableFrom(frame.ImplementationType), Is.False);
         });
     }
 

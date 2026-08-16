@@ -11,6 +11,7 @@ public sealed class ResourceClassifier
         string text = value.UnquotedText.Trim();
         if (text.StartsWith("env:", StringComparison.OrdinalIgnoreCase)) return new EnvironmentResourceReference(RequiredSuffix(text, "env:"));
         if (text.StartsWith("secret:", StringComparison.OrdinalIgnoreCase)) return new SecretResourceReference(RequiredSuffix(text, "secret:"));
+        if (text.StartsWith("config:", StringComparison.OrdinalIgnoreCase)) return new ConfigurationResourceReference(RequiredSuffix(text, "config:"));
         if (text.StartsWith("sql:", StringComparison.OrdinalIgnoreCase)) return new SqlResourceReference(RequiredSuffix(text, "sql:").Trim('"', '\''));
         if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) && uri.Scheme is "http" or "https") return new HttpResourceReference(uri);
         int colon = text.IndexOf(':');
@@ -32,8 +33,10 @@ public sealed class FormatInference
     {
         FileResourceReference file => FromExtension(Path.GetExtension(file.Path)),
         HttpResourceReference http => HttpFormat(http.Uri),
-        EnvironmentResourceReference or SecretResourceReference => ResourceFormat.Text,
-        SqlResourceReference or ModuleResourceReference => ResourceFormat.Unknown,
+        EnvironmentResourceReference or SecretResourceReference or ConfigurationResourceReference => ResourceFormat.Text,
+        SqlResourceReference => ResourceFormat.Unknown,
+        ModuleResourceReference module when module.Scheme.Equals("blob", StringComparison.OrdinalIgnoreCase) => ResourceFormat.Text,
+        ModuleResourceReference => ResourceFormat.Unknown,
         _ => ResourceFormat.Unknown
     };
     private static ResourceFormat HttpFormat(Uri uri)
@@ -59,6 +62,7 @@ public sealed class VariableNameInference
         HttpResourceReference http => Normalize(HttpName(http.Uri)),
         EnvironmentResourceReference environment => Normalize(environment.Name),
         SecretResourceReference secret => Normalize(secret.Name),
+        ConfigurationResourceReference configuration => Normalize(configuration.Key),
         ModuleResourceReference module => Normalize(module.Value),
         SqlResourceReference => "result", _ => "value"
     };

@@ -1,8 +1,8 @@
 using FluNET.Compilation;
+using FluNET.Execution.Commands;
 using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Prompt;
-using FluNET.Syntax.Verbs;
 
 namespace FluNET.Tests.Language;
 
@@ -25,16 +25,15 @@ public sealed class SemanticBindingTests
         Assert.Multiple(() =>
         {
             Assert.That(command.Command.Name, Is.EqualTo("GET"));
-            Assert.That(command.Frame.ImplementationType, Is.EqualTo(typeof(GetText)));
+            Assert.That(command.Frame.ImplementationType, Is.EqualTo(typeof(GetTextCommand)));
             Assert.That(command[SemanticRole.Output].Tokens.Single().Text, Is.EqualTo("[result]"));
             Assert.That(command[SemanticRole.Output].Slot.Direction, Is.EqualTo(SlotDirection.Output));
             Assert.That(command[SemanticRole.Source].Tokens.Single().Text, Is.EqualTo("{input.txt}"));
         });
     }
 
-    [TestCase("LOAD config FROM {settings.json}.", typeof(LoadConfig))]
-    [TestCase("LOAD [configname] FROM {settings.json}.", typeof(LoadConfig))]
-    [TestCase("LOAD [text] FROM {input.txt}.", typeof(LoadText))]
+    [TestCase("LOAD CONFIG [config] FROM {settings.json}.", typeof(LoadConfigCommand))]
+    [TestCase("LOAD TEXT [text] FROM {input.txt}.", typeof(LoadTextCommand))]
     public void Bind_SelectsOneRealization(string source, Type implementationType)
     {
         BoundCommand command = _binder.Bind(Parse(source));
@@ -50,7 +49,7 @@ public sealed class SemanticBindingTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(command.Frame.ImplementationType, Is.EqualTo(typeof(LoadConfig)));
+            Assert.That(command.Frame.ImplementationType, Is.EqualTo(typeof(LoadConfigCommand)));
             Assert.That(command[SemanticRole.Output].Tokens.Select(token => token.Text),
                 Is.EqualTo(new[] { "[settings]" }));
         });
@@ -94,10 +93,10 @@ public sealed class SemanticBindingTests
     public void Language_RequiresOneDefaultForAMultiFrameCommand()
     {
         LanguageBuilder builder = new();
-        builder.Command<LoadText, string[]>("IMPORT", "Text")
+        builder.Command<LoadTextCommand, string[]>("IMPORT", "Text")
             .Qualifiers("TEXT")
             .Positional<string[]>(SemanticRole.Output, SlotDirection.Output);
-        builder.Command<LoadConfig, Dictionary<string, object>>("IMPORT", "Config")
+        builder.Command<LoadConfigCommand, Dictionary<string, object>>("IMPORT", "Config")
             .Qualifiers("CONFIG")
             .Positional<Dictionary<string, object>>(SemanticRole.Output, SlotDirection.Output);
 

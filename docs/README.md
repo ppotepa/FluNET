@@ -11,11 +11,12 @@ FluNET has an explicit canonical surface and an inference-oriented compact surfa
 5. [Automation and desired state](automation-and-desired-state.md)
 6. [Embedding and extensibility](embedding-and-extensibility.md)
 7. [Architecture](architecture.md)
-8. [Status and limitations](status-and-limitations.md)
-9. [Durable workflows](durable-workflows.md)
-10. [Master roadmap](roadmap.md)
-11. [1.0 RC source readiness](1.0-rc-readiness.md)
-12. [1.0 verification gate](1.0-verification.md)
+8. [Ecosystem tree](ecosystem-tree.md)
+9. [Status and limitations](status-and-limitations.md)
+10. [Durable workflows](durable-workflows.md)
+11. [Master roadmap](roadmap.md)
+12. [1.0 RC source readiness](1.0-rc-readiness.md)
+13. [1.0 verification gate](1.0-verification.md)
 
 ## Milestone ledgers
 

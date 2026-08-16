@@ -1,0 +1,300 @@
+# FluNET Operations Control Tower
+# A large, executable application combining language, data, API, filesystem,
+# reliability, persistence and reporting features in one readable workflow.
+# Run from the showcase root or directly from this directory:
+# flu run 12-operations-control-tower.flu -vv --store .state/control.db --queue .state/control-queue.db --blob .state/control-blobs
+IMPORT "../modules/text.flu"
+# The program intentionally remains one inspectable, end-to-end sentence graph.
+# Prepare an isolated workspace for this application.
+MKDIR "./output" AS outputRoot
+MKDIR "./output/control-tower" AS towerRoot
+MKDIR "./output/control-tower/data" AS dataRoot
+MKDIR "./output/control-tower/reports" AS reportRoot
+MKDIR "./output/control-tower/cards" AS cardRoot
+MKDIR "./output/control-tower/archive" AS archiveRoot
+MKDIR "./output/control-tower/restored" AS restoredRoot
+MKDIR "./output/control-tower/audit" AS auditRoot
+# Capture runtime identity and portable host paths.
+NOW AS startedAt
+SYSTEM INFO AS runtime
+METRICS AS startupMetrics
+PATH TEMP AS temporaryPath
+PATH HOME AS homePath
+PATH CACHE AS cachePath
+DOCTOR [hostDoctor]
+SET application TO "FluNET Operations Control Tower"
+SET environment TO "showcase"
+SET eventTopic TO "control-tower.events"
+SET cycle TO 0
+SET healthy TO true
+RUN make-label control-tower AS applicationSlug
+SAY "Starting {application} at {startedAt}."
+SAY "Runtime={runtime.framework}; process={startupMetrics.processId}; label={applicationSlug}."
+# A bounded warm-up loop demonstrates stateful control flow.
+WHILE cycle < 5 MAX 8:
+    INCREMENT [cycle]
+    CONTINUE WHEN cycle == 2
+    SAY "Warm-up cycle {cycle} is ready."
+    BREAK WHEN cycle == 4
+IF cycle == 4:
+    SAY "Warm-up reached the expected checkpoint."
+ELSE IF cycle > 4:
+    SAY "Warm-up exceeded the expected checkpoint."
+ELSE:
+    SAY "Warm-up finished before the expected checkpoint."
+EXPECT "{cycle}" TO EQUAL "4"
+REPEAT 2 TIMES:
+    SAY "Control tower preflight is deterministic."
+# Load deterministic local datasets.
+LOAD "./fixtures/users.csv" AS users
+LOAD "./fixtures/posts.csv" AS posts
+STAT "./fixtures/users.json" AS usersFixtureInfo
+STAT "./fixtures/posts.json" AS postsFixtureInfo
+COUNT [users] AS userCount
+COUNT [posts] AS postCount
+COPY "./fixtures/users.json" TO "./output/control-tower/data/fixture-users-copy.json" AS copiedUsersFixture
+COPY "./fixtures/posts.json" TO "./output/control-tower/data/fixture-posts-copy.json" AS copiedPostsFixture
+EXPECT "{userCount}" TO EQUAL "5"
+EXPECT "{postCount}" TO EQUAL "5"
+THEN
+HASH "./output/control-tower/data/fixture-users-copy.json" AS usersFixtureHash
+IF users:
+    SAY "User dataset passed the availability gate."
+ELSE:
+    SAY "Health warning: user input is missing."
+    SAY "User dataset is unavailable."
+UNLESS posts:
+    SAY "Health warning: post input is missing."
+    SAY "Post dataset is unavailable."
+# Build user segments and a ranked leadership view.
+FILTER users WHERE active == true AS activeUsers
+FILTER users WHERE active == false AS inactiveUsers
+SORT activeUsers BY score DESC AS rankedUsers
+TAKE 4 AS rankedActiveUsers
+SELECT id, name, email, team, score AS activeDirectory
+FILTER users WHERE score >= 90 AS highScorers
+SORT highScorers BY name AS alphabeticalHighScorers
+TAKE 3 AS leadershipTeam
+SELECT id, name, team, score AS leadershipCards
+FILTER users WHERE team == 'platform' AS platformUsers
+FILTER users WHERE team == 'product' AS productUsers
+DISTINCT BY team AS representedTeams
+GROUP users BY team AS usersByTeam
+COUNT [activeUsers] AS activeUserCount
+COUNT [inactiveUsers] AS inactiveUserCount
+COUNT [leadershipTeam] AS leaderCount
+COUNT [platformUsers] AS platformUserCount
+COUNT [productUsers] AS productUserCount
+COUNT [usersByTeam] AS representedTeamCount
+COUNT [usersByTeam] AS userGroupCount
+FILTER users WHERE active == true AS scoreAverageRows | AVG score AS averageActiveScore
+FILTER users WHERE active == true AS scoreMinimumRows | MIN score AS minimumActiveScore
+FILTER users WHERE active == true AS scoreMaximumRows | MAX score AS maximumActiveScore
+FILTER users WHERE active == true AS scoreTotalRows | SUM score AS totalActiveScore
+SAY "Users={userCount}; active={activeUserCount}; inactive={inactiveUserCount}."
+SAY "Teams={representedTeamCount}; groups={userGroupCount}; leaders={leaderCount}."
+SAY "Active score min={minimumActiveScore}, avg={averageActiveScore}, max={maximumActiveScore}, total={totalActiveScore}."
+# Analyze publication activity and construct presentation cards.
+FILTER posts WHERE published == true AS publishedPosts
+FILTER posts WHERE published == false AS draftPosts
+SORT publishedPosts BY score DESC AS rankedPublishedPosts
+SKIP 1 AS publishedWithoutWinner
+TAKE 3 AS highlightedPosts
+DEFAULT title TO "untitled" AS titledPosts
+MAP TO { id, headline: title, owner: userId, score, published } AS postCards
+DISTINCT BY userId AS publishingAuthors
+GROUP posts BY userId AS postsByAuthor
+COUNT [publishedPosts] AS publishedPostCount
+COUNT [draftPosts] AS draftPostCount
+COUNT [highlightedPosts] AS highlightedPostCount
+COUNT [postCards] AS postCardCount
+COUNT [publishingAuthors] AS publishingAuthorCount
+COUNT [postsByAuthor] AS postGroupCount
+
+FILTER publishedPosts WHERE published == true AS publishedScoreRows | AVG score AS averagePostScore
+FILTER publishedPosts WHERE published == true AS minimumPostRows | MIN score AS minimumPostScore
+FILTER publishedPosts WHERE published == true AS maximumPostRows | MAX score AS maximumPostScore
+FILTER publishedPosts WHERE published == true AS totalPostRows | SUM score AS totalPostScore
+
+SAY "Posts={postCount}; published={publishedPostCount}; drafts={draftPostCount}."
+SAY "Highlights={highlightedPostCount}; cards={postCardCount}; authors={publishingAuthorCount}."
+SAY "Published score min={minimumPostScore}, avg={averagePostScore}, max={maximumPostScore}, total={totalPostScore}."
+
+# Correlate both datasets with relational collection operators.
+JOIN posts WITH users ON posts.userId = users.id AS postsWithAuthors
+MATCH posts.userId TO users.id AS matchedAuthorship
+COUNT [postsWithAuthors] AS joinedPostCount
+COUNT [matchedAuthorship] AS matchedPostCount
+
+EXPECT "{joinedPostCount}" TO EQUAL "5"
+EXPECT "{matchedPostCount}" TO EQUAL "5"
+
+FILTER postsWithAuthors WHERE published == true AS joinedPublishedPosts
+SORT joinedPublishedPosts BY score DESC AS joinedRanking
+TAKE 3 AS joinedHighlights
+SAVE JSON [joinedHighlights] TO "./output/control-tower/data/joined-highlights.json"
+
+SAY "Relational checks produced {joinedPostCount} joins and {matchedPostCount} matches."
+
+# Define a reusable resilience policy for external and local reads.
+POLICY resilient:
+    RETRY 3
+    TIMEOUT 10s
+    CONTINUE ON ERROR
+
+WITH resilient:
+    REQUEST https://jsonplaceholder.typicode.com/todos/1 AS healthResponse
+EXPECT healthResponse.status TO EQUAL "200"
+EXPECT healthResponse.body.id TO EQUAL "1"
+
+USE https://jsonplaceholder.typicode.com AS publicApi
+GET publicApi/users AS remoteUsers
+GET publicApi/posts AS remotePosts
+
+FILTER remotePosts WHERE userId == 1 AS firstRemoteAuthorPosts
+SORT firstRemoteAuthorPosts BY id DESC AS newestRemotePosts
+TAKE 5 AS remotePostPage
+
+COUNT [remoteUsers] AS remoteUserCount
+COUNT [remotePosts] AS remotePostCount
+COUNT [remotePostPage] AS remotePageCount
+
+IF remoteUsers:
+    SAY "Public API enrichment is available."
+ELSE:
+    SAY "Health warning: remote input is missing."
+    SAY "Public API enrichment returned no users."
+
+EXPECT "{remoteUserCount}" TO EQUAL "10"
+EXPECT "{remotePageCount}" TO EQUAL "5"
+
+SAVE JSON [remotePostPage] TO "./output/control-tower/data/remote-post-page.json"
+SAVE JSON [remoteUsers] TO "./output/control-tower/data/remote-users.json"
+SAY "Remote API returned {remoteUserCount} users and {remotePostCount} posts."
+SAY "API health title: {healthResponse.body.title}."
+
+# Exercise the text toolkit to produce stable report identifiers.
+SET rawReportName TO "  operations control tower daily report  "
+TRIM [rawReportName] AS cleanReportName
+UPPER [cleanReportName] AS upperReportName
+REPLACE "DAILY" WITH "VERIFIED" IN [upperReportName] AS verifiedReportName
+SPLIT [verifiedReportName] BY " " AS reportNameParts
+COMBINE [reportNameParts] WITH "-" AS reportSlug
+
+EXPECT [reportSlug] TO CONTAIN "VERIFIED"
+SAY "Report identifier: {reportSlug}."
+
+# Persist structured local reports in both JSON and CSV.
+SAVE JSON [activeDirectory] TO "./output/control-tower/reports/active-directory.json"
+SAVE CSV [activeDirectory] TO "./output/control-tower/reports/active-directory.csv"
+SAVE JSON [leadershipCards] TO "./output/control-tower/reports/leadership.json"
+SAVE CSV [leadershipCards] TO "./output/control-tower/reports/leadership.csv"
+SAVE JSON [postCards] TO "./output/control-tower/reports/post-cards.json"
+SAVE CSV [postCards] TO "./output/control-tower/reports/post-cards.csv"
+SAVE JSON [usersByTeam] TO "./output/control-tower/reports/users-by-team.json"
+SAVE JSON [postsByAuthor] TO "./output/control-tower/reports/posts-by-author.json"
+
+# Produce one human-readable card per leader in parallel.
+FOR EACH leader IN leadershipTeam PARALLEL 3
+    SAVE [leader.email] TO "./output/control-tower/cards/leader-{leader.id}.txt"
+    PUBLISH "leader-card:{leader.id}" TO "control-tower.cards"
+    SAY "Published card for {leader.name}."
+
+# Create and validate a textual executive summary.
+SET executiveSummary TO "{application}: local-users={userCount}; active={activeUserCount}; published={publishedPostCount}; remote-users={remoteUserCount}; healthy={healthy}"
+SAVE [executiveSummary] TO "./output/control-tower/reports/executive-summary.txt"
+THEN
+HASH "./output/control-tower/reports/executive-summary.txt" AS summaryHash
+THEN
+STAT "./output/control-tower/reports/executive-summary.txt" AS summaryInfo
+
+EXPECT [executiveSummary] TO CONTAIN "healthy=true"
+SAY "Executive summary bytes={summaryInfo.length}; sha256={summaryHash}."
+
+# Inventory every generated artifact and search its contents.
+FIND "./output/control-tower" WHERE size > 0 AS generatedFiles
+FIND "./output/control-tower/reports" WHERE extension == '.json' ORDER BY name AS generatedJsonReports
+FIND "./output/control-tower/reports" WHERE extension == '.csv' ORDER BY name AS generatedCsvReports
+SEARCH "FluNET" IN "./output/control-tower" RECURSIVE AS fluNetMentions
+SEARCH "score" IN "./output/control-tower" RECURSIVE AS scoreMentions
+INDEX FILES towerIndex FROM "./output/control-tower" RECURSIVE
+
+COUNT [generatedFiles] AS generatedFileCount
+COUNT [generatedJsonReports] AS generatedJsonCount
+COUNT [generatedCsvReports] AS generatedCsvCount
+COUNT [fluNetMentions] AS fluNetMentionCount
+COUNT [scoreMentions] AS scoreMentionCount
+COUNT [towerIndex] AS indexedArtifactCount
+
+SAVE JSON [towerIndex] TO "./output/control-tower/audit/artifact-index.json"
+SAY "Artifacts={generatedFileCount}; indexed={indexedArtifactCount}; JSON={generatedJsonCount}; CSV={generatedCsvCount}."
+SAY "Search found FluNET={fluNetMentionCount} and score={scoreMentionCount}."
+
+# Work with temporary data without leaking resources.
+TEMP FILE .txt AS scratchFile
+SAVE "control-tower scratch value {startedAt}" TO [scratchFile]
+THEN
+HASH [scratchFile] AS scratchHash
+THEN
+STAT [scratchFile] AS scratchInfo
+SAY "Scratch bytes={scratchInfo.length}; sha256={scratchHash}."
+CLEANUP [scratchFile]
+
+# Package reports, inspect the package, and restore it.
+PACK "./output/control-tower/reports" TO "./output/control-tower/archive/reports.zip" AS reportArchive
+LIST ARCHIVE "./output/control-tower/archive/reports.zip" WHERE isDirectory == false ORDER BY length DESC AS reportEntries
+UNPACK "./output/control-tower/archive/reports.zip" TO "./output/control-tower/restored" AS restoredReports
+COUNT [reportEntries] AS archiveEntryCount
+
+EXPECT "{archiveEntryCount}" TO EQUAL "9"
+SAY "Report archive contains {archiveEntryCount} files."
+# Verify portable file copy, trash and restore operations.
+COPY "./output/control-tower/reports/executive-summary.txt" TO "./output/control-tower/audit/summary-copy.txt" AS summaryCopy
+THEN
+HASH "./output/control-tower/audit/summary-copy.txt" AS copiedSummaryHash
+EXPECT [copiedSummaryHash] TO EQUAL [summaryHash]
+
+COPY "./output/control-tower/audit/summary-copy.txt" TO "./output/control-tower/audit/disposable.txt" AS disposableCopy
+THEN
+TRASH "./output/control-tower/audit/disposable.txt" AS trashedCopy
+RESTORE [trashedCopy] TO "./output/control-tower/audit/disposable.txt" AS restoredCopy
+# Store the final operational snapshot in three durable subsystems.
+SET operationalSnapshot TO "run={startedAt}; cycle={cycle}; users={activeUserCount}; posts={publishedPostCount}; remote={remoteUserCount}; artifacts={indexedArtifactCount}; hash={summaryHash}"
+STORE "control-tower:last-run" = [startedAt] AS storedRun
+STORE "control-tower:health" = [healthy] AS storedHealth
+STORE "control-tower:snapshot" = [operationalSnapshot] AS storedSnapshot
+THEN
+READ "control-tower:snapshot" AS loadedSnapshot
+LIST STORE "control-tower:" AS storedControlValues
+
+SAVE [operationalSnapshot] TO blob:control-tower/latest.txt
+SAVE [executiveSummary] TO blob:control-tower/executive-summary.txt
+THEN
+GET blob:control-tower/latest.txt AS blobSnapshot
+LIST BLOB "control-tower/" AS controlBlobs
+
+PUBLISH [operationalSnapshot] TO [eventTopic] AS publishedEvent
+RECEIVE [eventTopic] AS receivedEvent
+
+EXPECT [loadedSnapshot] TO EQUAL [blobSnapshot]
+SAY "Durable snapshot: {loadedSnapshot}."
+
+# Cache a deterministic local read and guard a final write with idempotency.
+LOAD "./fixtures/users.csv" CACHE 5m AS cachedUsers
+COUNT [cachedUsers] AS cachedUserCount
+EXPECT "{cachedUserCount}" TO EQUAL "{userCount}"
+
+SET auditMessage TO "{reportSlug}; entries={archiveEntryCount}; cached-users={cachedUserCount}; hash={summaryHash}"
+SAVE [auditMessage] TO "./output/control-tower/audit/final-audit.txt" ONCE BY "control-tower-final-audit-v1"
+
+# Finish with fresh metrics and a portable completion record.
+METRICS AS finalMetrics
+NOW AS finishedAt
+SET completion TO "{application} completed at {finishedAt}; process={finalMetrics.processId}; temp={temporaryPath}; home={homePath}; cache={cachePath}"
+SAVE [completion] TO "./output/control-tower/completion.txt"
+STORE "control-tower:completed" = [finishedAt] AS storedCompletion
+
+EXPECT "{healthy}" TO EQUAL "true"
+NOTIFY "Operations control tower completed"
+SAY "Completed with {activeUserCount} active users, {publishedPostCount} published posts and {archiveEntryCount} archived reports."
+SAY [completion]

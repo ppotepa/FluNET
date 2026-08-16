@@ -1,7 +1,6 @@
 using FluNET.Execution.Planning;
 using FluNET.Language.Binding;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using System.Collections;
 using System.Collections.ObjectModel;
@@ -33,7 +32,6 @@ public static class CompilationDiagnosticCodes
     public const string EmptyProgram = "FLN006";
     public const string BindingFailure = "FLN110";
     public const string ValidationFailure = "FLN115";
-    public const string CompatibilitySentenceFailure = "FLN116";
     public const string PlanningFailure = "FLN120";
     public const string CompilationFailure = "FLN125";
     public const string UnknownMarker = "FLN130";
@@ -124,13 +122,12 @@ public record CompilationResult : PromptAnalysis
     public CompilationResult(
         FluNetProgram program,
         ValidationResult validationResult,
-        ISentence? sentence,
         DiagnosticBag diagnosticBag,
         BoundProgram? boundProgram,
         ExecutionPlan? plan,
         CompilationPhase? failedPhase)
         : base((program ?? throw new ArgumentNullException(nameof(program))).Prompt,
-            validationResult ?? throw new ArgumentNullException(nameof(validationResult)), sentence)
+            validationResult ?? throw new ArgumentNullException(nameof(validationResult)))
     {
         Program = program;
         DiagnosticBag = diagnosticBag ?? throw new ArgumentNullException(nameof(diagnosticBag));

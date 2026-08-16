@@ -1,10 +1,7 @@
 using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Syntax.Verbs;
-using FluNET.Tokens.Tree;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests
@@ -69,14 +66,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"DELETE {testFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(sentence!.Root, Is.InstanceOf<DeleteFile>());
+                Assert.That(sentence, Is.Null);
                 Assert.That(result, Is.Not.Null);
                 Assert.That(result as string, Does.Contain("Deleted"));
                 Assert.That(File.Exists(testFile), Is.False, "File should be deleted");
@@ -96,13 +92,13 @@ namespace FluNET.Tests
                 ProcessedPrompt prompt = new("DELETE temp_delete_test.txt.");
 
                 // Act
-                (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+                (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
                 // Assert
                 Assert.Multiple(() =>
                 {
                     Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                    Assert.That(sentence, Is.Not.Null);
+                    Assert.That(sentence, Is.Null);
                     Assert.That(result as string, Does.Contain("Deleted"));
                     Assert.That(File.Exists(testFile), Is.False, "File should be deleted");
                 });
@@ -125,13 +121,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"DELETE {nonExistentFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("File not found"));
             });
         }
@@ -150,14 +146,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"DELETE test.txt FROM {testDirectory}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(sentence!.Root, Is.InstanceOf<DeleteFile>());
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("Deleted"));
                 Assert.That(File.Exists(testFile), Is.False, "File should be deleted");
             });
@@ -178,13 +173,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("DELETE [filepath].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("Deleted"));
                 Assert.That(File.Exists(testFile), Is.False, "File should be deleted");
             });
@@ -202,13 +197,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("DELETE [filename] FROM [directory].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("Deleted"));
                 Assert.That(File.Exists(testFile), Is.False, "File should be deleted");
             });
@@ -228,13 +223,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"DELETE {{{testFile}}}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("Deleted"));
                 Assert.That(File.Exists(testFile), Is.False, "File should be deleted");
             });
@@ -283,7 +278,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"DELETE {testFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -304,7 +299,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"DELETE {testFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>

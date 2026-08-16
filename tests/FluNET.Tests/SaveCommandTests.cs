@@ -1,10 +1,7 @@
 using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Syntax.Verbs;
-using FluNET.Tokens.Tree;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests
@@ -62,14 +59,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SAVE \"{text}\" TO {{{outputFile}}}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(sentence!.Root, Is.InstanceOf<SaveText>());
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Is.EqualTo(text));
                 Assert.That(File.Exists(outputFile), Is.True, "File should be created");
                 Assert.That(File.ReadAllText(outputFile), Is.EqualTo(text));
@@ -86,7 +82,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SAVE \"{text}\" TO {{{outputFile}}}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -110,7 +106,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("SAVE [content] TO [filepath].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -131,7 +127,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SAVE {{{text}}} TO {outputFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -152,7 +148,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SAVE {newContent} TO {outputFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -172,7 +168,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SAVE {text} TO {outputFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -192,7 +188,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SAVE \"\" TO {outputFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -204,3 +200,4 @@ namespace FluNET.Tests
         }
     }
 }
+

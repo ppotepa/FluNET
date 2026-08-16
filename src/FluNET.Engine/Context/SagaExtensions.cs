@@ -14,7 +14,7 @@ public static class SagaExtensions
     {
         ArgumentNullException.ThrowIfNull(context);
         return new SagaExecutor(
-            context.GetService<FluNET.Execution.Planning.ExecutionPlanExecutor>(),
+            context.GetService<FluNET.Execution.Planning.SentenceExecutor>(),
             context.GetService<FluNET.Capabilities.IFluNetFileSystem>());
     }
 }

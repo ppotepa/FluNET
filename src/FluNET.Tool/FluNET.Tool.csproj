@@ -12,8 +12,13 @@
     <PackageVersion>0.3.0-preview</PackageVersion>
     <Description>FluNET compiler, workflow and reconciliation command-line tool.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../FluNET.Engine/FluNET.Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="README.md" />
   </ItemGroup>
 </Project>

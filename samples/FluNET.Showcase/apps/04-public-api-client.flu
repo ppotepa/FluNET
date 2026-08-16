@@ -1,0 +1,18 @@
+# Public API client with response envelope, assertions and typed JSON pipeline.
+# Requires network access.
+
+REQUEST https://jsonplaceholder.typicode.com/todos/1 AS response
+EXPECT response.status TO EQUAL "200"
+EXPECT response.body.id TO EQUAL "1"
+
+USE https://jsonplaceholder.typicode.com AS api
+GET api/users AS users
+GET api/posts AS posts
+FILTER posts WHERE userId == 1 AS firstUserPosts
+SORT firstUserPosts BY id DESC AS newestPosts
+TAKE 5 AS page
+COUNT [users] AS userCount
+COUNT [page] AS pageCount
+
+SAY "API returned {userCount} users and {pageCount} selected posts."
+SAY "Todo title: {response.body.title}."

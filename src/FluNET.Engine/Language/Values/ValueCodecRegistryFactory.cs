@@ -1,8 +1,8 @@
 namespace FluNET.Language.Values;
 
 /// <summary>
-/// Creates the built-in value registry used by compatibility constructors and
-/// side-effect-free tests when no module runtime service provider is available.
+/// Creates the built-in value registry for standalone expression binders and
+/// host integrations when no module runtime service provider is available.
 /// </summary>
 public static class ValueCodecRegistryFactory
 {

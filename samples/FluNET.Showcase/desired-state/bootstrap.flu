@@ -1,0 +1,8 @@
+# Prepare disposable targets for ENSURE and SYNC examples.
+
+MKDIR "./output" AS output
+MKDIR "./output/desired-state" AS desiredState
+MKDIR "./output/reconciliation" AS reconciliation
+SAVE "stale snapshot" TO "./output/desired-state/notes.txt"
+COPY "./fixtures/users-observed.json" TO "./output/reconciliation/users.json" AS observedUsers
+SAY "Desired-state targets are ready."

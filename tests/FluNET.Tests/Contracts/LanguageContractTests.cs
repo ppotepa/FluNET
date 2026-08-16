@@ -21,14 +21,18 @@ public sealed class LanguageContractTests
                 .Select(frame => SnapshotFrame(command, frame))));
 
         const string expected = """
+flunet.configuration.getconfig|GETCONFIG|aliases=-|surface.get.configuration|Text|result=Text|default=False|qualifiers=-|OUTPUT:$:Text:Output:Required;SOURCE:FROM:Text:Input:Required
 flunet.core.delete|DELETE|aliases=-|core.delete.file|File|result=Text|default=False|qualifiers=-|THEME:$:Text:Input:Required;SOURCE:FROM:Directory:Input:Optional
+flunet.core.deletehttp|DELETEHTTP|aliases=-|core.delete.http|Http|result=Text|default=False|qualifiers=-|OUTPUT:$:Text:Output:Required;GOAL:FROM:Uri:Input:Required;CREDENTIAL:USING:Text:Input:Optional
 flunet.core.download|DOWNLOAD|aliases=GRAB,OBTAIN,PULL|core.download.file|File|result=File|default=False|qualifiers=-|OUTPUT:$:File:Output:Required;SOURCE:FROM:Uri:Input:Required;GOAL:TO:File:Input:Optional
 flunet.core.format|FORMAT|aliases=-|core.format.json|Json|result=Text|default=False|qualifiers=JSON|OUTPUT:$:Text:Output:Required;SOURCE:FROM:Json:Input:Required
 flunet.core.get|GET|aliases=FETCH,RETRIEVE|core.get.text|Text|result=List<Text>|default=False|qualifiers=TEXT|OUTPUT:$:List<Text>:Output:Required;SOURCE:FROM:File:Input:Required
-flunet.core.load|LOAD|aliases=-|core.load.config|Config|result=Object|default=False|qualifiers=CONFIG,JSON|OUTPUT:$:Object:Output:Required;SOURCE:FROM:File:Input:Required
+flunet.core.load|LOAD|aliases=-|core.load.config|Config|result=System.Object|default=False|qualifiers=CONFIG,JSON|OUTPUT:$:Object:Output:Required;SOURCE:FROM:File:Input:Required
 flunet.core.load|LOAD|aliases=-|core.load.text|Text|result=List<Text>|default=True|qualifiers=TEXT|OUTPUT:$:List<Text>:Output:Required;SOURCE:FROM:File:Input:Required
 flunet.core.parse|PARSE|aliases=-|core.parse.json|Json|result=Json|default=False|qualifiers=JSON|OUTPUT:$:Json:Output:Required;SOURCE:FROM:Text:Input:Required
-flunet.core.post|POST|aliases=-|core.post.json|Json|result=Text|default=False|qualifiers=JSON|THEME:$:Text:Input:Required;GOAL:TO:Uri:Input:Required
+flunet.core.patchjson|PATCHJSON|aliases=-|core.patch.json|Json|result=Text|default=False|qualifiers=JSON|THEME:$:Text:Input:Required;GOAL:TO:Uri:Input:Required;CREDENTIAL:USING:Text:Input:Optional
+flunet.core.post|POST|aliases=-|core.post.json|Json|result=Text|default=False|qualifiers=JSON|THEME:$:Text:Input:Required;GOAL:TO:Uri:Input:Required;CREDENTIAL:USING:Text:Input:Optional
+flunet.core.putjson|PUTJSON|aliases=-|core.put.json|Json|result=Text|default=False|qualifiers=JSON|THEME:$:Text:Input:Required;GOAL:TO:Uri:Input:Required;CREDENTIAL:USING:Text:Input:Optional
 flunet.core.save|SAVE|aliases=-|core.save.text|Text|result=Text|default=False|qualifiers=TEXT|THEME:$:Text:Input:Required;GOAL:TO:File:Input:Required
 flunet.core.say|SAY|aliases=ECHO,OUTPUT,PRINT,WRITE|core.say.text|Text|result=Text|default=False|qualifiers=-|THEME:$:Text:Input:Required
 flunet.core.send|SEND|aliases=-|core.send.email|Email|result=Text|default=False|qualifiers=-|THEME:$:Text:Input:Required;RECIPIENT:TO:Text:Input:Required
@@ -37,6 +41,14 @@ flunet.core.set|SET|aliases=-|core.set.json|Json|result=Json|default=False|quali
 flunet.core.set|SET|aliases=-|core.set.number|Number|result=Number|default=False|qualifiers=NUMBER|OUTPUT:$:Number:Output:Required;THEME:TO:Number:Input:Required
 flunet.core.set|SET|aliases=-|core.set.text|Text|result=Text|default=True|qualifiers=TEXT|OUTPUT:$:Text:Output:Required;THEME:TO:Text:Input:Repeated
 flunet.core.transform|TRANSFORM|aliases=-|core.transform.encoding|Encoding|result=Text|default=False|qualifiers=-|THEME:$:Text:Input:Required;INSTRUMENT:USING:System.Text.Encoding:Input:Required
+flunet.surface.text.expecttext|EXPECTTEXT|aliases=EXPECT|surface.text.expect|Boolean|result=Boolean|default=False|qualifiers=-|OUTPUT:$:Boolean:Output:Required;SOURCE:FROM:Text:Input:Required;EXPECTED:USING:Text:Input:Required;OPERATOR:WITH:Text:Input:Required
+flunet.surface.text.jointext|JOINTEXT|aliases=COMBINE,CONCATENATE|surface.text.join|Text|result=Text|default=False|qualifiers=-|OUTPUT:$:Text:Output:Required;SOURCE:FROM:List<Text>:Input:Required;SEPARATOR:USING:Text:Input:Required
+flunet.surface.text.lines|LINES|aliases=-|surface.text.lines|TextList|result=List<Text>|default=False|qualifiers=-|OUTPUT:$:List<Text>:Output:Required;SOURCE:FROM:Text:Input:Required
+flunet.surface.text.lowertext|LOWERTEXT|aliases=LOWER,LOWERCASE|surface.text.lower|Text|result=Text|default=False|qualifiers=-|OUTPUT:$:Text:Output:Required;SOURCE:FROM:Text:Input:Required
+flunet.surface.text.replacetext|REPLACETEXT|aliases=REPLACE|surface.text.replace|Text|result=Text|default=False|qualifiers=-|OUTPUT:$:Text:Output:Required;SOURCE:FROM:Text:Input:Required;OLD:USING:Text:Input:Required;NEW:WITH:Text:Input:Required
+flunet.surface.text.splittext|SPLITTEXT|aliases=SPLIT|surface.text.split|TextList|result=List<Text>|default=False|qualifiers=-|OUTPUT:$:List<Text>:Output:Required;SOURCE:FROM:Text:Input:Required;SEPARATOR:USING:Text:Input:Required
+flunet.surface.text.trimtext|TRIMTEXT|aliases=TRIM|surface.text.trim|Text|result=Text|default=False|qualifiers=-|OUTPUT:$:Text:Output:Required;SOURCE:FROM:Text:Input:Required
+flunet.surface.text.uppertext|UPPERTEXT|aliases=UPPER,UPPERCASE|surface.text.upper|Text|result=Text|default=False|qualifiers=-|OUTPUT:$:Text:Output:Required;SOURCE:FROM:Text:Input:Required
 """;
 
         Assert.Multiple(() =>
@@ -95,11 +107,9 @@ flunet.core.transform|TRANSFORM|aliases=-|core.transform.encoding|Encoding|resul
                 $"{diagnostic.Code}: {diagnostic.Message}")));
     }
 
-    [TestCase("LOAD [text] FROM {input.txt}.", "core.load.text")]
     [TestCase("LOAD TEXT [text] FROM {input.txt}.", "core.load.text")]
-    [TestCase("LOAD [config] FROM {config.json}.", "core.load.config")]
     [TestCase("LOAD CONFIG [config] FROM {config.json}.", "core.load.config")]
-    public void LoadCompatibility_SelectsStableFrame(string source, string expectedFrameId)
+    public void LoadQualifier_SelectsStableFrame(string source, string expectedFrameId)
     {
         using FluNETContext context = FluNETContext.Create();
 

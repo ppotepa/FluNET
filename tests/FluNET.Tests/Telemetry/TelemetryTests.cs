@@ -27,6 +27,29 @@ public sealed class TelemetryTests
     }
 
     [Test]
+    public async Task SentenceExecutionTelemetryTracksRunAndStepWithoutPayloads()
+    {
+        InMemoryFluNetTelemetrySink sink = new();
+        using FluNETContext context = SurfaceCompilationExtensions.CreateSurfaceContext(services =>
+            services.AddSingleton<IFluNetTelemetrySink>(sink));
+
+        await context.ExecuteSurfaceAsync("SAY \"secret-looking-text\"");
+
+        IReadOnlyList<FluNetTelemetryEvent> events = sink.Snapshot()
+            .Where(item => item.Category == "execution")
+            .ToArray();
+        Assert.Multiple(() =>
+        {
+            Assert.That(events, Has.Some.Matches<FluNetTelemetryEvent>(item =>
+                item.Name == "run" && item.Outcome == "succeeded"));
+            Assert.That(events, Has.Some.Matches<FluNetTelemetryEvent>(item =>
+                item.Name == "step" && item.Outcome == "succeeded" && item.Attributes["step.index"] == "0"));
+            Assert.That(string.Join("|", events.SelectMany(item => item.Attributes.Values)),
+                Does.Not.Contain("secret-looking-text"));
+        });
+    }
+
+    [Test]
     public async Task ReconciliationTelemetryIncludesFencingTokenAndDiffCountsOnly()
     {
         InMemoryFluNetTelemetrySink sink = new();

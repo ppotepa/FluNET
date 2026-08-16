@@ -1,6 +1,5 @@
 using FluNET.Language;
-using FluNET.Syntax.Registry;
-using FluNET.Syntax.Verbs;
+using FluNET.Execution.Commands;
 
 namespace FluNET.Tests.Language;
 
@@ -33,13 +32,13 @@ public sealed class LanguageSnapshotTests
     public void Build_FreezesAnIndependentSnapshot()
     {
         LanguageBuilder builder = new();
-        builder.Command<SayText, string>("SPEAK", "Text")
+        builder.Command<SayCommand, string>("SPEAK", "Text")
             .Aliases("TELL")
             .Positional<string>(SemanticRole.Theme);
 
         LanguageSnapshot first = builder.Build();
 
-        builder.Command<GetText, string[]>("READ", "Text")
+        builder.Command<GetTextCommand, string[]>("READ", "Text")
             .Positional<string[]>(SemanticRole.Output, SlotDirection.Output);
         LanguageSnapshot second = builder.Build();
 
@@ -55,10 +54,10 @@ public sealed class LanguageSnapshotTests
     public void Build_RejectsAmbiguousSurfaceForms()
     {
         LanguageBuilder builder = new();
-        builder.Command<SayText, string>("SPEAK", "Text")
+        builder.Command<SayCommand, string>("SPEAK", "Text")
             .Aliases("SHARED")
             .Positional<string>(SemanticRole.Theme);
-        builder.Command<GetText, string[]>("READ", "Text")
+        builder.Command<GetTextCommand, string[]>("READ", "Text")
             .Aliases("SHARED")
             .Positional<string[]>(SemanticRole.Output, SlotDirection.Output);
 
@@ -67,22 +66,4 @@ public sealed class LanguageSnapshotTests
         Assert.That(error!.Message, Does.Contain("SHARED"));
     }
 
-    [Test]
-    public void Registry_ProjectsOnlyTheInjectedSnapshot()
-    {
-        LanguageBuilder builder = new();
-        builder.Command<SayText, string>("SPEAK", "Text")
-            .Positional<string>(SemanticRole.Theme);
-        LanguageSnapshot snapshot = builder.Build();
-
-        LanguageRegistry registry = new(snapshot);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(registry.Snapshot, Is.SameAs(snapshot));
-            Assert.That(registry.GetVerbType("SPEAK"), Is.EqualTo(typeof(SayText)));
-            Assert.That(registry.GetVerbType("GET"), Is.Null);
-            Assert.That(registry.Verbs, Is.EqualTo(new[] { typeof(SayText) }));
-        });
-    }
 }

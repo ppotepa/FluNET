@@ -15,6 +15,7 @@ dotnet test FluNET.sln --configuration Release --no-build
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- version
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- contract
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- --help
+dotnet run --project src/FluNET.Flu/FluNET.Flu.csproj --configuration Release --no-build -- check samples/FluNET.Showcase/program.flu
 
 dotnet pack src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build --output "$PACKAGES"
 PACKAGE="$(find "$PACKAGES" -maxdepth 1 -type f -name 'FluNET.Tool.*.nupkg' ! -name '*.symbols.nupkg' -print -quit)"

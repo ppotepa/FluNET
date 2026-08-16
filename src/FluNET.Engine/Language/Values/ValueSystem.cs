@@ -358,7 +358,7 @@ public sealed class ValueCodecRegistry : IValueCodecRegistry
         }
 
         // Batch 9 kept non-Unit -> Text as a transitional rule. The value layer
-        // deliberately does not treat that compatibility rule as identity.
+        // deliberately does not treat that conversion rule as identity.
         if (target.Id == BuiltInTypeIds.Text)
         {
             return false;

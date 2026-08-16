@@ -28,7 +28,10 @@ public sealed record ParenthesizedExpressionSyntax(
 public sealed record PropertyExpressionSyntax(
     ExpressionSyntax Target,
     string Property,
-    SourceSpan SourceSpan) : ExpressionSyntax(SourceSpan);
+    SourceSpan SourceSpan) : ExpressionSyntax(SourceSpan)
+{
+    public bool NullSafe { get; init; }
+}
 
 public sealed record IndexExpressionSyntax(
     ExpressionSyntax Target,

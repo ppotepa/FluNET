@@ -26,12 +26,27 @@ public static class SurfaceCompilationExtensions
     public static SurfaceCompilationResult CompileSurface(this FluNETContext context, string source, SourceSyntaxKind syntaxKind = SourceSyntaxKind.Auto) =>
         context.GetSurfaceCompiler().Compile(new SourceDocument(source, syntaxKind));
 
+    public static SurfaceCompilationResult CompileSurface(this FluNETContext context, SourceDocument document) =>
+        context.GetSurfaceCompiler().Compile(document);
+
     public static async ValueTask<SurfaceExecutionResult> ExecuteSurfaceAsync(this FluNETContext context, string source, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(context); SurfaceCompilationResult compilation = context.CompileSurface(source);
+        return await ExecuteCompiledSurfaceAsync(context, compilation, cancellationToken).ConfigureAwait(false);
+    }
+
+    public static async ValueTask<SurfaceExecutionResult> ExecuteSurfaceAsync(this FluNETContext context, SourceDocument document, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(context); ArgumentNullException.ThrowIfNull(document);
+        SurfaceCompilationResult compilation = context.CompileSurface(document);
+        return await ExecuteCompiledSurfaceAsync(context, compilation, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static async ValueTask<SurfaceExecutionResult> ExecuteCompiledSurfaceAsync(FluNETContext context, SurfaceCompilationResult compilation, CancellationToken cancellationToken)
+    {
         if (!compilation.IsValid || compilation.Plan is null) return new SurfaceExecutionResult(compilation, null, [], null);
         List<ExecutionStepResult> steps = [];
-        try { object? result = await context.GetService<ExecutionPlanExecutor>().ExecuteAsync(compilation.Plan, steps, cancellationToken).ConfigureAwait(false); return new SurfaceExecutionResult(compilation, result, steps, null); }
+        try { object? result = await context.GetService<SentenceExecutor>().ExecuteAsync(compilation.Plan, steps, cancellationToken).ConfigureAwait(false); return new SurfaceExecutionResult(compilation, result, steps, null); }
         catch (Exception exception) { return new SurfaceExecutionResult(compilation, null, steps, exception); }
     }
 }

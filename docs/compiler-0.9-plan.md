@@ -45,7 +45,7 @@ ReconciliationMutationPlanner
  SurfaceCompiler
         |
         v
- ExecutionPlanExecutor
+ Executor
 ```
 
 The compiler also keeps a side-effect-free two-read analysis graph on each `SyncDefinition`; runtime state acquisition itself uses the observer boundary. This prevents the old compact `LOAD CONFIG` shape from constraining reconciliation of JSON arrays.

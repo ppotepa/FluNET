@@ -113,28 +113,39 @@ public sealed class SemanticCommandBinder
         CommandSyntax syntax,
         CommandFrameDescriptor frame)
     {
-        HashSet<string> acceptedMarkers = frame.Slots
+        string[] acceptedMarkers = frame.Slots
             .Select(slot => slot.Marker)
             .OfType<string>()
-            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderByDescending(marker => marker.Length)
+            .ToArray();
         Dictionary<string, List<PromptToken>> segments = new(StringComparer.OrdinalIgnoreCase)
         {
             [SubjectMarker] = []
         };
         string currentMarker = SubjectMarker;
 
-        foreach (PromptToken token in syntax.Arguments)
+        PromptToken[] arguments = syntax.Arguments.ToArray();
+        for (int index = 0; index < arguments.Length; index++)
         {
-            if (token.Kind == PromptTokenKind.Word && acceptedMarkers.Contains(token.Text))
+            PromptToken token = arguments[index];
+            string? marker = acceptedMarkers.FirstOrDefault(candidate =>
             {
-                currentMarker = token.Text.ToUpperInvariant();
+                string[] words = candidate.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                return index + words.Length <= arguments.Length &&
+                    words.Select((word, offset) => arguments[index + offset].Kind == PromptTokenKind.Word &&
+                        arguments[index + offset].Text.Equals(word, StringComparison.OrdinalIgnoreCase)).All(match => match);
+            });
+            if (marker is not null)
+            {
+                currentMarker = marker.ToUpperInvariant();
                 if (!segments.ContainsKey(currentMarker))
                 {
                     segments.Add(currentMarker, []);
                 }
+                index += marker.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length - 1;
                 continue;
             }
-
             segments[currentMarker].Add(token);
         }
 
@@ -167,18 +178,6 @@ public sealed class SemanticCommandBinder
                 return new FrameSelection(command.Frames[0], false);
             }
 
-            // Compatibility rule for the original PoC: LOAD [configname]
-            // selected the Config realization from the output variable name.
-            if (selector.Kind == PromptTokenKind.Variable)
-            {
-                CommandFrameDescriptor? legacyMatch = command.Frames.FirstOrDefault(frame =>
-                    frame.Qualifiers.Any(qualifier =>
-                        selector.Text.Contains(qualifier, StringComparison.OrdinalIgnoreCase)));
-                if (legacyMatch is not null)
-                {
-                    return new FrameSelection(legacyMatch, false);
-                }
-            }
         }
 
         if (command.Frames.Count == 1)

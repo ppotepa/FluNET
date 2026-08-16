@@ -60,7 +60,7 @@ compact source ------> Surface front end
                         ExecutionPlan
                                  |
                                  v
-                    ExecutionPlanExecutor
+                           SentenceExecutor
                                  |
                                  v
                         typed handlers
@@ -68,12 +68,28 @@ compact source ------> Surface front end
 
 ## Canonical front end
 
-`ProcessedPrompt` performs quote-aware tokenization and builds `PromptSyntax` directly. Canonical syntax contains:
+`ProcessedPrompt` preserves the source-level `Sentence[]` produced by `SentenceSegmenter`, then performs quote-aware tokenization and builds `PromptSyntax`. Canonical syntax contains:
 
 - commands;
 - clauses/markers;
 - connectors such as `AND`/`THEN`/`ELSE`;
 - command modifiers such as retry, timeout, condition and error policy.
+
+The front-end boundary is therefore:
+
+```text
+SourceDocument / ProcessedPrompt
+  -> Lexer
+  -> TokenStream
+  -> SentenceSegmenter
+  -> Sentence[]
+  -> SentenceParser / SurfaceParser
+  -> ProgramSyntax
+```
+
+`Sentence[]` preserves source text, spans, terminators and indentation. The
+The execution pipeline has one typed representation: source syntax becomes a
+bound program, then an execution plan consumed by `SentenceExecutor`.
 
 Canonical source is the explicit low-level representation consumed by semantic binding.
 
@@ -265,13 +281,31 @@ Type checking belongs before the planner.
 
 ## Runtime execution
 
-`ExecutionPlanExecutor` repeatedly selects ready DAG nodes, executes ready work, stores outputs, journals workflow events and handles retry/timeout/conditions/resume.
+`SentenceExecutor` repeatedly selects ready DAG nodes, executes ready work, stores outputs, journals workflow events and handles retry/timeout/conditions/resume.
 
 Dispatch is by stable frame identity to typed routes/handlers.
 
 Execution-result CACHE and `ONCE BY` idempotency are handled in the common `CommandDispatcher`, so the behavior applies across eligible commands without adding cache logic to individual handlers.
 
 ## Resource-provider architecture
+
+## Capability and provider architecture
+
+Portable features are described by a `CapabilityDescriptor` and discovered
+through `CapabilityRegistry`. A descriptor carries an id, version, supported
+platforms and requested permissions. The registry prefers an exact platform
+provider and falls back to a provider marked `Any`:
+
+```text
+Capability requirement
+        -> CapabilityRegistry
+        -> exact platform provider
+        -> portable fallback provider
+        -> unavailable capability diagnostic
+```
+
+This keeps language and workflow source platform-neutral. Windows, Linux and
+macOS integrations belong in providers, not in the core command grammar.
 
 Compact GET/LOAD uses:
 
@@ -287,6 +321,25 @@ Surface value
 Built-in providers currently cover:
 
 - local files;
+- portable file-pattern scanning through the `filesystem.scan` capability;
+- portable SHA-256 hashing through the `filesystem.hash` capability;
+- portable runtime information through the `system.info` capability;
+- portable host folder resolution through the injectable `system.path` capability;
+- portable clock and cancellation-aware delay through the `system.time` capability;
+- portable copy/move operations through the `filesystem.write` capability;
+- recoverable trash operations through the `filesystem.trash` capability;
+- host-driven file events through the `filesystem.watch` capability;
+- portable key-value state through the `storage.keyvalue` capability;
+- provider-neutral text blobs through the `storage.blob` capability;
+- optional local SQLite queries through the `database.sql` capability;
+- explicitly configured direct process execution through the `system.process` capability;
+- portable ZIP creation/extraction through the `filesystem.archive` capability;
+- HTTP GET/POST/PUT/PATCH/DELETE/download through the `network.http` capability;
+- desktop clipboard reads and writes through the `system.clipboard` capability;
+- portable directory creation through the `filesystem.directory` capability;
+
+The CLI exposes `--dry-run` and interactive `:dry-run`; these analyze and print
+canonical commands without dispatching any effectful handler.
 - HTTP JSON;
 - environment variables;
 - secrets.
@@ -315,7 +368,7 @@ EVERY / WATCH / WHEN source
         + WorkflowTemplate(SurfaceCompilationResult)
 ```
 
-`AutomationScheduler` is host-driven. It owns no thread and receives `TickAsync(now)` or `PublishSignalAsync(...)` calls from the embedding host. It executes the workflow template's normal `ExecutionPlan` with `ExecutionPlanExecutor`.
+`AutomationScheduler` is host-driven. It owns no thread and receives `TickAsync(now)` or `PublishSignalAsync(...)` calls from the embedding host. It executes the workflow template's normal `ExecutionPlan` with `SentenceExecutor`.
 
 `DurableAutomationScheduleStore` persists timer schedule state only. The host recompiles/re-registers definitions after restart.
 
@@ -336,9 +389,10 @@ Workflow durability stays behind `IWorkflowStateStore`. The executor writes the 
 
 Resume checks the plan fingerprint before restoring terminal steps.
 
-## Compatibility layer
+## Runtime model
 
-Historical token trees, sentence APIs and old verb adapters remain for compatibility, but new module/runtime architecture uses stable frames and typed commands. Compatibility projections must not determine canonical compilation success.
+Stable frames and typed commands are the only module/runtime architecture. There
+is no compatibility projection or alternate execution path.
 
 ## What is intentionally not another runtime
 

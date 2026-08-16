@@ -3,11 +3,12 @@ using FluNET.Language.Binding;
 using FluNET.Language.Values;
 using FluNET.Variables;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace FluNET.Execution.Commands;
 
 public sealed record FilterJsonCommand(IExpression<JsonElement[]> Source, JsonDataExpression Predicate) : ICommand<JsonElement[]>;
-public sealed record SortJsonCommand(IExpression<JsonElement[]> Source, JsonDataExpression Key) : ICommand<JsonElement[]>;
+public sealed record SortJsonCommand(IExpression<JsonElement[]> Source, JsonDataExpression Key, bool Descending) : ICommand<JsonElement[]>;
 public sealed record TakeJsonCommand(IExpression<JsonElement[]> Source, IExpression<int> Count) : ICommand<JsonElement[]>;
 public sealed record ProjectJsonCommand(IExpression<JsonElement[]> Source, JsonProjection Projection) : ICommand<JsonElement[]>;
 public sealed record DefaultJsonCommand(IExpression<JsonElement[]> Source, JsonDefaultSpec Default) : ICommand<JsonElement[]>;
@@ -32,8 +33,11 @@ public sealed class SortJsonCommandBinder(LanguageSnapshot language, IValueCodec
         if (command.Frame.Id != new FrameId("surface.data.sort.json")) return null;
         CommandBindingContext context = new(command, new ExpressionBinder(language, values));
         BoundArgument key = command[new FrameRoleId("Key")];
-        string source = string.Join(" ", key.Tokens.Select(token => Unwrap(token.Text)));
-        return new SortJsonCommand(context.Require<JsonElement[]>(SemanticRole.Source), JsonDataExpression.Parse(source));
+        string source = string.Join(" ", key.Tokens.Select(token => Unwrap(token.Text))).Trim();
+        bool descending = Regex.IsMatch(source, @"\s+(?:DESC|DESCENDING|NEWEST|LARGEST)\s*$", RegexOptions.IgnoreCase);
+        if (descending)
+            source = Regex.Replace(source, @"\s+(?:DESC|DESCENDING|NEWEST|LARGEST)\s*$", string.Empty, RegexOptions.IgnoreCase).Trim();
+        return new SortJsonCommand(context.Require<JsonElement[]>(SemanticRole.Source), JsonDataExpression.Parse(source), descending);
     }
     private static string Unwrap(string value) => value.Length >= 2 && value[0] == '{' && value[^1] == '}' ? value[1..^1] : value;
 }
@@ -93,9 +97,13 @@ public sealed class SortJsonCommandHandler(IVariableResolver variables) : IComma
     public ValueTask<JsonElement[]> HandleAsync(SortJsonCommand command, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        JsonElement[] result = command.Source.Evaluate(variables)
+        IEnumerable<Row> rows = command.Source.Evaluate(variables)
             .Select((item, index) => new Row(item, index, command.Key.Evaluate(item, variables)))
-            .OrderBy(row => row.Key, JsonDataComparer.Instance)
+            .ToArray();
+        IOrderedEnumerable<Row> ordered = command.Descending
+            ? rows.OrderByDescending(row => row.Key, JsonDataComparer.Instance)
+            : rows.OrderBy(row => row.Key, JsonDataComparer.Instance);
+        JsonElement[] result = ordered
             .ThenBy(row => row.Index)
             .Select(row => row.Value.Clone())
             .ToArray();

@@ -11,7 +11,7 @@ namespace FluNET.Tests.Execution;
 public sealed class CanonicalPipelineTests
 {
     [Test]
-    public async Task ExecuteAsync_DoesNotConstructLegacySentence()
+    public async Task ExecuteAsync_ProducesTypedPlan()
     {
         CapturingOutput output = new();
         using FluNETContext context = FluNETContext.Create(services =>
@@ -23,7 +23,6 @@ public sealed class CanonicalPipelineTests
         Assert.Multiple(() =>
         {
             Assert.That(result.IsSuccess, Is.True, result.Error?.Message);
-            Assert.That(result.Sentence, Is.Null);
             Assert.That(result.Plan, Is.Not.Null);
             Assert.That(result.Result, Is.EqualTo("canonical"));
             Assert.That(output.Messages, Is.EqualTo(new[] { "canonical" }));
@@ -50,7 +49,7 @@ public sealed class CanonicalPipelineTests
     }
 
     [Test]
-    public void Run_ProjectsCompatibilitySentenceWithoutRepeatingEffect()
+    public void Run_ExecutesWithoutRepeatingEffect()
     {
         CapturingOutput output = new();
         using FluNETContext context = FluNETContext.Create(services =>
@@ -61,7 +60,7 @@ public sealed class CanonicalPipelineTests
         Assert.Multiple(() =>
         {
             Assert.That(result.ValidationResult.IsValid, Is.True);
-            Assert.That(result.Sentence, Is.Not.Null);
+            Assert.That(result.SourceSentence, Is.Null);
             Assert.That(result.Result, Is.EqualTo("compatible"));
             Assert.That(output.Messages, Is.EqualTo(new[] { "compatible" }));
         });

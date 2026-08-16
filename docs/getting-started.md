@@ -45,7 +45,9 @@ LOAD settings.json AS config
 SAY "Environment: {config.environment}"
 ```
 
-Supported built-in compact file reads currently have executable decoders for JSON and text. The inference layer recognizes more extensions, but CSV/XML/binary/image decoding is not yet provided by the built-in file provider.
+Supported built-in compact file reads have executable decoders for JSON, text,
+CSV, XML, binary and image resources. Binary and image values remain opaque
+typed values until a host or encoder chooses how to consume them.
 
 ## 3. Load independent inputs in parallel
 
@@ -220,8 +222,9 @@ HTTP enrichment or arbitrary mutation inside the loop is not part of the current
 ## 11. Define a reusable TASK
 
 ```text
-TASK fetch-user id -> Json
+TASK fetch-user id RETURNS Json
     GET https://api.example.test/users/{id} AS user
+    RETURN [user]
 
 RUN fetch-user 42 AS user
 SAY "{user.name}"

@@ -1,4 +1,4 @@
-# Compact separators: `,`, `;`, `|`, `AND`, `THEN`
+# Compact separators: `.`, `,`, `;`, `|`, `AND`, `THEN`
 
 FluNET uses different separators for different kinds of relationships. The key rule is that punctuation should describe **syntax/dataflow**, not accidentally serialize work.
 
@@ -8,6 +8,7 @@ FluNET uses different separators for different kinds of relationships. The key r
 | --- | --- | --- |
 | `,` | another element of the same syntactic role | no |
 | `;` | another statement in the same lexical scope | no |
+| `.` | spoken sentence terminator, equivalent to a newline | no |
 | newline | another statement in the same lexical scope | no |
 | `|` | feed the produced value into the next pipeline stage | yes, through data dependency |
 | canonical `AND` | explicit parallel coordination | explicit same-stage relationship |
@@ -90,6 +91,20 @@ SAY {left;right}
 ```
 
 The splitter tracks quote state and delimiter depth before treating `;` as punctuation.
+
+## Period: a spoken sentence terminator
+
+A top-level period followed by whitespace or the end of input separates
+sentences. Periods inside quotes and nested values remain data:
+
+```text
+GET users FROM https://api.example.test/users. COUNT users AS total.
+SAY "A period is data here."
+```
+
+As with a newline, a period does not imply ordering; data dependencies and
+explicit `THEN` still determine execution order. Quote a value whose final
+character is a literal period.
 
 If an unquoted resource literally needs a top-level semicolon as part of its value (for example an unusual URI path), quote the value so the semicolon is data rather than syntax.
 

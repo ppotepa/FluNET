@@ -30,7 +30,7 @@ public static class ReconciliationExecutionExtensions
         context.GetResourceObserverRegistry(),
         new ReconciliationDiffEngine(),
         context.GetReconciliationMutationPlanner(),
-        context.GetService<ExecutionPlanExecutor>(),
+        context.GetService<SentenceExecutor>(),
         context.GetReconciliationStateStore(),
         context.GetReconciliationCheckpointStore(),
         context.GetReconciliationLeaseContextAccessor());

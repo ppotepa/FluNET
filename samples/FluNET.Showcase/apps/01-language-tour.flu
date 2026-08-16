@@ -1,0 +1,27 @@
+# Natural sentences, punctuation, typed values, text and control flow.
+
+SET greeting TO "  hello from FluNET  "; TRIM [greeting] AS clean.
+UPPER [clean] AS loud.
+REPLACE "HELLO" WITH "WELCOME" IN [loud] AS welcome.
+SPLIT [welcome] BY " " AS words.
+COMBINE [words] WITH "-" AS slug.
+
+SET attempts TO 0
+WHILE attempts < 4 MAX 8:
+    INCREMENT [attempts]
+    CONTINUE WHEN attempts == 2
+    BREAK WHEN attempts == 3
+
+IF attempts == 3:
+    SAY "Loop completed after {attempts} attempts."
+ELSE IF attempts > 3:
+    SAY "Loop exceeded its target."
+ELSE:
+    SAY "Loop stopped too early."
+
+UNLESS slug == "":
+    EXPECT [slug] TO CONTAIN "WELCOME"
+    SAY "Text pipeline: {slug}."
+
+REPEAT 2 TIMES:
+    SAY "A bounded repeated sentence."

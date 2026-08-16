@@ -49,19 +49,19 @@ public sealed class ReconciliationRunner : IReconciliationExecutor
     private readonly IResourceObserverRegistry observers;
     private readonly ReconciliationDiffEngine diffEngine;
     private readonly ReconciliationMutationPlanner mutationPlanner;
-    private readonly ExecutionPlanExecutor executor;
+    private readonly SentenceExecutor executor;
     private readonly IReconciliationStateStore stateStore;
     private readonly IReconciliationCheckpointStore checkpoints;
     private readonly IReconciliationLeaseContextAccessor leaseAccessor;
 
-    public ReconciliationRunner(IResourceObserverRegistry observers, ReconciliationDiffEngine diffEngine, ReconciliationMutationPlanner mutationPlanner, ExecutionPlanExecutor executor)
+    public ReconciliationRunner(IResourceObserverRegistry observers, ReconciliationDiffEngine diffEngine, ReconciliationMutationPlanner mutationPlanner, SentenceExecutor executor)
         : this(observers, diffEngine, mutationPlanner, executor, new InMemoryReconciliationStateStore(), new InMemoryReconciliationCheckpointStore(), new ReconciliationLeaseContextAccessor()) { }
 
     public ReconciliationRunner(
         IResourceObserverRegistry observers,
         ReconciliationDiffEngine diffEngine,
         ReconciliationMutationPlanner mutationPlanner,
-        ExecutionPlanExecutor executor,
+        SentenceExecutor executor,
         IReconciliationStateStore stateStore,
         IReconciliationCheckpointStore checkpoints,
         IReconciliationLeaseContextAccessor leaseAccessor)

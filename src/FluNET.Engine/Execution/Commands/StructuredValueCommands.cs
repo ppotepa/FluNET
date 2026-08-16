@@ -1,7 +1,6 @@
 using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Language.Values;
-using FluNET.Syntax.Verbs;
 using FluNET.Variables;
 using FluNET.Capabilities;
 using System.Text.Json;
@@ -18,7 +17,7 @@ public sealed record FormatJsonCommand(IExpression<JsonElement> Source) : IComma
 public sealed class SetTextCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<SetTextCommand, string, SetText>(language, values)
+    FrameCommandBinder<SetTextCommand, string>(language, values)
 {
     protected override SetTextCommand Bind(BoundCommand command) =>
         new(Context(command).RequireText(SemanticRole.Theme));
@@ -27,7 +26,7 @@ public sealed class SetTextCommandBinder(
 public sealed class SetJsonCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<SetJsonCommand, JsonElement, SetJson>(language, values)
+    FrameCommandBinder<SetJsonCommand, JsonElement>(language, values)
 {
     protected override SetJsonCommand Bind(BoundCommand command) =>
         new(Context(command).Require<JsonElement>(SemanticRole.Theme));
@@ -36,7 +35,7 @@ public sealed class SetJsonCommandBinder(
 public sealed class SetNumberCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<SetNumberCommand, decimal, SetNumber>(language, values)
+    FrameCommandBinder<SetNumberCommand, decimal>(language, values)
 {
     protected override SetNumberCommand Bind(BoundCommand command) =>
         new(Context(command).Require<decimal>(SemanticRole.Theme));
@@ -45,7 +44,7 @@ public sealed class SetNumberCommandBinder(
 public sealed class SetBooleanCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<SetBooleanCommand, bool, SetBoolean>(language, values)
+    FrameCommandBinder<SetBooleanCommand, bool>(language, values)
 {
     protected override SetBooleanCommand Bind(BoundCommand command) =>
         new(Context(command).Require<bool>(SemanticRole.Theme));
@@ -54,7 +53,7 @@ public sealed class SetBooleanCommandBinder(
 public sealed class ParseJsonCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<ParseJsonCommand, JsonElement, ParseJson>(language, values)
+    FrameCommandBinder<ParseJsonCommand, JsonElement>(language, values)
 {
     protected override ParseJsonCommand Bind(BoundCommand command) =>
         new(Context(command).RequireText(SemanticRole.Source));
@@ -63,7 +62,7 @@ public sealed class ParseJsonCommandBinder(
 public sealed class FormatJsonCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<FormatJsonCommand, string, FormatJson>(language, values)
+    FrameCommandBinder<FormatJsonCommand, string>(language, values)
 {
     protected override FormatJsonCommand Bind(BoundCommand command) =>
         new(Context(command).Require<JsonElement>(SemanticRole.Source));

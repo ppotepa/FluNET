@@ -2,7 +2,6 @@ using FluNET.Capabilities;
 using FluNET.Context;
 using FluNET.Execution;
 using FluNET.Prompt;
-using FluNET.Syntax.Verbs;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests;
@@ -48,7 +47,7 @@ public sealed class DownloadCommandTests
         Assert.Multiple(() =>
         {
             Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
-            Assert.That(execution.Sentence?.Root, Is.InstanceOf<DownloadFile>());
+            Assert.That(execution.Plan?.Steps, Is.Not.Empty);
             Assert.That(execution.Result, Is.InstanceOf<FileInfo>());
             Assert.That(File.ReadAllText(destination), Is.EqualTo("deterministic download content"));
         });

@@ -16,11 +16,11 @@ See [0.9 freeze readiness](compiler-0.9-freeze-readiness.md).
 
 ## 1.0 — Production Readiness
 
-Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 has implemented the release-gate policy. CI is wired to the canonical .NET 9 gate, but current GitHub jobs are blocked before checkout by an account billing issue, so release verification remains unavailable.
+Batches **76–88: VERIFIED 1.0 RC**. Batch 89 defines the release gate, which now passes locally on the exact current tree. CI remains independently subject to its account/infrastructure state.
 
 | Batch | Scope | Status |
 | --- | --- | --- |
-| 76 | solution-wide Release gate + bash/PowerShell scripts | IMPLEMENTED / NOT VERIFIED |
+| 76 | solution-wide Release gate + bash/PowerShell scripts | VERIFIED |
 | 77 | durable reconciliation baseline/state | IMPLEMENTED |
 | 78 | explicit reconciliation conflict policies | IMPLEMENTED |
 | 79 | generic reconciliation mutator registry | IMPLEMENTED |
@@ -32,9 +32,11 @@ Batches **76–88: IMPLEMENTED RC source candidate / NOT VERIFIED**. Batch 89 ha
 | 85 | language/API/persistence/durable-format freeze candidate | IMPLEMENTED |
 | 86 | Tool packaging + compatibility CLI boundary | IMPLEMENTED |
 | 87 | upgrade/backward-compatibility contracts | IMPLEMENTED source tests |
-| 88 | RC source-readiness ledger | IMPLEMENTED / NOT VERIFIED |
-| 89 | release-promotion gate policy + exact-tree evidence decision | GATE IMPLEMENTED / VERIFICATION ENV BLOCKED |
+| 88 | RC source-readiness ledger | VERIFIED |
+| 89 | release-promotion gate policy + exact-tree evidence decision | VERIFIED LOCALLY |
 
 See [1.0 RC source readiness](1.0-rc-readiness.md), [verification gate](1.0-verification.md), and [release gate](1.0-release-gate.md).
 
-The next action is not another feature batch. It is to make a .NET 9 runner available, execute the canonical gate, fix any real compiler/test/package failures, rerun it, promote the public version only after green pre-promotion evidence, and rerun again before an explicit release/tag.
+The release-candidate foundation is implemented and the current exact tree has
+passed the complete local gate. Feature work may continue; version promotion
+and release/tagging remain separately authorized actions.

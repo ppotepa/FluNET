@@ -1,7 +1,11 @@
 namespace FluNET.Prompt.Surface;
 
 public sealed record SurfaceProgramSyntax(IReadOnlyList<SurfaceStatementSyntax> Statements, SourceSpan Span);
-public abstract record SurfaceStatementSyntax(SourceSpan Span);
+public abstract record SurfaceStatementSyntax(SourceSpan Span)
+{
+    /// <summary>Index of the source Sentence which produced this statement.</summary>
+    public int SentenceIndex { get; init; } = -1;
+}
 public sealed record SurfaceCommandSyntax(string Name, IReadOnlyList<SurfaceValueSyntax> Values, string? Alias, SourceSpan Span) : SurfaceStatementSyntax(Span)
 {
     public string NormalizedName => Name.ToUpperInvariant();
@@ -15,6 +19,21 @@ public sealed record SurfaceTaskDefinitionSyntax(
     IReadOnlyList<string> Parameters,
     string? ResultTypeName,
     IReadOnlyList<SurfaceStatementSyntax> Statements,
+    SourceSpan Span) : SurfaceStatementSyntax(Span);
+
+public sealed record SurfaceRepeatSyntax(
+    int Count,
+    IReadOnlyList<SurfaceStatementSyntax> Statements,
+    SourceSpan Span) : SurfaceStatementSyntax(Span);
+
+public sealed record SurfaceWhileSyntax(
+    SurfaceWhileDescriptor Descriptor,
+    SourceSpan Span) : SurfaceStatementSyntax(Span);
+
+public sealed record SurfaceIfSyntax(
+    string Condition,
+    IReadOnlyList<SurfaceStatementSyntax> WhenTrue,
+    IReadOnlyList<SurfaceStatementSyntax> WhenFalse,
     SourceSpan Span) : SurfaceStatementSyntax(Span);
 
 public sealed record SurfaceValueSyntax(string Text, SourceSpan Span)

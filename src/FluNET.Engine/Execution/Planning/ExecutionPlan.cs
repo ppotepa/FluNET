@@ -4,10 +4,12 @@ using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Variables;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FluNET.Execution.Workflow;
+using FluNET.Telemetry;
 
 namespace FluNET.Execution.Planning;
 
@@ -229,7 +231,10 @@ public sealed class ExecutionPlanner
         for (int index = 1; index < commandCount; index++)
         {
             if (!links.TryGetValue(index, out Prompt.CommandLinkSyntax? link))
-                throw new ExecutionPlanException($"Command {index} has no connector from its predecessor.");
+            {
+                stages[index] = stages[index - 1];
+                continue;
+            }
             stages[index] = stages[index - 1] + (link.Kind == Prompt.CommandLinkKind.Sequence ? 1 : 0);
         }
         return stages;
@@ -316,23 +321,38 @@ public sealed record ExecutionStepResult(
     int Attempts = 1,
     Exception? Error = null);
 
-public sealed class ExecutionPlanExecutor
+/// <summary>Executes an already planned FluNET program.</summary>
+/// <summary>
+/// Executes the typed sentence plan produced by the compiler.
+/// A sentence is the semantic unit of a FluNET program; this class owns only
+/// execution and has no dependency on parser implementation details.
+/// </summary>
+public class SentenceExecutor
 {
     private readonly CommandDispatcher dispatcher;
     private readonly IVariableResolver variables;
     private readonly IWorkflowStateStore stateStore;
     private readonly IWorkflowValueSerializer valueSerializer;
+    private readonly IFluNetTelemetrySink telemetry;
 
-    public ExecutionPlanExecutor(CommandDispatcher dispatcher, IVariableResolver variables, IWorkflowStateStore stateStore, IWorkflowValueSerializer valueSerializer)
+    public SentenceExecutor(
+        CommandDispatcher dispatcher,
+        IVariableResolver variables,
+        IWorkflowStateStore stateStore,
+        IWorkflowValueSerializer valueSerializer,
+        IFluNetTelemetrySink telemetry)
     {
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         this.variables = variables ?? throw new ArgumentNullException(nameof(variables));
         this.stateStore = stateStore ?? throw new ArgumentNullException(nameof(stateStore));
         this.valueSerializer = valueSerializer ?? throw new ArgumentNullException(nameof(valueSerializer));
+        this.telemetry = telemetry ?? NullFluNetTelemetrySink.Instance;
     }
-    public ExecutionPlanExecutor(CommandDispatcher dispatcher, IVariableResolver variables, IWorkflowStateStore stateStore)
+    public SentenceExecutor(CommandDispatcher dispatcher, IVariableResolver variables, IWorkflowStateStore stateStore, IWorkflowValueSerializer valueSerializer)
+        : this(dispatcher, variables, stateStore, valueSerializer, NullFluNetTelemetrySink.Instance) { }
+    public SentenceExecutor(CommandDispatcher dispatcher, IVariableResolver variables, IWorkflowStateStore stateStore)
         : this(dispatcher, variables, stateStore, new JsonWorkflowValueSerializer()) { }
-    public ExecutionPlanExecutor(CommandDispatcher dispatcher, IVariableResolver variables)
+    public SentenceExecutor(CommandDispatcher dispatcher, IVariableResolver variables)
         : this(dispatcher, variables, new InMemoryWorkflowStateStore(), new JsonWorkflowValueSerializer()) { }
 
     public ValueTask<object?> ExecuteAsync(ExecutionPlan plan, ICollection<ExecutionStepResult> completedSteps, CancellationToken cancellationToken = default) =>
@@ -343,6 +363,12 @@ public sealed class ExecutionPlanExecutor
         ArgumentNullException.ThrowIfNull(plan);
         ArgumentNullException.ThrowIfNull(completedSteps);
         ArgumentNullException.ThrowIfNull(workflow);
+        await EmitRunAsync(workflow, "started", plan.Steps.Count, 0).ConfigureAwait(false);
+        foreach ((string name, object? value) in workflow.Inputs)
+        {
+            if (value is not null)
+                variables.Register(name, value);
+        }
         workflow.BindPlan(CreatePlanFingerprint(plan));
         object? lastResult = null;
         HashSet<int> completed = [];
@@ -384,22 +410,26 @@ public sealed class ExecutionPlanExecutor
             if (fatal?.Error is not null) System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(fatal.Error).Throw();
         }
         workflow.Complete();
+        await EmitRunAsync(workflow, "succeeded", plan.Steps.Count, completed.Count).ConfigureAwait(false);
         return lastResult;
     }
 
     private async Task<StepDispatch> DispatchAsync(ExecutionPlanStep step, WorkflowRunState workflow, CancellationToken cancellationToken)
     {
+        long started = Stopwatch.GetTimestamp();
         try
         {
             if (!EvaluateCondition(step.Policy))
             {
                 await RecordAsync(workflow, step.Index, WorkflowStepStatus.Skipped, 0, "Condition evaluated to false.", null, cancellationToken).ConfigureAwait(false);
+                await EmitStepAsync(step, WorkflowStepStatus.Skipped, 0, started).ConfigureAwait(false);
                 return new StepDispatch(step, null, WorkflowStepStatus.Skipped, 0, null, false);
             }
         }
         catch (Exception exception)
         {
             await RecordAsync(workflow, step.Index, WorkflowStepStatus.Failed, 0, exception.Message, null, cancellationToken).ConfigureAwait(false);
+            await EmitStepAsync(step, WorkflowStepStatus.Failed, 0, started, exception).ConfigureAwait(false);
             return new StepDispatch(step, null, WorkflowStepStatus.Failed, 0, exception, EffectiveErrorBehavior(step.Policy, exception) == WorkflowErrorBehavior.Fail);
         }
 
@@ -411,6 +441,7 @@ public sealed class ExecutionPlanExecutor
             attempts = attempt;
             lastError = null;
             await RecordAsync(workflow, step.Index, WorkflowStepStatus.Running, attempt, null, null, cancellationToken).ConfigureAwait(false);
+            await EmitStepAsync(step, WorkflowStepStatus.Running, attempt, started).ConfigureAwait(false);
             using CancellationTokenSource? timeout = step.Policy.Timeout is null ? null : CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             if (timeout is not null && step.Policy.Timeout is TimeSpan timeoutDelay) timeout.CancelAfter(timeoutDelay);
             CancellationToken stepToken = timeout?.Token ?? cancellationToken;
@@ -432,12 +463,14 @@ public sealed class ExecutionPlanExecutor
             {
                 string? resultJson = valueSerializer.Serialize(dispatch.Result, step.Command.Frame.ResultType);
                 await RecordAsync(workflow, step.Index, WorkflowStepStatus.Succeeded, attempt, null, resultJson, cancellationToken).ConfigureAwait(false);
+                await EmitStepAsync(step, WorkflowStepStatus.Succeeded, attempt, started).ConfigureAwait(false);
                 return new StepDispatch(step, dispatch.Result, WorkflowStepStatus.Succeeded, attempt, null, false);
             }
 
             if (attempt < maxAttempts && ShouldRetry(step.Policy, lastError))
             {
                 await RecordAsync(workflow, step.Index, WorkflowStepStatus.Retrying, attempt, lastError.Message, null, cancellationToken).ConfigureAwait(false);
+                await EmitStepAsync(step, WorkflowStepStatus.Retrying, attempt, started, lastError).ConfigureAwait(false);
                 TimeSpan delay = BackoffDelay(step.Policy.Backoff, step.Index, attempt);
                 if (delay > TimeSpan.Zero) await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
             }
@@ -446,7 +479,47 @@ public sealed class ExecutionPlanExecutor
 
         await RecordAsync(workflow, step.Index, WorkflowStepStatus.Failed, attempts, lastError?.Message, null, cancellationToken).ConfigureAwait(false);
         Exception error = lastError ?? new InvalidOperationException($"Execution step {step.Index} failed.");
+        await EmitStepAsync(step, WorkflowStepStatus.Failed, attempts, started, error).ConfigureAwait(false);
         return new StepDispatch(step, null, WorkflowStepStatus.Failed, attempts, error, EffectiveErrorBehavior(step.Policy, error) == WorkflowErrorBehavior.Fail);
+    }
+
+    private ValueTask EmitRunAsync(WorkflowRunState workflow, string outcome, int planSteps, int completedSteps) =>
+        FluNetTelemetry.TryEmitAsync(telemetry, new(
+            DateTimeOffset.UtcNow,
+            "execution",
+            "run",
+            outcome,
+            TimeSpan.Zero,
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["run.id"] = workflow.RunId.ToString("N"),
+                ["plan.steps"] = planSteps.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                ["completed.steps"] = completedSteps.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            }));
+
+    private ValueTask EmitStepAsync(
+        ExecutionPlanStep step,
+        WorkflowStepStatus status,
+        int attempt,
+        long started,
+        Exception? error = null)
+    {
+        Dictionary<string, string> attributes = new(StringComparer.Ordinal)
+        {
+            ["step.index"] = step.Index.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            ["frame.id"] = step.Command.Frame.Id.Value,
+            ["usage"] = step.Command.Frame.UsageName,
+            ["status"] = status.ToString(),
+            ["attempt"] = attempt.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+        if (error is not null) attributes["error.type"] = error.GetType().FullName ?? error.GetType().Name;
+        return FluNetTelemetry.TryEmitAsync(telemetry, new(
+            DateTimeOffset.UtcNow,
+            "execution",
+            "step",
+            status.ToString().ToLowerInvariant(),
+            Stopwatch.GetElapsedTime(started),
+            attributes));
     }
 
     private static bool ShouldRetry(CommandExecutionPolicy policy, Exception exception)
@@ -490,7 +563,7 @@ public sealed class ExecutionPlanExecutor
         return TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
     }
 
-    private async ValueTask<object?> RestoreAsync(
+    private ValueTask<object?> RestoreAsync(
         IReadOnlyList<WorkflowEvent> history,
         IDictionary<int, ExecutionPlanStep> pending,
         ISet<int> completed,
@@ -526,7 +599,7 @@ public sealed class ExecutionPlanExecutor
                     : null));
             if (item.Status == WorkflowStepStatus.Succeeded) lastResult = result;
         }
-        return lastResult;
+        return ValueTask.FromResult(lastResult);
     }
 
     private bool EvaluateCondition(CommandExecutionPolicy policy)

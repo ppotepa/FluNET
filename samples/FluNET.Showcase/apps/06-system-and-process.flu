@@ -1,0 +1,29 @@
+# Cross-platform runtime information, paths, time, temporary files and process execution.
+
+SYSTEM INFO AS system
+METRICS AS metrics
+PATH TEMP AS temporaryDirectory
+PATH HOME AS homeDirectory
+PATH CACHE AS cacheDirectory
+NOW AS started
+
+TEMP FILE .txt AS scratch
+TEMP DIRECTORY AS temporaryWorkspace
+SAVE "FluNET system probe" TO [scratch]
+THEN
+STAT [scratch] AS scratchInfo
+THEN
+HASH [scratch] AS scratchHash
+
+EXECUTE "dotnet --version" ENV {DOTNET_NOLOGO=1} AS dotnet
+EXPECT dotnet.exitCode TO EQUAL "0"
+
+WAIT 10ms
+NOW AS finished
+SAY "OS={system.osDescription}; architecture={system.osArchitecture}."
+SAY "Process={metrics.processId}; memory={metrics.workingSetBytes}."
+SAY "dotnet={dotnet.standardOutput}; scratch={scratchInfo.length} bytes; hash={scratchHash}."
+SAY "Started={started}; finished={finished}; temp={temporaryDirectory}."
+SAY "Home={homeDirectory}; cache={cacheDirectory}."
+CLEANUP [scratch]
+CLEANUP [temporaryWorkspace]

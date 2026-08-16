@@ -1,10 +1,7 @@
 using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Syntax.Verbs;
-using FluNET.Tokens.Tree;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text;
 
@@ -48,14 +45,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"TRANSFORM {text} USING UTF8.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(sentence!.Root, Is.InstanceOf<TransformEncoding>());
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Is.Not.Null);
 
                 // Verify the result is valid base64 encoded text
@@ -72,7 +68,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"TRANSFORM {text} USING ASCII.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -93,7 +89,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"TRANSFORM {text} USING Unicode.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -114,7 +110,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"TRANSFORM {text} USING UTF32.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -138,7 +134,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("TRANSFORM [text] USING [encoding].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -158,7 +154,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("TRANSFORM {Reference text} USING UTF8.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -175,7 +171,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("TRANSFORM \"\" USING UTF8.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -196,7 +192,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"TRANSFORM {text} USING UTF8.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -243,7 +239,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"TRANSFORM {longText} USING UTF8.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>

@@ -1,5 +1,4 @@
 using FluNET.Prompt;
-using FluNET.Syntax.Core;
 using System.Collections.ObjectModel;
 
 namespace FluNET.Language;
@@ -88,7 +87,7 @@ public sealed record CommandSlotDescriptor
     public SemanticRole Role => Enum.TryParse(RoleId.Value, true, out SemanticRole role)
         ? role
         : throw new InvalidOperationException(
-            $"Role '{RoleId}' is frame-specific. Use RoleId instead of the compatibility Role property.");
+            $"Role '{RoleId}' is frame-specific. Use RoleId for frame-specific roles.");
     public Type ValueType { get; }
     public TypeSymbol ValueTypeSymbol { get; internal set; } = null!;
     public SlotDirection Direction { get; }
@@ -108,9 +107,7 @@ public sealed record CommandFrameDescriptor
         ModuleId moduleId,
         string usageName,
         Type implementationType,
-        Type familyType,
         Type resultType,
-        bool hasLegacyVerbAdapter,
         bool isDefault,
         IEnumerable<string> qualifiers,
         IEnumerable<CommandSlotDescriptor> slots)
@@ -120,9 +117,7 @@ public sealed record CommandFrameDescriptor
         ModuleId = moduleId.IsEmpty ? throw new ArgumentException("A module id is required.", nameof(moduleId)) : moduleId;
         UsageName = RequireName(usageName, nameof(usageName));
         ImplementationType = implementationType ?? throw new ArgumentNullException(nameof(implementationType));
-        FamilyType = familyType ?? throw new ArgumentNullException(nameof(familyType));
         ResultType = resultType ?? throw new ArgumentNullException(nameof(resultType));
-        HasLegacyVerbAdapter = hasLegacyVerbAdapter;
         IsDefault = isDefault;
         Qualifiers = qualifiers.Select(NormalizeName).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
         Slots = slots.ToArray();
@@ -133,18 +128,8 @@ public sealed record CommandFrameDescriptor
     public ModuleId ModuleId { get; }
     public string UsageName { get; }
 
-    /// <summary>
-    /// CLR declaration type retained for compatibility. For legacy frames this
-    /// is the old IVerb adapter; for native frames it is the typed command type.
-    /// It is never the frame identity.
-    /// </summary>
+    /// <summary>CLR command declaration type. It is metadata, never frame identity.</summary>
     public Type ImplementationType { get; }
-
-    /// <summary>Legacy verb-family metadata; native frames use their command type.</summary>
-    public Type FamilyType { get; }
-
-    /// <summary>True only when the frame has an old IVerb compatibility adapter.</summary>
-    public bool HasLegacyVerbAdapter { get; }
 
     public Type ResultType { get; }
     public TypeSymbol ResultTypeSymbol { get; internal set; } = null!;
@@ -184,17 +169,6 @@ public sealed record CommandDescriptor
         {
             throw new LanguageDefinitionException(
                 $"All frames of command '{Name}' must carry command id '{Id}' and module id '{ModuleId}'.");
-        }
-
-        Type[] legacyFamilies = Frames
-            .Where(frame => frame.HasLegacyVerbAdapter)
-            .Select(frame => frame.FamilyType)
-            .Distinct()
-            .ToArray();
-        if (legacyFamilies.Length > 1)
-        {
-            throw new LanguageDefinitionException(
-                $"All legacy frames of command '{Name}' must belong to the same verb family.");
         }
 
         int defaultFrames = Frames.Count(frame => frame.IsDefault);
@@ -367,7 +341,7 @@ public sealed class LanguageSnapshot
 
 public interface IFluNetModule
 {
-    /// <summary>Legacy language-only module hook retained for compatibility.</summary>
+    /// <summary>Registers language declarations.</summary>
     void Register(LanguageBuilder language)
     {
     }
@@ -402,16 +376,14 @@ public sealed class LanguageBuilder
         return this;
     }
 
-    /// <summary>Legacy command declaration backed by an IVerb compatibility adapter.</summary>
+    /// <summary>Declares a typed command frame.</summary>
     public CommandFrameBuilder Command<TImplementation, TResult>(string name, string usageName)
-        where TImplementation : class, IVerb =>
+        where TImplementation : class =>
         AddCommandFrame(
             name,
             usageName,
             typeof(TImplementation),
-            FindVerbFamily(typeof(TImplementation)),
-            typeof(TResult),
-            hasLegacyVerbAdapter: true);
+            typeof(TResult));
 
     /// <summary>Creates a native frame for the typed module API without an IVerb.</summary>
     internal CommandFrameBuilder CommandForRoute<TResult>(
@@ -422,17 +394,13 @@ public sealed class LanguageBuilder
             name,
             usageName,
             commandType ?? throw new ArgumentNullException(nameof(commandType)),
-            commandType,
-            typeof(TResult),
-            hasLegacyVerbAdapter: false);
+            typeof(TResult));
 
     private CommandFrameBuilder AddCommandFrame(
         string name,
         string usageName,
         Type implementationType,
-        Type familyType,
-        Type resultType,
-        bool hasLegacyVerbAdapter)
+        Type resultType)
     {
         string normalized = NormalizeName(name);
         if (!_commands.TryGetValue(normalized, out MutableCommand? command))
@@ -446,27 +414,17 @@ public sealed class LanguageBuilder
                 $"Command '{normalized}' is already owned by module '{command.ModuleId}'.");
         }
 
-        if (hasLegacyVerbAdapter && command.Frames.Any(frame =>
-            frame.HasLegacyVerbAdapter && frame.ImplementationType == implementationType))
-        {
-            throw new LanguageDefinitionException(
-                $"Implementation '{implementationType.FullName}' is already registered for '{normalized}'.");
-        }
-
         MutableFrame frame = new(
             usageName,
             implementationType,
-            familyType,
-            resultType,
-            hasLegacyVerbAdapter);
+            resultType);
         command.Frames.Add(frame);
         return new CommandFrameBuilder(command, frame);
     }
 
-    public LanguageBuilder Keyword<TKeyword>(string text)
-        where TKeyword : class, IWord
+    public LanguageBuilder Keyword(string text)
     {
-        _keywords.Add(new KeywordDescriptor(text, typeof(TKeyword)));
+        _keywords.Add(new KeywordDescriptor(text, typeof(object)));
         return this;
     }
 
@@ -571,9 +529,7 @@ public sealed class LanguageBuilder
                     command.ModuleId,
                     frame.UsageName,
                     frame.ImplementationType,
-                    frame.FamilyType,
                     frame.ResultType,
-                    frame.HasLegacyVerbAdapter,
                     frame.IsDefault,
                     frame.Qualifiers,
                     frame.Slots);
@@ -593,23 +549,6 @@ public sealed class LanguageBuilder
             new PromptGrammar(_clauseMarkers, _commandConnectors, _commandModifiers),
             _version,
             _typeNames);
-    }
-
-    private static Type FindVerbFamily(Type implementationType)
-    {
-        Type? baseType = implementationType.BaseType;
-        while (baseType is not null && !baseType.IsAbstract && baseType != typeof(object))
-        {
-            baseType = baseType.BaseType;
-        }
-
-        if (baseType is null || baseType == typeof(object))
-        {
-            throw new LanguageDefinitionException(
-                $"Verb '{implementationType.FullName}' must inherit from an abstract verb family.");
-        }
-
-        return baseType.IsGenericType ? baseType.GetGenericTypeDefinition() : baseType;
     }
 
     private static string NormalizeName(string value) =>
@@ -633,16 +572,12 @@ public sealed class LanguageBuilder
     internal sealed class MutableFrame(
         string usageName,
         Type implementationType,
-        Type familyType,
-        Type resultType,
-        bool hasLegacyVerbAdapter)
+        Type resultType)
     {
         public string UsageName { get; } = usageName;
         public FrameId? Id { get; set; }
         public Type ImplementationType { get; } = implementationType;
-        public Type FamilyType { get; } = familyType;
         public Type ResultType { get; } = resultType;
-        public bool HasLegacyVerbAdapter { get; } = hasLegacyVerbAdapter;
         public bool IsDefault { get; set; }
         public HashSet<string> Qualifiers { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<CommandSlotDescriptor> Slots { get; } = [];

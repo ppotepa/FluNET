@@ -138,13 +138,15 @@ FOR EACH user PARALLEL 8
     SAY "User: {user.name}"
 ```
 
-Current `FOR EACH` is intentionally limited to `SAY` actions in the body. See the compact reference for exact constraints.
+`FOR EACH` supports output, notifications, messaging, resource, HTTP and portable filesystem actions in
+the body; see the compact reference for exact constraints.
 
 ### 6. Reuse workflow fragments with TASK
 
 ```text
-TASK fetch-user id -> Json
+TASK fetch-user id RETURNS Json
     GET https://api.example.test/users/{id} AS user
+    RETURN [user]
 
 RUN fetch-user 42 AS user
 SAY "{user.name}"
@@ -221,6 +223,39 @@ flunet graph FILE
 flunet run FILE
 ```
 
+The short launcher is available as a separate .NET tool command and shares
+the same runner:
+
+```text
+flu run program.flu
+```
+
+For a local developer install, run `scripts/install-flu.ps1` on PowerShell or
+`scripts/install-flu.sh` on bash. These scripts pack the project and install
+the local `0.3.0-preview` package; the package is not published to NuGet.org.
+Alternatively, run it directly from this repository with
+`dotnet run --project src/FluNET.Flu -- run program.flu`.
+
+The manual equivalent is:
+
+```text
+dotnet pack src/FluNET.Flu/FluNET.Flu.csproj -c Release -o .artifacts/flu-packages
+dotnet tool install --global FluNET.Flu --add-source .artifacts/flu-packages --version 0.3.0-preview --ignore-failed-sources
+```
+
+The `--global` flag matters: without it, `dotnet tool install` expects a tool
+manifest in the current directory or one of its parents.
+
+Capability discovery:
+
+```text
+flunet tools
+flunet tools --json
+```
+
+`tools` reports the capability contracts visible to the current host,
+including platform support, permissions and policy availability.
+
 Examples through `dotnet run`:
 
 ```bash
@@ -230,20 +265,21 @@ dotnet run --project src/FluNET.Cli -- graph program.fln
 dotnet run --project src/FluNET.Cli -- run program.fln
 ```
 
-Canonical CLI file access defaults to the current directory. `--root PATH` can be repeated. If no `--host` is provided, the current canonical CLI leaves network access unrestricted; adding one or more `--host` values restricts network access to those hosts.
+Canonical CLI file access defaults to the current directory. `--root PATH` can be repeated. If no `--host` is provided, the current canonical CLI leaves network access unrestricted; adding one or more `--host` values restricts network access to those hosts. `--store PATH` enables durable key-value storage for compact `STORE`/`READ`/`LIST STORE`/`DELETE STORE` commands: `.json` uses the atomic JSON backend, while `.db`/`.sqlite` uses SQLite. `--queue PATH` enables durable JSONL messaging for compact `PUBLISH`/`RECEIVE` when passed to `flunet run FILE`, and `--sqlite PATH` enables SQL access. `--config-prefix PREFIX` exposes environment-backed `GETCONFIG` values; `--config PATH` reads nested values from JSON; `--secret-prefix PREFIX` plus repeated `--allow-secret NAME` enables explicitly allow-listed environment secrets.
 
 The compact file-tool path currently uses the current directory as its file root and open network access; it does not expose the canonical runner's `--root`/`--host` parsing for those subcommands yet.
 
 ## Architecture in one diagram
 
 ```text
-canonical source -> ProcessedPrompt ------------------+
-                                                       |
-compact source -> SurfaceParser                       |
-                 -> TASK / policies / cache / once    |
-                 -> inference + lowering --------------+
-                                                       v
-                                                 PromptSyntax
+canonical source -> SourceDocument -> Lexer             +
+                                     -> Sentence[]       |
+                                                        |
+compact source -> SurfaceParser                         |
+                 -> TASK / policies / cache / once       |
+                 -> inference + lowering ----------------+
+                                                        v
+                                                  ProgramSyntax
                                                        |
                                     Bind -> Validate -> Compile
                                                        |
@@ -253,7 +289,7 @@ compact source -> SurfaceParser                       |
                                                        |
                                                 ExecutionPlan
                                                        |
-                                            ExecutionPlanExecutor
+                                                   Executor
                                                        |
                                                 typed handlers
 ```
@@ -272,17 +308,15 @@ Start with [docs/README.md](docs/README.md).
 - [Architecture](docs/architecture.md)
 - [Status and limitations](docs/status-and-limitations.md)
 - [Durable workflows](docs/durable-workflows.md)
-- [Legacy API migration](docs/legacy-api-migration.md)
 
 ## Important current limitations
 
 The current source tree does **not** provide a released/general implementation for every roadmap idea. In particular:
 
-- compact file inference recognizes CSV/XML/binary/image formats, but built-in compact decoders currently cover JSON/text (plus JSON globs);
+- compact file inference recognizes CSV/XML/binary/image formats; built-in local decoders cover JSON/text/CSV/XML (plus JSON globs);
 - compact HTTP GET currently has a JSON contract;
-- `FOR EACH` body actions are currently SAY-only;
 - generic compact `AUTH`, policy `BACKOFF` and status-specific `CONTINUE ON 404` are not implemented;
-- SQL has no built-in executable resource provider;
+- SQL queries use the provider-neutral boundary; the built-in SQLite adapter is opt-in (`--sqlite PATH` in the CLI);
 - automation/ENSURE are embedding APIs, not normal `flunet run` commands;
 - generic SYNC/reconciliation and distributed workflow coordination are not established public features in the current `main` tree.
 

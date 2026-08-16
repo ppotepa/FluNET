@@ -1,11 +1,7 @@
 using FluNET.Context;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Tokens;
-using FluNET.Tokens.Tree;
 using FluNET.Variables;
-using FluNET.Words;
 using Microsoft.Extensions.DependencyInjection;
 using FluNET.Extensions;
 
@@ -65,7 +61,7 @@ namespace FluNET.Tests
             File.WriteAllText(testFile, @"{""name"": ""Alice"", ""age"": 30}");
 
             // Act - Use literal syntax (no curly braces)
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(
                 new ProcessedPrompt($"GET [{{name, age}}] FROM {testFile}."));
 
             // Then access the variable
@@ -75,7 +71,7 @@ namespace FluNET.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(nameResult, Is.EqualTo("Alice"));
             });
         }
@@ -91,7 +87,7 @@ namespace FluNET.Tests
             Console.WriteLine($"Test file path: {testFile}");
             Console.WriteLine($"Command: GET [{{name, age}}] FROM {{{testFile}}}.");
 
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(
                 new ProcessedPrompt($"GET [{{name, age}}] FROM {{{testFile}}}."));
 
             Console.WriteLine($"Validation: {validation.IsValid}, Reason: {validation.FailureReason}");
@@ -105,7 +101,7 @@ namespace FluNET.Tests
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(nameResult, Is.EqualTo("Bob"));
             });
         }

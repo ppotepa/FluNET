@@ -36,6 +36,7 @@ public sealed class WorkflowRunState
 {
     private readonly object _gate = new();
     private readonly List<WorkflowEvent> _events = [];
+    private readonly Dictionary<string, object?> _inputs = new(StringComparer.OrdinalIgnoreCase);
 
     public WorkflowRunState(WorkflowExecutionOptions? options = null)
     {
@@ -58,6 +59,22 @@ public sealed class WorkflowRunState
                 return _events.ToArray();
             }
         }
+    }
+
+    /// <summary>External inputs supplied by a host trigger for this run.</summary>
+    public IReadOnlyDictionary<string, object?> Inputs
+    {
+        get
+        {
+            lock (_gate)
+                return new Dictionary<string, object?>(_inputs, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    public void SetInput(string name, object? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        lock (_gate) _inputs[name.Trim()] = value;
     }
 
     internal void Record(WorkflowEvent item)

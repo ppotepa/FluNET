@@ -1,4 +1,5 @@
 using FluNET.Compilation.Inference;
+using FluNET.Compilation.Sql;
 using FluNET.Execution.Commands;
 using FluNET.Language;
 using FluNET.Language.Binding;
@@ -32,6 +33,7 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
             .ToArray();
         List<DependencyEdge> edges = [];
         Dictionary<string, int> producers = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<string, int> fileProducers = new(StringComparer.OrdinalIgnoreCase);
         HashSet<(int From, int To)> explicitParallel = syntax.Links
             .Where(link => link.Kind == CommandLinkKind.Parallel)
             .Select(link => (link.PredecessorIndex, link.SuccessorIndex))
@@ -53,6 +55,16 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
                     Add(edges, new DependencyEdge(producer, index, DependencyKind.Data, variable));
                     trace?.Add(new InferenceDecision(InferenceKind.Dependency, variable,
                         $"{producer}->{index}", "producer-consumer", command.Syntax.Span));
+                }
+            }
+
+            foreach (string path in InputFileReferences(command))
+            {
+                if (fileProducers.TryGetValue(path, out int producer))
+                {
+                    Add(edges, new DependencyEdge(producer, index, DependencyKind.Data, path));
+                    trace?.Add(new InferenceDecision(InferenceKind.Dependency, path,
+                        $"{producer}->{index}", "file-producer-consumer", command.Syntax.Span));
                 }
             }
 
@@ -90,6 +102,11 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
                 }
                 producers[output] = index;
             }
+
+            foreach (string path in OutputFileReferences(command))
+            {
+                fileProducers[path] = index;
+            }
         }
 
         return new DependencyGraph(program, syntax, nodes, edges);
@@ -116,6 +133,7 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
     private static IEnumerable<string> InputVariables(BoundCommand command)
     {
         HashSet<string> variables = new(StringComparer.OrdinalIgnoreCase);
+        bool sqlCommand = command.Frame.Id.Value is "surface.get.sql" or "surface.apply.sql";
         foreach (BoundArgument argument in command.Arguments.Values.Where(argument =>
             argument.Slot.Direction == SlotDirection.Input && argument.IsPresent))
         {
@@ -125,6 +143,13 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
                 {
                     variables.Add(NormalizeVariable(token.Text));
                     continue;
+                }
+                if (sqlCommand || token.Text.StartsWith("{sql:", StringComparison.OrdinalIgnoreCase))
+                {
+                    foreach (string name in SqlParameterScanner.Scan(token.Text))
+                    {
+                        variables.Add(name);
+                    }
                 }
                 foreach (string interpolation in InterpolationVariables(token.Text))
                 {
@@ -171,6 +196,42 @@ public sealed class DependencyAnalyzer(IExecutionMetadataProvider metadata)
                 yield return inner;
             }
         }
+    }
+
+    private static IEnumerable<string> InputFileReferences(BoundCommand command) =>
+        FileReferences(command, SlotDirection.Input);
+
+    private static IEnumerable<string> OutputFileReferences(BoundCommand command) =>
+        FileReferences(command, SlotDirection.Output);
+
+    private static IEnumerable<string> FileReferences(BoundCommand command, SlotDirection direction)
+    {
+        HashSet<string> references = new(StringComparer.OrdinalIgnoreCase);
+        foreach (BoundArgument argument in command.Arguments.Values.Where(argument =>
+            argument.Slot.Direction == direction && argument.IsPresent))
+        {
+            foreach (PromptToken token in argument.Tokens.Where(token => token.Kind == PromptTokenKind.Reference))
+            {
+                string value = token.Text.Trim();
+                if (value.Length >= 2 && value[0] == '{' && value[^1] == '}')
+                {
+                    value = value[1..^1].Trim();
+                }
+                if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase) ||
+                    value.StartsWith("https://", StringComparison.OrdinalIgnoreCase) ||
+                    value.Contains(':') && value.Length > 1)
+                {
+                    continue;
+                }
+
+                if (!string.IsNullOrWhiteSpace(value))
+                {
+                    references.Add(value);
+                }
+            }
+        }
+
+        return references;
     }
 
     private static IEnumerable<string> InterpolationVariables(string text)

@@ -16,7 +16,7 @@ public static class EnsureExecutionExtensions
             ?? new TextOutputDesiredStateNotifier(
                 services.GetRequiredService<FluNET.Capabilities.ITextOutput>());
         return new EnsureRunner(
-            services.GetRequiredService<ExecutionPlanExecutor>(),
+            services.GetRequiredService<SentenceExecutor>(),
             services.GetRequiredService<FluNET.Capabilities.IFluNetFileSystem>(),
             versions,
             notifier);

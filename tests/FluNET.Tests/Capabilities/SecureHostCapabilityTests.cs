@@ -1,11 +1,63 @@
 using FluNET.Capabilities;
 using System.Net;
+using System.Net.Http.Headers;
 
 namespace FluNET.Tests.Capabilities;
 
 [TestFixture]
 public sealed class SecureHostCapabilityTests
 {
+    [Test]
+    public void ApiKeyAndBasicSchemesApplyOnlyTheirExpectedHeaders()
+    {
+        using HttpRequestMessage apiRequest = new(HttpMethod.Get, "https://api.example.test");
+        new ApiKeyHttpAuthenticationScheme("X-Developer-Key").Apply(apiRequest, SecretValue.Create("secret-key"));
+
+        using HttpRequestMessage basicRequest = new(HttpMethod.Get, "https://api.example.test");
+        new BasicHttpAuthenticationScheme().Apply(basicRequest, SecretValue.Create("alice:password"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(apiRequest.Headers.GetValues("X-Developer-Key"), Is.EqualTo(new[] { "secret-key" }));
+            Assert.That(apiRequest.Headers.Authorization, Is.Null);
+            Assert.That(basicRequest.Headers.Authorization, Is.EqualTo(new AuthenticationHeaderValue("Basic", Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes("alice:password")))));
+        });
+    }
+
+    [Test]
+    public void ApiKeySchemeRejectsInvalidHeaderNames()
+    {
+        Assert.Throws<ArgumentException>(() => new ApiKeyHttpAuthenticationScheme("X Bad"));
+    }
+
+    [Test]
+    public void EnvironmentAndCompositeSecretStoresResolveWithoutChangingOpaqueValues()
+    {
+        string name = "TEST_" + Guid.NewGuid().ToString("N");
+        string variable = "FLUNET_SECRET_" + name;
+        Environment.SetEnvironmentVariable(variable, "environment-secret");
+        try
+        {
+            EnvironmentSecretStore environment = new();
+            CompositeSecretStore composite = new([
+                new DictionarySecretStore(new Dictionary<string, string> { ["fallback"] = "dictionary-secret" }),
+                environment]);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(composite.TryGet(name, out SecretValue? fromEnvironment), Is.True);
+                Assert.That(fromEnvironment!.ToString(), Is.EqualTo("<secret>"));
+                Assert.That(fromEnvironment.Reveal(), Is.EqualTo("environment-secret"));
+                Assert.That(composite.TryGet("fallback", out SecretValue? fromDictionary), Is.True);
+                Assert.That(fromDictionary!.ToString(), Is.EqualTo("<secret>"));
+            });
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable(variable, null);
+        }
+    }
+
     [Test]
     public void PlainHttpAndPrivateLiteralAreDeniedByDefault()
     {
@@ -49,7 +101,7 @@ public sealed class SecureHostCapabilityTests
     }
 
     [Test]
-    public async Task RedirectToPrivateAddressIsRevalidatedBeforeSecondRequest()
+    public void RedirectToPrivateAddressIsRevalidatedBeforeSecondRequest()
     {
         SecureExecutionPolicy policy = new(new SecureHostOptions(
             [Path.GetTempPath()],

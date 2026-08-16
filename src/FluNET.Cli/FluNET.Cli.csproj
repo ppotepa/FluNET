@@ -5,14 +5,14 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <AssemblyName>flunet</AssemblyName>
+    <AssemblyName>flunet-cli</AssemblyName>
     <RootNamespace>FluNET.Cli</RootNamespace>
     <IsPackable>false</IsPackable>
-    <Description>Compatibility FluNET CLI. New tooling is provided by FluNET.Tool.</Description>
+    <Description>FluNET command-line runner.</Description>
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\FluNET.Engine\FluNET.Engine.csproj" />
+    <ProjectReference Include="..\FluNET.Tool\FluNET.Tool.csproj" />
   </ItemGroup>
 
 </Project>

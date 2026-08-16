@@ -38,8 +38,7 @@ public sealed class CommandCompilationStep(TypedProgramCompiler compiler) : IExe
                 ExecutionFailureKind.Binding,
                 exception.Code,
                 exception.Message,
-                exception,
-                context.Sentence));
+                exception));
         }
         catch (Exception exception) when (
             exception is FormatException or NotSupportedException or InvalidOperationException)
@@ -54,8 +53,7 @@ public sealed class CommandCompilationStep(TypedProgramCompiler compiler) : IExe
                 ExecutionFailureKind.Validation,
                 "FLN154",
                 message,
-                exception,
-                context.Sentence));
+                exception));
         }
     }
 

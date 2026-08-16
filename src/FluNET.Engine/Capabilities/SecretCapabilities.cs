@@ -30,6 +30,42 @@ public sealed class DictionarySecretStore : ISecretStore
     public bool TryGet(string name, out SecretValue? value) => _values.TryGetValue(name, out value);
 }
 
+/// <summary>Reads secrets from host environment variables without exposing values in diagnostics.</summary>
+public sealed class EnvironmentSecretStore(string prefix = "FLUNET_SECRET_") : ISecretStore
+{
+    public string Prefix { get; } = ValidatePrefix(prefix);
+
+    public bool TryGet(string name, out SecretValue? value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        string? raw = Environment.GetEnvironmentVariable(Prefix + name);
+        value = string.IsNullOrEmpty(raw) ? null : SecretValue.Create(raw);
+        return value is not null;
+    }
+
+    private static string ValidatePrefix(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        if (value.Any(ch => ch is '\r' or '\n')) throw new ArgumentException("Secret prefix cannot contain newlines.", nameof(value));
+        return value;
+    }
+}
+
+/// <summary>Composes host-owned secret stores in priority order.</summary>
+public sealed class CompositeSecretStore(IEnumerable<ISecretStore> stores) : ISecretStore
+{
+    private readonly ISecretStore[] stores = stores?.Where(store => store is not null).ToArray()
+        ?? throw new ArgumentNullException(nameof(stores));
+
+    public bool TryGet(string name, out SecretValue? value)
+    {
+        foreach (ISecretStore store in stores)
+            if (store.TryGet(name, out value) && value is not null) return true;
+        value = null;
+        return false;
+    }
+}
+
 public interface ISecretAccessPolicy
 {
     void EnsureSecretAccess(string name);
@@ -47,4 +83,15 @@ public sealed class AllowListedSecretAccessPolicy(IEnumerable<string> names) : I
     {
         if (!_names.Contains(name)) throw new CapabilityDeniedException($"Secret access is not allowed: {name}");
     }
+}
+
+public sealed class SecretCapabilityProvider(ISecretStore store, ISecretAccessPolicy policy) : ICapabilityProvider
+{
+    public CapabilityDescriptor Descriptor { get; } = new(
+        "system.secrets",
+        "1.0",
+        [FluNetPlatform.Any],
+        ["secret.read"]);
+
+    public bool IsAvailable => store is not EmptySecretStore && policy is not DenyAllSecretAccessPolicy;
 }

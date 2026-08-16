@@ -21,8 +21,7 @@ public sealed class PlanningStep(ExecutionPlanner planner) : IExecutionStep
                 ExecutionFailureKind.Binding,
                 "FLN120",
                 exception.Message,
-                exception,
-                context.Sentence));
+                exception));
         }
     }
 }

@@ -1,0 +1,20 @@
+# Reusable execution policy, cache and idempotent local mutation.
+
+MKDIR "./output" AS output
+MKDIR "./output/reliability" AS reliability
+
+POLICY resilient
+    RETRY 2
+    TIMEOUT 5s
+    CONTINUE ON ERROR
+
+WITH resilient
+    LOAD "./fixtures/users.csv" AS users
+    COUNT [users] AS userCount
+    SAY "Policy-protected read returned {userCount} users."
+
+LOAD "./fixtures/posts.csv" CACHE 5m AS cachedPosts
+COUNT [cachedPosts] AS postCount
+SET report TO "Cached posts={postCount}"
+SAVE [report] TO "./output/reliability/summary.txt" ONCE BY "showcase-reliability-summary"
+SAY [report]

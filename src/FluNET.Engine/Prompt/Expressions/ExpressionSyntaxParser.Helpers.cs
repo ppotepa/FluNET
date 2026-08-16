@@ -24,6 +24,26 @@ public sealed partial class ExpressionSyntaxParser
         return false;
     }
 
+    private bool MatchWordOperator(string first, string? second = null)
+    {
+        if (Current.Kind != ExpressionTokenKind.Word ||
+            !Current.Text.Equals(first, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (second is not null &&
+            (Peek(1).Kind != ExpressionTokenKind.Word ||
+             !Peek(1).Text.Equals(second, StringComparison.OrdinalIgnoreCase)))
+        {
+            return false;
+        }
+
+        Advance();
+        if (second is not null) Advance();
+        return true;
+    }
+
     private bool MatchPunctuation(string value)
     {
         if (Current.Kind == ExpressionTokenKind.Punctuation && Current.Text == value)

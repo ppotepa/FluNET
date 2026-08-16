@@ -1,7 +1,6 @@
 using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using Microsoft.Extensions.DependencyInjection;
 

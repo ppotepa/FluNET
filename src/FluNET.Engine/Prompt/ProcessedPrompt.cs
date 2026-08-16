@@ -19,6 +19,7 @@ public sealed class ProcessedPrompt
         var (tokens, diagnostics) = Tokenize(prompt);
         LexicalTokens = tokens.ToArray();
         Tokens = tokens.Select(token => token.Text).ToArray();
+        Sentences = SentenceSegmenter.Segment(prompt);
         Syntax = BuildSyntax(tokens, diagnostics, Grammar);
         Diagnostics = diagnostics.ToArray();
     }
@@ -28,10 +29,13 @@ public sealed class ProcessedPrompt
 
     public PromptGrammar Grammar { get; }
 
-    /// <summary>Compatibility view containing token text only.</summary>
+    /// <summary>Convenience projection containing token text only.</summary>
     public string[] Tokens { get; }
 
     public IReadOnlyList<PromptToken> LexicalTokens { get; }
+
+    /// <summary>Source-level sentence boundaries preserved before AST parsing.</summary>
+    public IReadOnlyList<Sentence> Sentences { get; }
 
     public IReadOnlyList<PromptDiagnostic> Diagnostics { get; }
 
