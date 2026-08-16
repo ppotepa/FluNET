@@ -5,13 +5,13 @@ using System.Reflection;
 namespace FluNET.Language;
 
 /// <summary>
-/// Mutable registration facade used while composing a FluNET language. Reflection is
-/// centralized at registration/compilation time; consumers can obtain an immutable snapshot.
+/// Mutable registration facade used while composing a FluNET language. A keyword may
+/// have multiple concrete verb implementations; overload selection belongs to binding.
 /// </summary>
 public sealed class LanguageRegistry
 {
     private readonly Dictionary<string, WordDescriptor> _words = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, VerbDescriptor> _verbs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<VerbDescriptor>> _verbs = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, QualifierDescriptor> _qualifiers = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<Assembly> _assemblies = [];
     private readonly LanguageCompiler _compiler = new();
@@ -23,7 +23,7 @@ public sealed class LanguageRegistry
     }
 
     public IReadOnlyCollection<WordDescriptor> Words => _words.Values.DistinctBy(x => x.WordType).ToArray();
-    public IReadOnlyCollection<VerbDescriptor> Verbs => _verbs.Values.DistinctBy(x => x.VerbType).ToArray();
+    public IReadOnlyCollection<VerbDescriptor> Verbs => _verbs.Values.SelectMany(x => x).DistinctBy(x => x.VerbType).ToArray();
     public IReadOnlyCollection<QualifierDescriptor> Qualifiers => _qualifiers.Values.ToArray();
 
     public LanguageSnapshot Snapshot => new(Words, Verbs, Qualifiers);
@@ -78,14 +78,25 @@ public sealed class LanguageRegistry
         return false;
     }
 
-    public bool TryGetVerb(string text, out VerbDescriptor? descriptor) =>
-        _verbs.TryGetValue(text, out descriptor);
+    /// <summary>
+    /// Legacy single-verb lookup. New binding code should call GetVerbOverloads.
+    /// </summary>
+    public bool TryGetVerb(string text, out VerbDescriptor? descriptor)
+    {
+        IReadOnlyList<VerbDescriptor> overloads = GetVerbOverloads(text);
+        descriptor = overloads.FirstOrDefault();
+        return descriptor != null;
+    }
 
-    public IReadOnlyList<VerbDescriptor> GetVerbOverloads(string text) => Snapshot.GetVerbOverloads(text);
+    public IReadOnlyList<VerbDescriptor> GetVerbOverloads(string text) =>
+        _verbs.TryGetValue(text, out List<VerbDescriptor>? overloads)
+            ? overloads.DistinctBy(x => x.VerbType).ToArray()
+            : [];
 
     public Type? GetVerbBaseType(string text)
     {
-        if (!_verbs.TryGetValue(text, out VerbDescriptor? descriptor))
+        VerbDescriptor? descriptor = GetVerbOverloads(text).FirstOrDefault();
+        if (descriptor == null)
             return null;
 
         Type? baseType = descriptor.VerbType.BaseType;
@@ -107,17 +118,26 @@ public sealed class LanguageRegistry
 
         string[] synonyms = prototype is IVerb verb ? verb.Synonyms : [];
         var word = new WordDescriptor(type, keyword.Text, synonyms, factory);
-        _words[keyword.Text] = word;
+        _words.TryAdd(keyword.Text, word);
         foreach (string synonym in synonyms)
-            _words[synonym] = word;
+            _words.TryAdd(synonym, word);
 
-        if (prototype is IVerb)
-        {
-            VerbDescriptor descriptor = _compiler.DescribeVerb(type, keyword.Text, synonyms, () => factory() as IVerb);
-            _verbs[keyword.Text] = descriptor;
-            foreach (string synonym in synonyms)
-                _verbs[synonym] = descriptor;
-        }
+        if (prototype is not IVerb)
+            return;
+
+        VerbDescriptor descriptor = _compiler.DescribeVerb(type, keyword.Text, synonyms, () => factory() as IVerb);
+        RegisterOverload(keyword.Text, descriptor);
+        foreach (string synonym in synonyms)
+            RegisterOverload(synonym, descriptor);
+    }
+
+    private void RegisterOverload(string keyword, VerbDescriptor descriptor)
+    {
+        if (!_verbs.TryGetValue(keyword, out List<VerbDescriptor>? overloads))
+            _verbs[keyword] = overloads = [];
+
+        if (overloads.All(x => x.VerbType != descriptor.VerbType))
+            overloads.Add(descriptor);
     }
 
     private static object? CreatePrototype(Type type)
