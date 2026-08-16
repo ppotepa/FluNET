@@ -5,7 +5,7 @@ FluNET has two advanced compilation APIs above ordinary compact programs:
 - **automation**: `EVERY` / `WATCH` / `WHEN` compile trigger metadata plus an already-compiled ordinary workflow plan;
 - **desired state**: `ENSURE` compiles a goal into an ordinary GET/SAVE plan and optional interval automation.
 
-Neither layer introduces a second command executor. Workflow bodies still run through `ExecutionPlanExecutor`.
+Neither layer introduces a second command executor. Workflow bodies still run through `SentenceExecutor`.
 
 > These are experimental source-level APIs on `main`. They are not exposed as `flunet run` language constructs and the exact tree still requires Release build/test verification.
 
@@ -40,6 +40,36 @@ WATCH github.issues
 ```
 
 `WHEN` is currently recognized as the first nested child of a WATCH block. It needs an event name and an indented workflow body.
+
+Watch workflows receive the triggering signal through the dynamic `event`
+root, for example `{event.path}` and `{event.length}`. File-watch adapters
+populate the path, old path, kind, timestamp, directory flag and length fields.
+
+Hosts can persist incoming signals through `IAutomationSignalStore`. The
+bundled tool exposes the JSONL adapter for file watches:
+
+```text
+flunet automation watch workflow.flunet ./incoming incoming.files --events ./events.jsonl
+```
+
+The journal is append-only and provider-neutral; an embedder can replace it
+with a database or queue implementation without changing the language.
+
+Stored signals can be replayed through the same automation plans:
+
+```text
+flunet automation replay workflow.flunet ./events.jsonl --event CREATED
+```
+
+Replay preserves journal order and can restrict delivery to one event kind.
+
+Scheduled automations can also be kept alive by the CLI. The daemon uses the
+same `AutomationScheduler` and durable schedule state, and stops cleanly on
+Ctrl+C:
+
+```text
+flunet automation daemon workflow.flu --state .flunet/schedule.json --interval 1s
+```
 
 ## Compile automation definitions
 
@@ -78,7 +108,7 @@ using FluNET.Automation;
 using FluNET.Execution.Planning;
 
 AutomationScheduler scheduler = new(
-    context.GetService<ExecutionPlanExecutor>(),
+    context.GetService<SentenceExecutor>(),
     new InMemoryAutomationScheduleStore());
 
 DateTimeOffset now = DateTimeOffset.UtcNow;
@@ -93,6 +123,15 @@ IReadOnlyList<AutomationRunResult> due =
 IReadOnlyList<AutomationRunResult> signaled =
     await scheduler.PublishSignalAsync("github.issues", "opened");
 ```
+
+For local files, the packaged tool supplies a portable watcher bridge:
+
+```text
+flunet automation watch automation.fln ./incoming files.changed --recursive
+```
+
+It translates `Created`, `Changed`, `Deleted` and `Renamed` filesystem events
+into `WATCH`/`WHEN` signals and stops cleanly on Ctrl+C.
 
 The scheduler executes the precompiled plan through the canonical executor and returns per-run results.
 
@@ -110,7 +149,7 @@ IAutomationScheduleStore store = new DurableAutomationScheduleStore(
     policy);
 
 AutomationScheduler scheduler = new(
-    context.GetService<ExecutionPlanExecutor>(),
+    context.GetService<SentenceExecutor>(),
     store);
 ```
 

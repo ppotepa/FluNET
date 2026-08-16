@@ -1,0 +1,11 @@
+# Host diagnostics, environment input and the portable clipboard provider.
+# This application intentionally replaces the current clipboard text.
+
+DOCTOR [doctor]
+GET env:PATH AS environmentPath
+COPY "FluNET clipboard round-trip" TO CLIPBOARD
+READ CLIPBOARD AS clipboardText
+
+EXPECT [clipboardText] TO EQUAL "FluNET clipboard round-trip"
+SAY "Runtime={doctor.framework}; capabilities={doctor.capabilities.available}."
+SAY "PATH is available: {environmentPath}."

@@ -30,7 +30,8 @@ public sealed record SurfaceForEachDescriptor(
         SurfaceCommandSyntax header,
         IReadOnlyList<SurfaceStatementSyntax> body,
         ICollection<SurfaceDiagnostic> diagnostics,
-        out SurfaceForEachDescriptor? descriptor)
+        out SurfaceForEachDescriptor? descriptor,
+        bool allowLoopControl = false)
     {
         descriptor = null;
         if (header.Values.Count != 1)
@@ -86,10 +87,10 @@ public sealed record SurfaceForEachDescriptor(
         {
             if (statement is not SurfaceCommandSyntax command)
             {
-                diagnostics.Add(new SurfaceDiagnostic("FLN272", "FOR EACH body supports ordinary SAY/GET/LOAD/SAVE/POST statements.", statement.Span));
+            diagnostics.Add(new SurfaceDiagnostic("FLN272", "FOR EACH body supports SAY/NOTIFY/PUBLISH/GET/LOAD/SAVE/POST and portable filesystem actions.", statement.Span));
                 return false;
             }
-            if (!TryAction(command, diagnostics, out SurfaceIterationActionDescriptor? action)) return false;
+            if (!TryAction(command, diagnostics, out SurfaceIterationActionDescriptor? action, allowLoopControl)) return false;
             actions.Add(action!);
         }
         if (actions.Count == 0)
@@ -104,7 +105,8 @@ public sealed record SurfaceForEachDescriptor(
     private static bool TryAction(
         SurfaceCommandSyntax command,
         ICollection<SurfaceDiagnostic> diagnostics,
-        out SurfaceIterationActionDescriptor? action)
+        out SurfaceIterationActionDescriptor? action,
+        bool allowLoopControl)
     {
         action = null;
         switch (command.NormalizedName)
@@ -141,8 +143,104 @@ public sealed record SurfaceForEachDescriptor(
                 action = new(command.NormalizedName, value!, null, target);
                 return true;
             }
+            case "PUBLISH":
+            {
+                if (command.Values.Count != 1 || command.Alias is not null ||
+                    !TryValueToTarget(command.Values[0].UnquotedText, out string? payload, out string? topic))
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN272", "PUBLISH inside FOR EACH requires `payload TO topic` and no alias.", command.Span));
+                    return false;
+                }
+                action = new("PUBLISH", payload!, null, topic);
+                return true;
+            }
+            case "NOTIFY":
+            {
+                if (command.Values.Count == 0 || command.Alias is not null)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN272", "NOTIFY inside FOR EACH requires a message and no alias.", command.Span));
+                    return false;
+                }
+                action = new("NOTIFY", string.Join(" ", command.Values.Select(value => value.Text)));
+                return true;
+            }
+            case "INCREMENT":
+            {
+                if (command.Values.Count != 1 || command.Alias is not null)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN272", "INCREMENT inside a loop requires one variable and no alias.", command.Span));
+                    return false;
+                }
+                action = new("INCREMENT", command.Values[0].UnquotedText.Trim());
+                return true;
+            }
+            case "SET":
+            {
+                if (command.Values.Count != 1 || command.Alias is not null)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN272", "SET inside a loop requires `SET [variable] TO value`.", command.Span));
+                    return false;
+                }
+                string phrase = command.Values[0].UnquotedText.Trim();
+                int marker = phrase.IndexOf(" TO ", StringComparison.OrdinalIgnoreCase);
+                if (marker <= 0 || marker + 4 >= phrase.Length)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN272", "SET inside a loop requires `SET [variable] TO value`.", command.Span));
+                    return false;
+                }
+                string variable = phrase[..marker].Trim();
+                string value = phrase[(marker + 4)..].Trim();
+                action = new("SET", value, variable);
+                return true;
+            }
+            case "BREAK" or "CONTINUE":
+            {
+                if (!allowLoopControl || command.Alias is not null || command.Values.Count > 1)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN275", "BREAK/CONTINUE are available in WHILE bodies as `BREAK WHEN condition` or `CONTINUE WHEN condition`.", command.Span));
+                    return false;
+                }
+
+                string condition = command.Values.Count == 0
+                    ? "true"
+                    : command.Values[0].UnquotedText.Trim();
+                if (condition.StartsWith("WHEN ", StringComparison.OrdinalIgnoreCase))
+                    condition = condition[5..].Trim();
+                if (condition.Length == 0)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN275", "BREAK/CONTINUE WHEN requires a condition.", command.Span));
+                    return false;
+                }
+                action = new(command.NormalizedName, condition);
+                return true;
+            }
+            case "MKDIR":
+            case "TRASH":
+            {
+                if (command.Values.Count != 1 || command.Alias is not null)
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN272", $"{command.NormalizedName} inside FOR EACH requires one path and no alias.", command.Span));
+                    return false;
+                }
+                action = new(command.NormalizedName, command.Values[0].UnquotedText);
+                return true;
+            }
+            case "COPY":
+            case "MOVE":
+            case "PACK":
+            case "UNPACK":
+            {
+                if (command.Values.Count != 1 || command.Alias is not null ||
+                    !TryValueToTarget(command.Values[0].UnquotedText, out string? source, out string? target))
+                {
+                    diagnostics.Add(new SurfaceDiagnostic("FLN272", $"{command.NormalizedName} inside FOR EACH requires `source TO target`.", command.Span));
+                    return false;
+                }
+                action = new(command.NormalizedName, source!, null, target);
+                return true;
+            }
             default:
-                diagnostics.Add(new SurfaceDiagnostic("FLN272", $"FOR EACH action '{command.Name}' is not supported. Use SAY, GET, LOAD, SAVE or POST.", command.Span));
+                diagnostics.Add(new SurfaceDiagnostic("FLN272", $"FOR EACH action '{command.Name}' is not supported. Use SAY, NOTIFY, PUBLISH, GET, LOAD, SAVE, POST, MKDIR, COPY, MOVE, PACK, UNPACK or TRASH.", command.Span));
                 return false;
         }
     }

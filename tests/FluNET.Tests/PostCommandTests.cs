@@ -2,7 +2,6 @@ using FluNET.Capabilities;
 using FluNET.Context;
 using FluNET.Execution;
 using FluNET.Prompt;
-using FluNET.Syntax.Verbs;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests;
@@ -37,7 +36,7 @@ public sealed class PostCommandTests
         Assert.Multiple(() =>
         {
             Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
-            Assert.That(execution.Sentence?.Root, Is.InstanceOf<PostJson>());
+            Assert.That(execution.Plan?.Steps, Is.Not.Empty);
             Assert.That(execution.Result, Is.EqualTo(_http.PostResponse));
             Assert.That(_http.Posts, Has.Count.EqualTo(1));
             Assert.That(_http.Posts[0].Uri, Is.EqualTo(new Uri(endpoint)));

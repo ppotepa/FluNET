@@ -1,8 +1,6 @@
 using FluNET.Compilation;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Tokens.Tree;
 using FluNET.Language.Binding;
 using FluNET.Execution.Planning;
 using FluNET.Execution.Workflow;
@@ -16,6 +14,8 @@ namespace FluNET.Execution
     public class ExecutionContext
     {
         public ProcessedPrompt Prompt { get; }
+        /// <summary>Source sentences captured before syntax and semantic compilation.</summary>
+        public IReadOnlyList<FluNET.Prompt.Sentence> InputSentences => Prompt.Sentences;
         public FluNetProgram? Program { get; internal set; }
         public BoundProgram? BoundProgram { get; internal set; }
         public DiagnosticBag CompilationDiagnostics { get; } = new();
@@ -24,14 +24,7 @@ namespace FluNET.Execution
         internal List<ExecutionStepResult> CompletedSteps { get; } = [];
         public IReadOnlyList<ExecutionStepResult> StepResults => CompletedSteps;
 
-        /// <summary>
-        /// Legacy token-tree compatibility state. The standard execution path no
-        /// longer populates these members.
-        /// </summary>
-        public IReadOnlyList<TokenTree> CommandTrees { get; internal set; } = Array.Empty<TokenTree>();
-        public TokenTree? TokenTree { get; set; }
         public ValidationResult? ValidationResult { get; set; }
-        public ISentence? Sentence { get; set; }
         public object? Result { get; set; }
         public Exception? Exception { get; set; }
         public CancellationToken CancellationToken { get; internal set; }

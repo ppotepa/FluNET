@@ -2,27 +2,22 @@ using FluNET.Capabilities;
 using FluNET.Language;
 using FluNET.Language.Binding;
 using FluNET.Language.Values;
-using FluNET.Syntax.Core;
-using FluNET.Syntax.Verbs;
 using FluNET.Variables;
 using System.Text.Json;
 
 namespace FluNET.Execution.Commands;
 
-public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>
+public abstract class FrameCommandBinder<TCommand, TResult>
     : ICommandBinder<TCommand, TResult>
     where TCommand : class, ICommand<TResult>
-    where TImplementation : class, IVerb
 {
     private readonly ExpressionBinder _expressions;
 
-    /// <summary>Compatibility constructor for pre-0.4 extension binders.</summary>
     protected FrameCommandBinder()
         : this(StandardLanguage.CreateSnapshot())
     {
     }
 
-    /// <summary>Compatibility constructor using the built-in value registry.</summary>
     protected FrameCommandBinder(LanguageSnapshot language)
         : this(
             language ?? throw new ArgumentNullException(nameof(language)),
@@ -42,7 +37,7 @@ public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>
     public TCommand? TryBind(BoundCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
-        return command.Frame.ImplementationType == typeof(TImplementation)
+        return command.Frame.ImplementationType == typeof(TCommand)
             ? Bind(command)
             : null;
     }
@@ -56,7 +51,7 @@ public abstract class FrameCommandBinder<TCommand, TResult, TImplementation>
 public sealed record GetTextCommand(IExpression<FileInfo> Source) : ICommand<string[]>;
 public sealed record LoadTextCommand(IExpression<FileInfo> Source) : ICommand<string[]>;
 public sealed record LoadConfigCommand(IExpression<FileInfo> Source)
-    : ICommand<Dictionary<string, object>>;
+    : ICommand<object>;
 public sealed record SaveTextCommand(
     IExpression<string> Theme,
     IExpression<FileInfo> Goal) : ICommand<string>;
@@ -68,7 +63,8 @@ public sealed record DownloadFileCommand(
     IExpression<FileInfo>? Goal) : ICommand<FileInfo>;
 public sealed record PostJsonCommand(
     IExpression<string> Theme,
-    IExpression<Uri> Goal) : ICommand<string>;
+    IExpression<Uri> Goal,
+    IExpression<string>? Credential = null) : ICommand<string>;
 public sealed record SendEmailCommand(
     IExpression<string> Theme,
     IExpression<string> Recipient) : ICommand<string>;
@@ -79,7 +75,7 @@ public sealed record TransformEncodingCommand(
 public sealed class GetTextCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<GetTextCommand, string[], GetText>(language, values)
+    FrameCommandBinder<GetTextCommand, string[]>(language, values)
 {
     protected override GetTextCommand Bind(BoundCommand command) =>
         new(Context(command).Require<FileInfo>(SemanticRole.Source));
@@ -88,7 +84,7 @@ public sealed class GetTextCommandBinder(
 public sealed class LoadTextCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<LoadTextCommand, string[], LoadText>(language, values)
+    FrameCommandBinder<LoadTextCommand, string[]>(language, values)
 {
     protected override LoadTextCommand Bind(BoundCommand command) =>
         new(Context(command).Require<FileInfo>(SemanticRole.Source));
@@ -97,7 +93,7 @@ public sealed class LoadTextCommandBinder(
 public sealed class LoadConfigCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<LoadConfigCommand, Dictionary<string, object>, LoadConfig>(language, values)
+    FrameCommandBinder<LoadConfigCommand, object>(language, values)
 {
     protected override LoadConfigCommand Bind(BoundCommand command) =>
         new(Context(command).Require<FileInfo>(SemanticRole.Source));
@@ -106,7 +102,7 @@ public sealed class LoadConfigCommandBinder(
 public sealed class SaveTextCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<SaveTextCommand, string, SaveText>(language, values)
+    FrameCommandBinder<SaveTextCommand, string>(language, values)
 {
     protected override SaveTextCommand Bind(BoundCommand command)
     {
@@ -120,7 +116,7 @@ public sealed class SaveTextCommandBinder(
 public sealed class DeleteFileCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<DeleteFileCommand, string, DeleteFile>(language, values)
+    FrameCommandBinder<DeleteFileCommand, string>(language, values)
 {
     protected override DeleteFileCommand Bind(BoundCommand command)
     {
@@ -134,7 +130,7 @@ public sealed class DeleteFileCommandBinder(
 public sealed class DownloadFileCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<DownloadFileCommand, FileInfo, DownloadFile>(language, values)
+    FrameCommandBinder<DownloadFileCommand, FileInfo>(language, values)
 {
     protected override DownloadFileCommand Bind(BoundCommand command)
     {
@@ -148,21 +144,22 @@ public sealed class DownloadFileCommandBinder(
 public sealed class PostJsonCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<PostJsonCommand, string, PostJson>(language, values)
+    FrameCommandBinder<PostJsonCommand, string>(language, values)
 {
     protected override PostJsonCommand Bind(BoundCommand command)
     {
         CommandBindingContext context = Context(command);
         return new PostJsonCommand(
             context.RequireText(SemanticRole.Theme, preserveStructuredReferences: true),
-            context.Require<Uri>(SemanticRole.Goal));
+            context.Require<Uri>(SemanticRole.Goal),
+            HttpBinding.Credential(context));
     }
 }
 
 public sealed class SendEmailCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<SendEmailCommand, string, SendEmail>(language, values)
+    FrameCommandBinder<SendEmailCommand, string>(language, values)
 {
     protected override SendEmailCommand Bind(BoundCommand command)
     {
@@ -176,7 +173,7 @@ public sealed class SendEmailCommandBinder(
 public sealed class TransformEncodingCommandBinder(
     LanguageSnapshot language,
     IValueCodecRegistry values) :
-    FrameCommandBinder<TransformEncodingCommand, string, TransformEncoding>(language, values)
+    FrameCommandBinder<TransformEncodingCommand, string>(language, values)
 {
     protected override TransformEncodingCommand Bind(BoundCommand command)
     {
@@ -205,16 +202,27 @@ public sealed class LoadTextCommandHandler(
 
 public sealed class LoadConfigCommandHandler(
     IVariableResolver variables,
-    IFluNetFileSystem files) : ICommandHandler<LoadConfigCommand, Dictionary<string, object>>
+    IFluNetFileSystem files) : ICommandHandler<LoadConfigCommand, object>
 {
-    public async ValueTask<Dictionary<string, object>> HandleAsync(
+    public async ValueTask<object> HandleAsync(
         LoadConfigCommand command,
         CancellationToken cancellationToken = default)
     {
         FileInfo source = command.Source.Evaluate(variables);
         string json = await files.ReadAllTextAsync(source.FullName, cancellationToken).ConfigureAwait(false);
-        return JsonSerializer.Deserialize<Dictionary<string, object>>(json)
-            ?? throw new InvalidDataException($"Configuration file '{source.FullName}' contains JSON null.");
+        using JsonDocument document = JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind == JsonValueKind.Object)
+        {
+            return JsonSerializer.Deserialize<Dictionary<string, object>>(json)
+                ?? throw new InvalidDataException($"Configuration file '{source.FullName}' contains JSON null.");
+        }
+
+        if (document.RootElement.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        {
+            throw new InvalidDataException($"Configuration file '{source.FullName}' contains JSON null.");
+        }
+
+        return document.RootElement.Clone();
     }
 }
 
@@ -295,14 +303,24 @@ public sealed class DownloadFileCommandHandler(
 
 public sealed class PostJsonCommandHandler(
     IVariableResolver variables,
-    IHttpTransport http) : ICommandHandler<PostJsonCommand, string>
+    IHttpTransport http,
+    IAuthenticatedHttpTransport authenticated,
+    ISecretStore secrets,
+    ISecretAccessPolicy secretPolicy) : ICommandHandler<PostJsonCommand, string>
 {
     public async ValueTask<string> HandleAsync(
         PostJsonCommand command,
         CancellationToken cancellationToken = default) =>
-        await http.PostJsonAsync(
+        await HttpMutationRuntime.SendAsync(
+            HttpMethod.Post,
             command.Goal.Evaluate(variables),
             command.Theme.Evaluate(variables),
+            command.Credential,
+            variables,
+            http,
+            authenticated,
+            secrets,
+            secretPolicy,
             cancellationToken).ConfigureAwait(false);
 }
 

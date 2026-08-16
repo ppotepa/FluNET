@@ -10,8 +10,12 @@ Logical modules:
 - `flunet.automation` — triggers and host-driven scheduling;
 - `flunet.reconciliation` — desired/observed state, SYNC, diff, compensation/saga/history orchestration;
 - `flunet.providers` — resource acquisition/decoding/auth/observation;
-- `flunet.compatibility` — legacy bridges only.
+- The runtime has one typed execution path; no compatibility bridge module is
+  part of the source topology.
 
-`FluNetPlatformTopology` exposes this topology programmatically. All modules currently remain in `FluNET.Engine` so package splitting cannot destabilize the candidate before build/test verification.
+`FluNetPlatformTopology` exposes this topology programmatically. The runtime
+has one typed execution path; all modules currently remain in `FluNET.Engine`
+so package splitting cannot destabilize the candidate before build/test
+verification.
 
-A later physical package split may map these logical modules to separate NuGet packages without changing the language/execution contract. Preferred modules must not acquire dependencies on the compatibility layer.
+A later physical package split may map these logical modules to separate NuGet packages without changing the language/execution contract.

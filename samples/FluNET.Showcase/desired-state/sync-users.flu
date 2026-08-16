@@ -1,0 +1,1 @@
+SYNC ./output/reconciliation/users.json WITH ./fixtures/users.json BY id

@@ -1,9 +1,26 @@
 using FluNET.Prompt.Expressions;
+using System.Text.RegularExpressions;
 
 namespace FluNET.Execution.Commands;
 
 public sealed partial class ConditionExpressionCompiler
 {
+    public static string NormalizeNaturalCondition(string source)
+    {
+        HashSet<string> languageWords = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "AND", "OR", "NOT", "TRUE", "FALSE", "NULL", "CONTAINS", "STARTS", "ENDS", "WITH", "IN"
+        };
+
+        return Regex.Replace(
+            source,
+            @"(?<![\[\w])(?<name>[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*)(?![\]\w])",
+            match => languageWords.Contains(match.Groups["name"].Value)
+                ? match.Value
+                : $"[{match.Value}]",
+            RegexOptions.CultureInvariant);
+    }
+
     private static Func<IExpressionEvaluationContext, object?> CompileNode(
         ExpressionSyntax syntax,
         ISet<string> variables) => syntax switch
@@ -34,6 +51,7 @@ public sealed partial class ConditionExpressionCompiler
     {
         string value = text.Trim('"', '\'');
         if (bool.TryParse(value, out bool boolean)) return boolean;
+        if (DataUnits.TryParse(value, out decimal sized)) return sized;
         if (decimal.TryParse(
             value,
             System.Globalization.NumberStyles.Number,
@@ -61,6 +79,13 @@ public sealed partial class ConditionExpressionCompiler
         {
             case decimal direct:
                 number = direct;
+                return true;
+            case string text when decimal.TryParse(
+                text.Trim().Trim('"', '\''),
+                System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out decimal parsed):
+                number = parsed;
                 return true;
             case byte direct:
                 number = direct;

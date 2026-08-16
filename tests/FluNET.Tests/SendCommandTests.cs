@@ -1,10 +1,7 @@
 using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Syntax.Verbs;
-using FluNET.Tokens.Tree;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests
@@ -50,14 +47,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SEND {message} TO {recipient}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(sentence!.Root, Is.InstanceOf<SendEmail>());
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("Email sent to"));
                 Assert.That(result as string, Does.Contain(recipient));
             });
@@ -73,13 +69,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("SEND [message] TO [recipient].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("Email sent to"));
                 Assert.That(result as string, Does.Contain("test@example.com"));
             });
@@ -92,13 +88,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("SEND {Important message} TO admin@example.com.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result as string, Does.Contain("Email sent to"));
             });
         }
@@ -115,7 +111,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SEND {longMessage} TO {recipient}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -137,7 +133,7 @@ namespace FluNET.Tests
             foreach (string recipient in recipients)
             {
                 ProcessedPrompt prompt = new($"SEND {message} TO {recipient}.");
-                (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+                (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
                 Assert.Multiple(() =>
                 {
@@ -157,7 +153,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"SEND {message} TO {recipient}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -174,7 +170,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("SEND \"\" TO user@example.com.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
@@ -194,7 +190,7 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("SEND [greeting] TO [email].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>

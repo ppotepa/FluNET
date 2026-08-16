@@ -38,7 +38,7 @@ public sealed class LoadJsonGlobCommandHandler(
         string pattern = command.Pattern.Evaluate(variables);
         IFluNetFileEnumerator enumerator = new PhysicalFluNetFileEnumerator(policy);
         IReadOnlyList<string> paths = await enumerator
-            .EnumerateFilesAsync(pattern, cancellationToken)
+            .EnumerateFilesAsync(pattern, cancellationToken: cancellationToken)
             .ConfigureAwait(false);
         List<JsonElement> result = new(paths.Count);
         foreach (string path in paths)

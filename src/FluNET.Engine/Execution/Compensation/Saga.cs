@@ -33,10 +33,10 @@ public sealed record SagaExecutionResult(
 
 /// <summary>
 /// Saga orchestration over ordinary execution plans. It does not execute commands itself;
-/// it journals reversible effects and delegates each unit to the canonical ExecutionPlanExecutor.
+/// it journals reversible effects and delegates each unit to SentenceExecutor.
 /// </summary>
 public sealed class SagaExecutor(
-    ExecutionPlanExecutor executor,
+    SentenceExecutor executor,
     IFluNetFileSystem files)
 {
     private sealed record Snapshot(int UnitIndex, int PlanStepIndex, string TargetPath, bool Existed, string? Content);
@@ -74,8 +74,10 @@ public sealed class SagaExecutor(
                 try
                 {
                     object? result = await executor.ExecuteAsync(unit.Compilation.Compilation.Plan, completed, cancellationToken).ConfigureAwait(false);
-                    foreach (ExecutionStepResult executed in completed.Where(item => item.Status == WorkflowStepStatus.Succeeded))
-                        if (currentSnapshots.TryGetValue(executed.Step.Index, out Snapshot? snapshot)) journal.Add(snapshot);
+                    // A successful unit has completed its compensatable effects even when
+                    // the executor did not expose an individual result for a no-op branch.
+                    // Keep the pre-write snapshot for the saga journal as a unit-level fact.
+                    journal.AddRange(currentSnapshots.Values);
                     stepResults.Add(new(unit, completed, result, null));
                 }
                 catch (Exception unitFailure)

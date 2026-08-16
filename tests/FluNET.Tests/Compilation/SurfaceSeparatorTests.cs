@@ -16,6 +16,8 @@ public sealed class SurfaceSeparatorTests
 
         Assert.That(parsed.IsValid, Is.True, Diagnostics(parsed));
         Assert.That(parsed.Program.Statements, Has.Count.EqualTo(2));
+        Assert.That(parsed.Program.Statements.Select(statement => statement.SentenceIndex),
+            Is.EqualTo(new[] { 0, 1 }));
 
         SurfaceCommandSyntax load = (SurfaceCommandSyntax)parsed.Program.Statements[0];
         SurfaceCommandSyntax say = (SurfaceCommandSyntax)parsed.Program.Statements[1];

@@ -5,6 +5,7 @@ using FluNET.Language;
 using FluNET.Language.Resources;
 using FluNET.Language.Values;
 using FluNET.Prompt.Surface;
+using FluNET.Prompt.Expressions;
 using FluNET.Variables;
 using System.Text.Json;
 
@@ -183,7 +184,13 @@ public sealed class SurfaceNestedActionCompiler(
     IResourceDecoderRegistry decoders,
     ISecretStore secrets,
     ISecretAccessPolicy secretPolicy,
-    ISqlQueryExecutor sql)
+    ISqlQueryExecutor sql,
+    IFluNetDirectoryOperations directories,
+    IFluNetFileOperations fileOperations,
+    IFluNetFileTrash trash,
+    IFluNetArchive archive,
+    IFluNetMessageBus bus,
+    IFluNetNotifier notifier)
 {
     public CompiledActionTemplate Compile(IEnumerable<SurfaceIterationActionDescriptor> descriptors)
     {
@@ -196,11 +203,27 @@ public sealed class SurfaceNestedActionCompiler(
                 "GET" or "LOAD" => new CompiledResourceReadAction(descriptor.Kind, Text(descriptor.Source), descriptor.Alias!, language, policy, http, decoders, secrets, secretPolicy, sql),
                 "SAVE" => new CompiledSaveAction(descriptor.Source, Text(descriptor.Target!), files),
                 "POST" => new CompiledPostAction(descriptor.Source, Text(descriptor.Target!), http),
+                "MKDIR" => new CompiledCreateDirectoryAction(Text(descriptor.Source), directories),
+                "COPY" => new CompiledFileTransferAction(Text(descriptor.Source), Text(descriptor.Target!), fileOperations, move: false),
+                "MOVE" => new CompiledFileTransferAction(Text(descriptor.Source), Text(descriptor.Target!), fileOperations, move: true),
+                "TRASH" => new CompiledTrashAction(Text(descriptor.Source), trash),
+                "PACK" => new CompiledArchiveAction(Text(descriptor.Source), Text(descriptor.Target!), archive, extract: false),
+                "UNPACK" => new CompiledArchiveAction(Text(descriptor.Source), Text(descriptor.Target!), archive, extract: true),
+                "PUBLISH" => new CompiledPublishAction(Text(descriptor.Source), Text(descriptor.Target!), bus),
+                "NOTIFY" => new CompiledNotifyAction(Text(descriptor.Source), notifier),
+                "INCREMENT" => new CompiledIncrementAction(Text(descriptor.Source)),
+                "SET" => new CompiledSetAction(Text(descriptor.Source), Text(descriptor.Alias!)),
+                "BREAK" => new CompiledLoopControlAction(LoopControlKind.Break, CompileCondition(descriptor.Source)),
+                "CONTINUE" => new CompiledLoopControlAction(LoopControlKind.Continue, CompileCondition(descriptor.Source)),
                 _ => throw new NotSupportedException($"Nested action '{descriptor.Kind}' is not supported.")
             });
         }
         return new CompiledActionTemplate(result);
     }
+
+    private static CompiledCondition CompileCondition(string source) =>
+        new ConditionExpressionCompiler().Compile(
+            ExpressionSyntaxParser.Parse(ConditionExpressionCompiler.NormalizeNaturalCondition(source)));
 
     private IExpression<string> Text(string source)
     {
@@ -210,4 +233,52 @@ public sealed class SurfaceNestedActionCompiler(
             : new LiteralExpression<string>(text);
     }
     private static string Unquote(string value) => value.Length >= 2 && ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\'')) ? value[1..^1] : value;
+}
+
+public sealed class CompiledIncrementAction(IExpression<string> target) : ICompiledAction
+{
+    public string Kind => "INCREMENT";
+
+    public ValueTask ExecuteAsync(IVariableResolver variables, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string name = target.Evaluate(variables).Trim().TrimStart('[').TrimEnd(']');
+        object? current = variables.Resolve<object>($"[{name}]");
+        decimal number = current switch
+        {
+            decimal value => value,
+            IConvertible value => Convert.ToDecimal(value, System.Globalization.CultureInfo.InvariantCulture),
+            null => 0m,
+            _ => throw new InvalidOperationException($"INCREMENT requires numeric variable [{name}].")
+        };
+        variables.Register(name, number + 1m);
+        return ValueTask.CompletedTask;
+    }
+}
+
+public sealed class CompiledSetAction(IExpression<string> value, IExpression<string> target) : ICompiledAction
+{
+    public string Kind => "SET";
+
+    public ValueTask ExecuteAsync(IVariableResolver variables, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string name = target.Evaluate(variables).Trim().TrimStart('[').TrimEnd(']');
+        object? resolved = NestedActionValue.Resolve(value.Evaluate(variables), variables);
+        variables.Register(name, resolved ?? string.Empty);
+        return ValueTask.CompletedTask;
+    }
+}
+
+public sealed class CompiledLoopControlAction(LoopControlKind kind, CompiledCondition condition) : ICompiledAction
+{
+    public string Kind => kind.ToString().ToUpperInvariant();
+
+    public ValueTask ExecuteAsync(IVariableResolver variables, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (condition.Expression.Evaluate(new ExpressionEvaluationContext(variables)))
+            throw new LoopControlSignal(kind);
+        return ValueTask.CompletedTask;
+    }
 }

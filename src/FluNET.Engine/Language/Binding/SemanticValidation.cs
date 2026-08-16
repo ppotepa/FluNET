@@ -6,7 +6,7 @@ namespace FluNET.Language.Binding;
 /// <summary>
 /// Validates a bound program exclusively from the immutable language snapshot,
 /// selected command frames, and their semantic slots. It has no dependency on
-/// WordFactory, IWord, legacy verb validation, or sentence creation.
+/// Word-level factories or sentence creation.
 /// </summary>
 public sealed class SemanticProgramValidator(LanguageSnapshot language)
 {
@@ -105,10 +105,9 @@ public sealed class SemanticProgramValidator(LanguageSnapshot language)
             return;
         }
 
-        // LOAD historically accepts a lone TEXT/CONFIG-like token as the output
-        // target while also using it to select the frame. Preserve only that
-        // compatibility construction; other qualifiers introduce a realization
-        // and therefore require a following subject value.
+        // LOAD accepts a lone TEXT/CONFIG-like token as the output target while
+        // also using it to select the frame. Other qualifiers introduce a
+        // realization and therefore require a following subject value.
         if (command.Command.Name.Equals("LOAD", StringComparison.OrdinalIgnoreCase))
         {
             return;

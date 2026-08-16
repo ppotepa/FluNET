@@ -1,0 +1,6 @@
+TASK prepare-workspace
+    MKDIR "./output" AS output
+    MKDIR "./output/reports" AS reports
+    MKDIR "./output/cards" AS cards
+    MKDIR "./output/archive" AS archive
+    MKDIR "./output/restored" AS restored

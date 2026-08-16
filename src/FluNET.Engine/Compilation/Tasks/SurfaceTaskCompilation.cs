@@ -17,20 +17,25 @@ public static class SurfaceTaskHeader
         parameters = null;
         if (command.Values.Count != 1 || command.Alias is not null)
         {
-            diagnostics.Add(new SurfaceDiagnostic("FLN290", "TASK requires `TASK name [parameters] [-> Type]`.", command.Span));
+            diagnostics.Add(new SurfaceDiagnostic("FLN290", "TASK requires `TASK name [parameters] RETURNS Type`.", command.Span));
             return false;
         }
         string[] tokens = SplitWords(command.Values[0].UnquotedText).ToArray();
-        int arrow = Array.IndexOf(tokens, "->");
-        string[] declaration = arrow < 0 ? tokens : tokens[..arrow];
-        if (arrow >= 0)
+        int returns = Array.FindIndex(tokens, token => token.Equals("RETURNS", StringComparison.OrdinalIgnoreCase));
+        if (tokens.Any(token => token == "->"))
         {
-            if (arrow + 2 != tokens.Length)
+            diagnostics.Add(new SurfaceDiagnostic("FLN290", "TASK result declarations use `RETURNS Type`.", command.Span));
+            return false;
+        }
+        string[] declaration = returns < 0 ? tokens : tokens[..returns];
+        if (returns >= 0)
+        {
+            if (returns + 2 != tokens.Length)
             {
-                diagnostics.Add(new SurfaceDiagnostic("FLN290", "TASK result declaration must be `-> Type`.", command.Span));
+                diagnostics.Add(new SurfaceDiagnostic("FLN290", "TASK result declaration must be `RETURNS Type`.", command.Span));
                 return false;
             }
-            resultType = tokens[arrow + 1];
+            resultType = tokens[returns + 1];
         }
         if (declaration.Length == 0 || declaration.Any(token => !IsIdentifier(token)))
         {
@@ -104,6 +109,10 @@ public sealed class SurfaceTaskCompiler(LanguageSnapshot language)
                     diagnostics.Add(new SurfaceDiagnostic("FLN292", $"TASK '{task.Name}' is declared more than once.", task.Span));
                 else if (task.ResultTypeName is string typeName && language.Types.Find(typeName) is null)
                     diagnostics.Add(new SurfaceDiagnostic("FLN293", $"TASK '{task.Name}' declares unknown result type '{typeName}'.", task.Span));
+                else if (task.ResultTypeName is string resultType &&
+                         !resultType.Equals("Unit", StringComparison.OrdinalIgnoreCase) &&
+                         !ContainsReturn(task.Statements))
+                    diagnostics.Add(new SurfaceDiagnostic("FLN299", $"TASK '{task.Name}' must contain RETURN because it declares RETURNS {resultType}.", task.Span));
                 else tasks[task.Name] = task;
             }
             else if (statement is SurfaceContextSyntax context) Collect(context.Statements, tasks, diagnostics);
@@ -176,9 +185,89 @@ public sealed class SurfaceTaskCompiler(LanguageSnapshot language)
         string prefix = $"__task_{_callIndex++:D4}_";
         Dictionary<string, string> aliases = CollectAliases(task.Statements, prefix);
         List<SurfaceStatementSyntax> cloned = task.Statements.Select(statement => Substitute(statement, parameters, aliases)).ToList();
+        NormalizeReturns(cloned, run.Alias, task.ResultTypeName, diagnostics);
         if (run.Alias is not null) AssignFinalResult(cloned, run.Alias);
         return Rewrite(cloned, tasks, [.. stack, task.Name], diagnostics);
     }
+
+    private static bool ContainsReturn(IEnumerable<SurfaceStatementSyntax> statements) => statements.Any(statement =>
+        statement is SurfaceCommandSyntax command && command.NormalizedName == "RETURN" ||
+        statement is SurfaceContextSyntax context && ContainsReturn(context.Statements) ||
+        statement is SurfacePolicyContextSyntax policy && ContainsReturn(policy.Statements));
+
+    private void NormalizeReturns(
+        List<SurfaceStatementSyntax> statements,
+        string? publicAlias,
+        string? resultType,
+        ICollection<SurfaceDiagnostic> diagnostics)
+    {
+        for (int index = statements.Count - 1; index >= 0; index--)
+        {
+            if (statements[index] is not SurfaceCommandSyntax command || command.NormalizedName != "RETURN")
+                continue;
+
+            if (command.Values.Count != 1 || command.Alias is not null)
+            {
+                diagnostics.Add(new SurfaceDiagnostic("FLN298", "RETURN requires exactly one value and cannot have AS.", command.Span));
+                statements.RemoveAt(index);
+                continue;
+            }
+
+            string value = command.Values[0].Text.Trim();
+            string variable = value.Trim();
+            if (variable.StartsWith('[') && variable.EndsWith(']'))
+                variable = variable[1..^1].Trim();
+            if (IsIdentifier(variable) && TryAliasReturnedVariable(statements, index, variable, publicAlias))
+            {
+                statements.RemoveAt(index);
+                continue;
+            }
+
+            string target = publicAlias ?? $"__task_return_{_callIndex:D4}";
+            if (resultType?.Equals("Text", StringComparison.OrdinalIgnoreCase) == true &&
+                variable.Length > 0 && value.StartsWith('[') && value.EndsWith(']'))
+                value = $"\"{{{variable}}}\"";
+            statements[index] = new SurfaceCommandSyntax(
+                "LET",
+                [new SurfaceValueSyntax($"{target} = {value}", command.Values[0].Span)],
+                null,
+                command.Span);
+        }
+    }
+
+    private static bool TryAliasReturnedVariable(
+        List<SurfaceStatementSyntax> statements,
+        int returnIndex,
+        string variable,
+        string? publicAlias)
+    {
+        for (int index = returnIndex - 1; index >= 0; index--)
+        {
+            if (statements[index] is SurfaceCommandSyntax command &&
+                command.Alias is string alias &&
+                alias.Equals(variable, StringComparison.OrdinalIgnoreCase))
+            {
+                statements[index] = command with { Alias = publicAlias ?? alias };
+                return true;
+            }
+            if (statements[index] is SurfacePipelineSyntax pipeline)
+            {
+                SurfaceCommandSyntax[] stages = pipeline.Stages.ToArray();
+                for (int stageIndex = stages.Length - 1; stageIndex >= 0; stageIndex--)
+                {
+                    if (!string.Equals(stages[stageIndex].Alias, variable, StringComparison.OrdinalIgnoreCase)) continue;
+                    stages[stageIndex] = stages[stageIndex] with { Alias = publicAlias ?? stages[stageIndex].Alias };
+                    statements[index] = pipeline with { Stages = stages };
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static bool IsIdentifier(string value) => value.Length > 0 &&
+        (char.IsLetter(value[0]) || value[0] == '_') &&
+        value.Skip(1).All(ch => char.IsLetterOrDigit(ch) || ch is '_' or '-');
 
     private static Dictionary<string, string> CollectAliases(IEnumerable<SurfaceStatementSyntax> statements, string prefix)
     {
@@ -265,5 +354,8 @@ public sealed class SurfaceTaskCompiler(LanguageSnapshot language)
     }
 
     private static bool ProducesValue(SurfaceCommandSyntax command) =>
-        command.NormalizedName is "GET" or "LOAD" or "FILTER" or "SORT" or "TAKE" or "SELECT" or "MAP" or "DEFAULT" or "GROUP" or "SUM" or "JOIN" or "MATCH";
+        command.Alias is not null ||
+        command.NormalizedName is "GET" or "LOAD" or "FILTER" or "WHERE" or "SORT" or "ORDER" or
+        "TAKE" or "SKIP" or "DISTINCT" or "SELECT" or "MAP" or "DEFAULT" or "GROUP" or "SUM" or
+        "COUNT" or "AVG" or "MIN" or "MAX" or "JOIN" or "MATCH" or "LET";
 }

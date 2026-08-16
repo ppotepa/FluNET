@@ -22,7 +22,7 @@ public static class CompensationExtensions
     {
         ArgumentNullException.ThrowIfNull(context);
         return new CompensationCoordinator(
-            context.GetService<FluNET.Execution.Planning.ExecutionPlanExecutor>(),
+            context.GetService<FluNET.Execution.Planning.SentenceExecutor>(),
             context.GetService<FluNET.Capabilities.IFluNetFileSystem>());
     }
 

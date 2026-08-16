@@ -43,8 +43,7 @@ public sealed class TypeValidationStep : IExecutionStep
                 ExecutionFailureKind.Validation,
                 exception.Code,
                 exception.Message,
-                exception,
-                context.Sentence));
+                exception));
         }
     }
 }

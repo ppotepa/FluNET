@@ -1,7 +1,7 @@
 using FluNET.Execution.Commands;
+using FluNET.Capabilities;
 using FluNET.Language.Resources;
 using FluNET.Language.Values;
-using FluNET.Syntax.Core;
 using Microsoft.Extensions.DependencyInjection;
 using System.Collections.ObjectModel;
 
@@ -21,6 +21,7 @@ public sealed record CommandRouteDescriptor
 }
 
 internal sealed record PendingCommandRoute(CommandRouteDescriptor Descriptor, Action<IServiceCollection, FrameId> Register);
+internal sealed record CapabilityProviderRegistration(Type ProviderType, Func<IServiceProvider, ICapabilityProvider> Create);
 
 public sealed class FluNetModuleBuilder
 {
@@ -30,6 +31,7 @@ public sealed class FluNetModuleBuilder
     private readonly List<ResourceProviderRegistration> _resourceProviders = [];
     private readonly List<ResourceDecoderRegistration> _resourceDecoders = [];
     private readonly List<ResourceEncoderRegistration> _resourceEncoders = [];
+    private readonly List<CapabilityProviderRegistration> _capabilityProviders = [];
     public LanguageBuilder Language { get; } = new();
 
     public FluNetModuleBuilder AddModule(IFluNetModule module) { ArgumentNullException.ThrowIfNull(module); module.Register(this); return this; }
@@ -54,6 +56,20 @@ public sealed class FluNetModuleBuilder
     public FluNetModuleBuilder ResourceEncoder<TEncoder>() where TEncoder : class, IResourceEncoder
     { _resourceEncoders.Add(new ResourceEncoderRegistration(typeof(TEncoder), services => ActivatorUtilities.CreateInstance<TEncoder>(services))); return this; }
 
+    /// <summary>
+    /// Registers a provider-neutral capability supplied by this module. The
+    /// host still controls its concrete dependencies and policy through DI;
+    /// the provider is only made discoverable after the runtime is installed.
+    /// </summary>
+    public FluNetModuleBuilder Capability<TProvider>()
+        where TProvider : class, ICapabilityProvider
+    {
+        _capabilityProviders.Add(new CapabilityProviderRegistration(
+            typeof(TProvider),
+            services => ActivatorUtilities.CreateInstance<TProvider>(services)));
+        return this;
+    }
+
     public FluNetModuleBuilder Route<TCommand, TResult, TBinder, THandler>(FrameId frameId)
         where TCommand : class, ICommand<TResult> where TBinder : class, ICommandBinder<TCommand, TResult> where THandler : class, ICommandHandler<TCommand, TResult>
     {
@@ -66,7 +82,7 @@ public sealed class FluNetModuleBuilder
         where TCommand : class, ICommand<TResult> where TBinder : class, ICommandBinder<TCommand, TResult> where THandler : class, ICommandHandler<TCommand, TResult> =>
         Route<TCommand, TResult, TBinder, THandler>(new FrameId(frameId));
     public FluNetModuleBuilder Route<TImplementation, TCommand, TResult, TBinder, THandler>()
-        where TImplementation : class, IVerb where TCommand : class, ICommand<TResult> where TBinder : class, ICommandBinder<TCommand, TResult> where THandler : class, ICommandHandler<TCommand, TResult>
+        where TImplementation : class where TCommand : class, ICommand<TResult> where TBinder : class, ICommandBinder<TCommand, TResult> where THandler : class, ICommandHandler<TCommand, TResult>
     {
         CommandRouteDescriptor descriptor = new(typeof(TImplementation), typeof(TCommand), typeof(TResult), typeof(TBinder), typeof(THandler));
         _routes.Add(new PendingCommandRoute(descriptor, (services, resolvedFrameId) => services.AddTypedCommand<TCommand, TResult, TBinder, THandler>(resolvedFrameId)));
@@ -76,18 +92,18 @@ public sealed class FluNetModuleBuilder
     public FluNetRuntimeDefinition Build()
     {
         LanguageSnapshot language = Language.Build();
-        ResolveLegacyFrameIds(language); ValidateRoutes(language); ValidateValues(language);
-        return new FluNetRuntimeDefinition(language, _routes, _codecs, _conversions, _resourceProviders, _resourceDecoders, _resourceEncoders);
+        ResolveRouteFrameIds(language); ValidateRoutes(language); ValidateValues(language);
+        return new FluNetRuntimeDefinition(language, _routes, _codecs, _conversions, _resourceProviders, _resourceDecoders, _resourceEncoders, _capabilityProviders);
     }
 
-    private void ResolveLegacyFrameIds(LanguageSnapshot language)
+    private void ResolveRouteFrameIds(LanguageSnapshot language)
     {
         CommandFrameDescriptor[] frames = language.Commands.SelectMany(command => command.Frames).ToArray();
         foreach (PendingCommandRoute route in _routes.Where(route => route.Descriptor.FrameId.IsEmpty))
         {
             Type? implementationType = route.Descriptor.ImplementationType;
-            CommandFrameDescriptor[] matches = frames.Where(frame => frame.HasLegacyVerbAdapter && frame.ImplementationType == implementationType).ToArray();
-            if (matches.Length != 1) throw new LanguageDefinitionException($"Legacy route implementation '{implementationType?.FullName}' must resolve to exactly one frame; found {matches.Length}.");
+            CommandFrameDescriptor[] matches = frames.Where(frame => frame.ImplementationType == implementationType).ToArray();
+            if (matches.Length != 1) throw new LanguageDefinitionException($"Route implementation '{implementationType?.FullName}' must resolve to exactly one frame; found {matches.Length}.");
             route.Descriptor.FrameId = matches[0].Id;
         }
     }
@@ -122,6 +138,8 @@ public sealed class FluNetModuleBuilder
         if (duplicateDecoders.Length > 0) throw new LanguageDefinitionException($"Resource decoder types are registered more than once: {string.Join(", ", duplicateDecoders.Select(type => type.FullName))}.");
         Type[] duplicateEncoders = _resourceEncoders.GroupBy(item => item.EncoderType).Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
         if (duplicateEncoders.Length > 0) throw new LanguageDefinitionException($"Resource encoder types are registered more than once: {string.Join(", ", duplicateEncoders.Select(type => type.FullName))}.");
+        Type[] duplicateCapabilities = _capabilityProviders.GroupBy(item => item.ProviderType).Where(group => group.Count() > 1).Select(group => group.Key).ToArray();
+        if (duplicateCapabilities.Length > 0) throw new LanguageDefinitionException($"Capability provider types are registered more than once: {string.Join(", ", duplicateCapabilities.Select(type => type.FullName))}.");
     }
 }
 
@@ -133,16 +151,19 @@ public sealed class FluNetRuntimeDefinition
     private readonly ReadOnlyCollection<ResourceProviderRegistration> _resourceProviders;
     private readonly ReadOnlyCollection<ResourceDecoderRegistration> _resourceDecoders;
     private readonly ReadOnlyCollection<ResourceEncoderRegistration> _resourceEncoders;
+    private readonly ReadOnlyCollection<CapabilityProviderRegistration> _capabilityProviders;
 
     internal FluNetRuntimeDefinition(LanguageSnapshot language, IEnumerable<PendingCommandRoute> routes,
         IEnumerable<ValueCodecRegistration>? codecs = null, IEnumerable<ValueConversionRegistration>? conversions = null,
         IEnumerable<ResourceProviderRegistration>? resourceProviders = null, IEnumerable<ResourceDecoderRegistration>? resourceDecoders = null,
-        IEnumerable<ResourceEncoderRegistration>? resourceEncoders = null)
+        IEnumerable<ResourceEncoderRegistration>? resourceEncoders = null,
+        IEnumerable<CapabilityProviderRegistration>? capabilityProviders = null)
     {
         Language = language ?? throw new ArgumentNullException(nameof(language));
         _routes = Array.AsReadOnly(routes.ToArray()); _codecs = Array.AsReadOnly(codecs?.ToArray() ?? []);
         _conversions = Array.AsReadOnly(conversions?.ToArray() ?? []); _resourceProviders = Array.AsReadOnly(resourceProviders?.ToArray() ?? []);
         _resourceDecoders = Array.AsReadOnly(resourceDecoders?.ToArray() ?? []); _resourceEncoders = Array.AsReadOnly(resourceEncoders?.ToArray() ?? []);
+        _capabilityProviders = Array.AsReadOnly(capabilityProviders?.ToArray() ?? []);
         Routes = Array.AsReadOnly(_routes.Select(route => route.Descriptor).ToArray());
     }
     public LanguageSnapshot Language { get; }
@@ -151,6 +172,8 @@ public sealed class FluNetRuntimeDefinition
     {
         ArgumentNullException.ThrowIfNull(services);
         foreach (PendingCommandRoute route in _routes) route.Register(services, route.Descriptor.FrameId);
+        foreach (CapabilityProviderRegistration capability in _capabilityProviders)
+            services.AddSingleton<ICapabilityProvider>(provider => capability.Create(provider));
         services.AddSingleton<IValueCodecRegistry>(provider => new ValueCodecRegistry(Language, provider, _codecs, _conversions));
         services.AddSingleton<IResourceProviderRegistry>(provider => new ResourceProviderRegistry(provider, _resourceProviders));
         services.AddSingleton<IResourceDecoderRegistry>(provider => new ResourceDecoderRegistry(provider, _resourceDecoders));

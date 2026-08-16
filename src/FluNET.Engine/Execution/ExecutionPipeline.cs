@@ -58,20 +58,18 @@ public sealed class ExecutionPipeline
                 ExecutionFailureKind.Execution,
                 "FLN200",
                 context.Exception.Message,
-                context.Exception,
-                context.Sentence));
+                context.Exception));
         }
 
-        if (context.Plan is null && context.Sentence is null)
+        if (context.Plan is null)
         {
             return ValueTask.FromResult(ExecutionResult.Failed(
                 ExecutionFailureKind.Internal,
                 "FLN202",
-                "The pipeline completed without producing an execution plan or compatibility sentence."));
+                "The pipeline completed without producing an execution plan."));
         }
 
         return ValueTask.FromResult(ExecutionResult.Success(
-            context.Sentence,
             context.Result,
             context.Plan,
             context.StepResults,

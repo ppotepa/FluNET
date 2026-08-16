@@ -4,6 +4,31 @@ FluNET.Engine is designed to be embedded in a .NET host. The host chooses the la
 
 ## Canonical engine
 
+For a batteries-included cross-platform application host:
+
+```csharp
+using FluNET.Context;
+
+using FluNETContext context = FluNetHost.Create(new FluNetHostOptions
+{
+    Root = "./workspace",
+    DataDirectory = "./.flunet",
+    NetworkHosts = ["api.example.test"]
+});
+```
+
+This wires policy-aware local storage, SQLite metadata index, durable queue,
+blob directory and provider-package catalog. Every provider remains replaceable
+through the optional `IServiceCollection` callback.
+
+For a runnable reference host, see `samples/FluNET.HostedApp`. It accepts a
+workspace root and a canonical prompt, making it a compact starting point for
+desktop, service, worker or container applications.
+
+The engine is packable as `FluNET.Engine` (`0.9.0` candidate). The package
+contains the README and declares the MIT license metadata so an embedding host
+can consume the runtime without copying repository files.
+
 ```csharp
 using FluNET;
 using FluNET.Context;
@@ -51,7 +76,7 @@ SAY "{post.title} — {todo.title}"
 """);
 ```
 
-Execute through the same `ExecutionPlanExecutor` used by the rest of the engine:
+Execute through the same `SentenceExecutor` used by the rest of the engine:
 
 ```csharp
 SurfaceExecutionResult execution = await context.ExecuteSurfaceAsync("""
@@ -87,13 +112,44 @@ using FluNETContext context = SurfaceCompilationExtensions.CreateSurfaceContext(
     {
         services.AddSingleton<IExecutionPolicy>(myPolicy);
         services.AddSingleton<IHttpTransport>(myHttpTransport);
+        // Choose the host's authentication convention: Bearer, API key, or Basic.
+        services.AddSingleton<IHttpAuthenticationScheme>(new ApiKeyHttpAuthenticationScheme("X-API-Key"));
         services.AddSingleton<IFluNetFileSystem>(myFileSystem);
         services.AddSingleton<ITextOutput>(myOutput);
-        services.AddSingleton<IEmailTransport>(myEmailTransport);
+    services.AddSingleton<IEmailTransport>(myEmailTransport);
     });
 ```
 
+For a host-owned remote queue, the standard messaging surface can use the
+portable REST adapter:
+
+```csharp
+services.AddSingleton<IFluNetMessageBus>(provider =>
+    new HttpFluNetMessageBus(
+        new Uri("https://queue.example.test/events"),
+        provider.GetRequiredService<IHttpTransport>(),
+        provider.GetRequiredService<IAuthenticatedHttpTransport>()));
+```
+
+The adapter uses `POST /topic` for publish and `GET /topic` for receive; a
+broker-specific host can implement `IFluNetMessageBus` directly instead.
+
 The default embedding `FluNETContext` keeps `AllowAllExecutionPolicy` for backward compatibility. Production hosts should install an appropriate policy.
+
+## Provider package catalog
+
+Hosts can publish approved provider manifests without changing the language
+runtime:
+
+```csharp
+services.AddSingleton<IFluNetProviderPackageCatalog>(
+    new JsonFileFluNetProviderPackageCatalog(
+        "./.flunet/packages",
+        myPolicy));
+```
+
+The `PACKAGES [packages]` command exposes only validated metadata. Loading an
+entry point and granting permissions remains an explicit host decision.
 
 ## Secrets
 
@@ -299,6 +355,56 @@ public sealed class MyResourceProvider : IResourceProvider
     }
 }
 ```
+
+Portable host composition is also available for environment-backed secrets:
+
+```csharp
+services.AddSingleton<ISecretStore>(new CompositeSecretStore([
+    new EnvironmentSecretStore("APP_SECRET_"),
+    new DictionarySecretStore(testFallbacks)
+]));
+```
+
+`CompositeSecretStore` checks stores in order. Secret values remain opaque;
+their `ToString()` representation is always `<secret>`.
+
+`IHttpAuthenticationScheme` is deliberately host-owned. The built-in schemes are
+`BearerHttpAuthenticationScheme`, `ApiKeyHttpAuthenticationScheme` and
+`BasicHttpAuthenticationScheme`; custom schemes can implement the same interface
+without changing the language or compiler.
+
+## Module capabilities
+
+Modules can also ship a provider-neutral capability. This keeps the language
+surface portable while allowing the host to decide whether the provider is
+available, which policy it uses, and which platform-specific implementation it
+injects:
+
+```csharp
+public sealed class ReportsModule : IFluNetModule
+{
+    public void Register(FluNetModuleBuilder module)
+    {
+        module.Capability<ReportsCapabilityProvider>();
+    }
+}
+
+public sealed class ReportsCapabilityProvider(IReportStore store)
+    : ICapabilityProvider
+{
+    public CapabilityDescriptor Descriptor { get; } = new(
+        "reports.store",
+        platforms: [FluNetPlatform.Any],
+        permissions: ["reports.read", "reports.write"]);
+
+    public bool IsAvailable => store.IsAvailable;
+}
+```
+
+`CapabilityRegistry` discovers module providers together with the built-in
+filesystem, storage, network, process and system providers. The registry only
+exposes an available provider for the current platform; it never chooses a
+platform-specific implementation by inspecting application code.
 
 Unknown `scheme:value` resources are represented by `ModuleResourceReference`, so a provider can own a scheme without changing `SurfaceLowerer`.
 

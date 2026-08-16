@@ -1,6 +1,5 @@
 using FluNET.Context;
 using FluNET.Prompt;
-using FluNET.Tokens.Tree;
 
 namespace FluNET.Tests;
 
@@ -108,24 +107,6 @@ public sealed class SyntaxTests
     }
 
     [Test]
-    public void TokenTreeAdapter_UsesParserCommandBoundaries()
-    {
-        ProcessedPrompt prompt = new("SAY one THEN SAY two.");
-        TokenTreeFactory factory = _context.GetService<TokenTreeFactory>();
-
-        IReadOnlyList<TokenTree> commands = factory.ProcessCommands(prompt);
-
-        Assert.Multiple(() =>
-        {
-            Assert.That(commands, Has.Count.EqualTo(2));
-            Assert.That(commands[0].GetTokens().Select(token => token.Value),
-                Is.EqualTo(new[] { "SAY", "one" }));
-            Assert.That(commands[1].GetTokens().Select(token => token.Value),
-                Is.EqualTo(new[] { "SAY", "two" }));
-        });
-    }
-
-    [Test]
     public void SyntaxTree_RepresentsVerbAndClauses()
     {
         CommandSyntax command = new ProcessedPrompt(
@@ -158,7 +139,7 @@ public sealed class SyntaxTests
         Assert.Multiple(() =>
         {
             Assert.That(analysis.IsValid, Is.True, analysis.ValidationResult.FailureReason);
-            Assert.That(analysis.Sentence, Is.Not.Null);
+            Assert.That(analysis.Plan, Is.Not.Null);
         });
     }
 

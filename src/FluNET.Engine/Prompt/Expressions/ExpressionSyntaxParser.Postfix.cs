@@ -7,15 +7,21 @@ public sealed partial class ExpressionSyntaxParser
         ExpressionSyntax expression = ParsePrimary();
         while (true)
         {
+            bool nullSafe = MatchOperator("?");
             if (MatchPunctuation("."))
             {
                 ExpressionToken property = ConsumeWord("Expected a property name after '.'.");
                 expression = new PropertyExpressionSyntax(
                     expression,
                     property.Text,
-                    SourceSpan.FromBounds(expression.Span.Start, property.Span.End));
+                    SourceSpan.FromBounds(expression.Span.Start, property.Span.End))
+                {
+                    NullSafe = nullSafe
+                };
                 continue;
             }
+
+            if (nullSafe) throw Error("Expected '.' after '?.'.");
 
             if (Current.Kind == ExpressionTokenKind.Variable)
             {

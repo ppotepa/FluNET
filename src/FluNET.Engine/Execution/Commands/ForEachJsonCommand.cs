@@ -12,7 +12,7 @@ namespace FluNET.Execution.Commands;
 
 public interface IForEachJsonAction : ICompiledAction
 {
-    string ICompiledAction.Kind => "legacy.foreach";
+    string ICompiledAction.Kind => "flow.foreach";
 }
 
 public sealed record ForEachJsonCommand(IExpression<JsonElement[]> Source,string ItemName,int MaxConcurrency,CompiledActionTemplate Template):ICommand<JsonElement[]>
@@ -29,7 +29,9 @@ public sealed record ForEachJsonCommand(IExpression<JsonElement[]> Source,string
 
 public sealed class ForEachJsonCommandBinder(
     LanguageSnapshot language,IValueCodecRegistry values,ITextOutput output,IExecutionPolicy policy,IFluNetFileSystem files,
-    IHttpTransport http,IResourceDecoderRegistry decoders,ISecretStore secrets,ISecretAccessPolicy secretPolicy,ISqlQueryExecutor sql)
+    IHttpTransport http,IResourceDecoderRegistry decoders,ISecretStore secrets,ISecretAccessPolicy secretPolicy,ISqlQueryExecutor sql,
+    IFluNetDirectoryOperations directories,IFluNetFileOperations fileOperations,IFluNetFileTrash trash,IFluNetArchive archive,
+    IFluNetMessageBus bus,IFluNetNotifier notifier)
     : ICommandBinder<ForEachJsonCommand,JsonElement[]>
 {
     public ForEachJsonCommand? TryBind(BoundCommand command)
@@ -39,7 +41,7 @@ public sealed class ForEachJsonCommandBinder(
         BoundArgument template=command[new FrameRoleId("Template")];
         string encoded=string.Join("",template.Tokens.Select(token=>Unwrap(token.Text)));
         SurfaceForEachDescriptor descriptor=SurfaceForEachDescriptor.Decode(encoded);
-        CompiledActionTemplate compiled=new SurfaceNestedActionCompiler(language,values,output,policy,files,http,decoders,secrets,secretPolicy,sql).Compile(descriptor.Actions);
+        CompiledActionTemplate compiled=new SurfaceNestedActionCompiler(language,values,output,policy,files,http,decoders,secrets,secretPolicy,sql,directories,fileOperations,trash,archive,bus,notifier).Compile(descriptor.Actions);
         return new(context.Require<JsonElement[]>(SemanticRole.Source),descriptor.ItemName,descriptor.MaxConcurrency,compiled);
     }
     private static string Unwrap(string value)=>value.Length>=2&&value[0]=='{'&&value[^1]=='}'?value[1..^1]:value;

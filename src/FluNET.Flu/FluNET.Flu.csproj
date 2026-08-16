@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>flu</AssemblyName>
+    <RootNamespace>FluNET.Flu</RootNamespace>
+    <Description>Short FluNET command-line launcher.</Description>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>flu</ToolCommandName>
+    <PackageId>FluNET.Flu</PackageId>
+    <PackageVersion>0.3.0-preview</PackageVersion>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../FluNET.Tool/FluNET.Tool.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../README.md" Pack="true" PackagePath="README.md" />
+  </ItemGroup>
+</Project>

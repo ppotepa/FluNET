@@ -1,4 +1,3 @@
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
 using FluNET.Execution.Planning;
 using FluNET.Execution.Workflow;
@@ -28,7 +27,6 @@ public sealed record ExecutionError(
 public sealed class ExecutionResult
 {
     public ValidationResult ValidationResult { get; }
-    public ISentence? Sentence { get; }
     public object? Result { get; }
     public ExecutionError? Error { get; }
     public ExecutionPlan? Plan { get; }
@@ -38,7 +36,6 @@ public sealed class ExecutionResult
 
     private ExecutionResult(
         ValidationResult validationResult,
-        ISentence? sentence,
         object? result,
         ExecutionError? error,
         ExecutionPlan? plan,
@@ -46,7 +43,6 @@ public sealed class ExecutionResult
         WorkflowRunState? workflow = null)
     {
         ValidationResult = validationResult ?? throw new ArgumentNullException(nameof(validationResult));
-        Sentence = sentence;
         Result = result;
         Error = error;
         Plan = plan;
@@ -55,21 +51,18 @@ public sealed class ExecutionResult
     }
 
     /// <summary>
-    /// Creates a successful canonical execution result. Sentence is optional and
-    /// is populated only by compatibility/custom pipelines.
+    /// Creates a successful typed execution result.
     /// </summary>
     public static ExecutionResult Success(
-        ISentence? sentence,
         object? result,
         ExecutionPlan? plan = null,
         IEnumerable<ExecutionStepResult>? steps = null,
         WorkflowRunState? workflow = null) =>
-        new(ValidationResult.Success(), sentence, result, null, plan, steps, workflow);
+        new(ValidationResult.Success(), result, null, plan, steps, workflow);
 
     public static ExecutionResult Failed(ValidationResult validationResult) =>
         new(
             validationResult,
-            null,
             null,
             new ExecutionError(
                 ExecutionFailureKind.Validation,
@@ -84,15 +77,13 @@ public sealed class ExecutionResult
         string code,
         string message,
         Exception? exception = null,
-        ISentence? sentence = null,
         ExecutionPlan? plan = null,
         IEnumerable<ExecutionStepResult>? steps = null,
         WorkflowRunState? workflow = null) =>
         new(
-            kind == ExecutionFailureKind.Validation
+            kind is ExecutionFailureKind.Syntax or ExecutionFailureKind.Binding or ExecutionFailureKind.Validation
                 ? ValidationResult.Failure(message)
                 : ValidationResult.Success(),
-            sentence,
             null,
             new ExecutionError(kind, code, message, exception),
             plan,

@@ -14,7 +14,7 @@ public sealed record ReconciliationMutationRequest(
 
 /// <summary>
 /// A mutator is a side-effect-free mutation-plan factory. It must return a plan that is later
-/// executed by ExecutionPlanExecutor; implementations must not perform the mutation in Plan().
+/// executed by SentenceExecutor; implementations must not perform the mutation in Plan().
 /// </summary>
 public interface IReconciliationMutator
 {

@@ -5,7 +5,7 @@ using System.Text.Json;
 namespace FluNET.Variables
 {
     /// <summary>
-    /// Compatibility variable resolver backed by the typed 0.4 variable store.
+    /// Variable resolver backed by the typed language store.
     /// </summary>
     public class VariableResolver : IVariableResolver
     {
@@ -62,8 +62,8 @@ namespace FluNET.Variables
             }
             catch (LanguageDefinitionException)
             {
-                // Compatibility hosts may register arbitrary object graphs.
-                // Keep them as the language's structural object value.
+                // Unknown host objects are represented by the language's
+                // structural object value.
                 type = _language.Types.Object;
             }
             VariableSymbol symbol = new(NormalizeName(name), type, -1);

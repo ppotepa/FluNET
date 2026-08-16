@@ -279,6 +279,4 @@ Prefer compact syntax for normal authoring when the compiler can infer the obvio
 
 ## Compatibility layer
 
-Historical sentence/token-tree APIs remain for source compatibility, but canonical execution uses the typed compiler/runtime. New modules should use native typed command declarations rather than deriving their semantic identity from legacy verb classes.
-
-See [legacy API migration](legacy-api-migration.md) for migration details.
+Canonical execution uses the typed compiler/runtime. New modules declare typed command frames and routes directly.

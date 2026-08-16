@@ -18,4 +18,4 @@ Planned work is tracked as Batches 53–65 in `roadmap.md`:
 12. automation/ENSURE CLI;
 13. tooling/freeze candidate.
 
-Architectural invariant: all new front-end forms must lower/compile to the same typed command graph and ultimately execute through the canonical `ExecutionPlanExecutor`.
+Architectural invariant: all new front-end forms must lower/compile to the same typed command graph and ultimately execute through the canonical `Executor`.

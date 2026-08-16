@@ -91,14 +91,22 @@ public sealed record HttpResourceResponse(byte[] Content, int StatusCode, string
 public interface IHttpTransport
 {
     Task<byte[]> GetBytesAsync(Uri uri, CancellationToken cancellationToken = default);
+    async Task<HttpResourceResponse> GetResponseAsync(Uri uri, CancellationToken cancellationToken = default) =>
+        await GetAsync(uri, cancellationToken).ConfigureAwait(false);
     async Task<HttpResourceResponse> GetAsync(Uri uri, CancellationToken cancellationToken = default) =>
         new(await GetBytesAsync(uri, cancellationToken).ConfigureAwait(false), 200, null, null, new Dictionary<string, string[]>(StringComparer.OrdinalIgnoreCase));
     Task<string> PostJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default);
+    Task<string> PutJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This HTTP provider does not support JSON PUT.");
+    Task<string> PatchJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This HTTP provider does not support JSON PATCH.");
+    Task<string> DeleteAsync(Uri uri, CancellationToken cancellationToken = default) =>
+        throw new NotSupportedException("This HTTP provider does not support HTTP DELETE.");
 }
 
 public sealed class HttpTransport(HttpClient client, IExecutionPolicy policy) : IHttpTransport
 {
-    public async Task<HttpResourceResponse> GetAsync(Uri uri, CancellationToken cancellationToken = default)
+    public async Task<HttpResourceResponse> GetResponseAsync(Uri uri, CancellationToken cancellationToken = default)
     {
         policy.EnsureNetworkAccess(uri);
         using HttpRequestMessage request = new(HttpMethod.Get, uri);
@@ -107,9 +115,14 @@ public sealed class HttpTransport(HttpClient client, IExecutionPolicy policy) : 
         Dictionary<string, string[]> headers = new(StringComparer.OrdinalIgnoreCase);
         foreach (KeyValuePair<string, IEnumerable<string>> header in response.Headers) headers[header.Key] = header.Value.ToArray();
         foreach (KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers) headers[header.Key] = header.Value.ToArray();
-        response.EnsureSuccessStatusCode();
         MediaTypeHeaderValue? type = response.Content.Headers.ContentType;
         return new(content, (int)response.StatusCode, type?.MediaType, type?.CharSet, headers);
+    }
+    public async Task<HttpResourceResponse> GetAsync(Uri uri, CancellationToken cancellationToken = default)
+    {
+        HttpResourceResponse response = await GetResponseAsync(uri, cancellationToken).ConfigureAwait(false);
+        EnsureSuccess(uri, response.StatusCode);
+        return response;
     }
     public async Task<byte[]> GetBytesAsync(Uri uri, CancellationToken cancellationToken = default) => (await GetAsync(uri, cancellationToken).ConfigureAwait(false)).Content;
     public async Task<string> PostJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default)
@@ -120,12 +133,38 @@ public sealed class HttpTransport(HttpClient client, IExecutionPolicy policy) : 
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
+
+    public Task<string> PutJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default) =>
+        SendJsonMutationAsync(HttpMethod.Put, uri, json, cancellationToken);
+
+    public Task<string> PatchJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default) =>
+        SendJsonMutationAsync(new HttpMethod("PATCH"), uri, json, cancellationToken);
+
+    public Task<string> DeleteAsync(Uri uri, CancellationToken cancellationToken = default) =>
+        SendJsonMutationAsync(HttpMethod.Delete, uri, null, cancellationToken);
+
+    private async Task<string> SendJsonMutationAsync(HttpMethod method, Uri uri, string? json, CancellationToken cancellationToken)
+    {
+        policy.EnsureNetworkAccess(uri);
+        using HttpRequestMessage request = new(method, uri);
+        if (json is not null)
+            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        using HttpResponseMessage response = await client.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private static void EnsureSuccess(Uri uri, int statusCode)
+    {
+        if (statusCode is >= 200 and < 300) return;
+        throw new HttpRequestException($"HTTP request to '{uri}' returned status {statusCode}.", null, (System.Net.HttpStatusCode)statusCode);
+    }
 }
 
 public interface ITextOutput { ValueTask WriteLineAsync(string message, CancellationToken cancellationToken = default); }
 public interface IEmailTransport { ValueTask<string> SendAsync(string recipient, string message, CancellationToken cancellationToken = default); }
 public sealed class DiagnosticEmailTransport : IEmailTransport
-{ public ValueTask<string> SendAsync(string recipient, string message, CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return ValueTask.FromResult($"diagnostic://email/{recipient}"); } }
+{ public ValueTask<string> SendAsync(string recipient, string message, CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); return ValueTask.FromResult($"Email sent to {recipient}"); } }
 public sealed class ConsoleTextOutput : ITextOutput
 { public ValueTask WriteLineAsync(string message, CancellationToken cancellationToken = default) { cancellationToken.ThrowIfCancellationRequested(); Console.WriteLine(message); return ValueTask.CompletedTask; } }
 public sealed class CapabilityDeniedException : InvalidOperationException { public CapabilityDeniedException(string message) : base(message) { } }

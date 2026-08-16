@@ -26,7 +26,7 @@ public sealed class CompilationPipelineTests
             Assert.That(result.BoundProgram.Statements[0], Is.TypeOf<BoundCommandStatement>());
             Assert.That(result.BoundCommands, Has.Count.EqualTo(1));
             Assert.That(result.Plan, Is.Not.Null);
-            Assert.That(result.Sentence, Is.Not.Null);
+            Assert.That(result.Plan, Is.Not.Null);
         });
     }
 
@@ -108,3 +108,4 @@ public sealed class CompilationPipelineTests
         });
     }
 }
+

@@ -1,0 +1,6 @@
+# Local modules and reusable typed tasks.
+
+IMPORT "../modules/text.flu"
+
+RUN make-label reusable-task AS label
+SAY "Task result: {label}."

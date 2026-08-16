@@ -1,0 +1,44 @@
+# Portable filesystem, metadata, content search, trash, hashing and archives.
+
+MKDIR "./output" AS output
+MKDIR "./output/files" AS files
+MKDIR "./output/files/source" AS source
+MKDIR "./output/files/archive" AS archive
+
+COPY "./fixtures/users.json" TO "./output/files/source/users.json" AS usersCopy
+COPY "./fixtures/posts.json" TO "./output/files/source/posts.json" AS postsCopy
+COPY "./fixtures/notes.txt" TO "./output/files/source/notes.txt" AS notesCopy
+
+THEN
+FIND "./output/files/source" WHERE size > 0 AS nonEmpty
+FIND "./output/files/source" WHERE extension == '.json' ORDER BY name AS jsonFiles
+SEARCH "platform" IN "./output/files/source" RECURSIVE AS matches
+INDEX FILES sourceIndex FROM "./output/files/source" RECURSIVE
+
+THEN
+HASH "./output/files/source/users.json" AS usersHash
+THEN
+STAT "./output/files/source/users.json" AS usersInfo
+COUNT [nonEmpty] AS fileCount
+COUNT [jsonFiles] AS jsonCount
+COUNT [matches] AS matchCount
+COUNT [sourceIndex] AS indexCount
+
+PACK "./output/files/source" TO "./output/files/archive/source.zip" AS packed
+LIST ARCHIVE "./output/files/archive/source.zip" WHERE isDirectory == false ORDER BY length DESC AS entries
+UNPACK "./output/files/archive/source.zip" TO "./output/files/restored" AS restored
+COUNT [entries] AS archiveCount
+
+MKDIR "./output/files/operations" AS operations
+COPY "./output/files/source/notes.txt" TO "./output/files/operations/disposable.txt" AS disposable
+TRASH "./output/files/operations/disposable.txt" AS removed
+RESTORE [removed] TO "./output/files/operations/restored.txt" AS restoredFile
+
+COPY DIRECTORY "./output/files/source" TO "./output/files/operations/directory-copy" AS copiedDirectory
+MOVE DIRECTORY "./output/files/operations/directory-copy" TO "./output/files/operations/directory-moved" AS movedDirectory
+TRASH DIRECTORY "./output/files/operations/directory-moved" AS removedDirectory
+RESTORE DIRECTORY [removedDirectory] TO "./output/files/operations/directory-restored" AS restoredDirectory
+
+SAY "Files={fileCount}; JSON={jsonCount}; index={indexCount}; matches={matchCount}."
+SAY "Archive entries={archiveCount}; users bytes={usersInfo.length}; hash={usersHash}."
+TRASH DIRECTORY "./output/files/operations" AS cleanedOperations

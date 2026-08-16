@@ -1,0 +1,13 @@
+# Validate with: flu automation check apps/07-automation-daemon.flu
+# Run with:      flu automation daemon apps/07-automation-daemon.flu --state .state/automation.json --interval 1s
+
+EVERY 30s
+    NOW AS timestamp
+    METRICS AS metrics
+    SAY "Heartbeat at {timestamp}; memory={metrics.workingSetBytes}."
+
+WATCH "./fixtures/*.json"
+    WHEN CHANGED
+        FIND "./fixtures" WHERE extension == '.json' AS changedInputs
+        COUNT [changedInputs] AS inputCount
+        SAY "Fixture change detected; {inputCount} JSON inputs are available."

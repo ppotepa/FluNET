@@ -55,7 +55,7 @@ Baseline selection/persistence is host-owned in 0.9; `ExecuteSyncAsync` uses two
 
 ## Mutation contract
 
-The built-in mutation synthesizer owns one concrete target contract: a single local JSON file. It serializes the desired keyed snapshot deterministically, registers it as a typed `Text` value, compiles a normal compact SAVE and delegates execution to `ExecutionPlanExecutor`.
+The built-in mutation synthesizer owns one concrete target contract: a single local JSON file. It serializes the desired keyed snapshot deterministically, registers it as a typed `Text` value, compiles a normal compact SAVE and delegates execution to `Executor`.
 
 Other target kinds are rejected with `ReconciliationMutationNotSupportedException` until a future explicit mutation-provider contract exists. Conflicts never produce a mutation plan.
 
@@ -89,7 +89,7 @@ These tests exist in source but have **not** been executed in this session becau
 
 ## Architectural invariant
 
-Observation, diffing, WATCH routing, compensation and saga coordination are orchestration layers. Command mutation still goes through the existing typed `ExecutionPlanExecutor`; no reconciliation-specific command executor exists.
+Observation, diffing, WATCH routing, compensation and saga coordination are orchestration layers. Command mutation still goes through the existing typed `Executor`; no reconciliation-specific command executor exists.
 
 ## Release gate
 

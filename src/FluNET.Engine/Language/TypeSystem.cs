@@ -34,7 +34,7 @@ public static class BuiltInTypeIds
     public static TypeId Json { get; } = new("flunet.json");
     public static TypeId Object { get; } = new("flunet.object");
 
-    /// <summary>Compatibility type used by the existing TRANSFORM command.</summary>
+    /// <summary>Encoding type used by the TRANSFORM command.</summary>
     public static TypeId Encoding { get; } = new("flunet.encoding");
 }
 
@@ -123,8 +123,8 @@ public sealed class TypeSymbol : IEquatable<TypeSymbol>
     public TypeNullability Nullability { get; }
 
     /// <summary>
-    /// Primary CLR runtime mapping retained for compatibility. It is not part of
-    /// language identity and may be null for structural-only types such as unions.
+    /// Primary CLR runtime mapping. It is not part of language identity and may
+    /// be null for structural-only types such as unions.
     /// </summary>
     public Type? ClrType
     {
@@ -531,11 +531,9 @@ public sealed class LanguageTypeSystem
                 "Register custom types with LanguageBuilder.Type<T>(name).");
         }
 
-        // Compatibility fallback for old modules. The type is still compared by
-        // TypeId, but stable public modules should declare a language type name.
-        TypeId compatibilityId = new($"legacy.clr.{NormalizeClrIdentity(type)}");
+        TypeId clrTypeId = new($"clr.{NormalizeClrIdentity(type)}");
         return Intern(
-            compatibilityId,
+            clrTypeId,
             type.FullName ?? type.Name,
             TypeKind.Scalar,
             TypeNullability.NonNullable,

@@ -1,0 +1,23 @@
+# Durable key/value state, blob storage and queue messaging.
+# Run with --store, --blob and --queue as documented in README.
+
+NOW AS timestamp
+SET topic TO "showcase.durable"
+SET payload TO "durable event at {timestamp}"
+
+STORE "demo:last-run" = [timestamp] AS storedRun
+STORE "demo:payload" = [payload] AS storedPayload
+THEN
+READ "demo:payload" AS loadedPayload
+LIST STORE "demo:" AS state
+
+SAVE [payload] TO blob:demo/latest.txt
+THEN
+GET blob:demo/latest.txt AS blobPayload
+LIST BLOB "demo/" AS objects
+
+PUBLISH [payload] TO [topic] AS sent
+RECEIVE [topic] AS received
+
+EXPECT [loadedPayload] TO EQUAL [blobPayload]
+SAY "State, blob and queue agree: {loadedPayload}."

@@ -1,10 +1,7 @@
 using FluNET.Context;
 using FluNET.Extensions;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using FluNET.Syntax.Validation;
-using FluNET.Syntax.Verbs;
-using FluNET.Tokens.Tree;
 using Microsoft.Extensions.DependencyInjection;
 using System.Text.Json;
 
@@ -64,20 +61,37 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"LOAD config FROM {configFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
-                Assert.That(sentence!.Root, Is.InstanceOf<LoadConfig>());
+                Assert.That(sentence, Is.Null);
                 Assert.That(result, Is.InstanceOf<Dictionary<string, object>>());
 
                 var config = result as Dictionary<string, object>;
                 Assert.That(config, Is.Not.Null);
                 Assert.That(((JsonElement)config!["setting1"]).GetString(), Is.EqualTo("value1"));
                 Assert.That(((JsonElement)config["setting2"]).GetInt32(), Is.EqualTo(42));
+            });
+        }
+
+        [Test]
+        public void Load_JsonArrayRoot_ShouldReturnJsonElement()
+        {
+            string jsonFile = Path.Combine(testDirectory!, "items.json");
+            File.WriteAllText(jsonFile, "[{\"id\":1},{\"id\":2}]");
+
+            (ValidationResult validation, object? sentence, object? result) =
+                engine!.Run(new ProcessedPrompt($"LOAD JSON items FROM {jsonFile}."));
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(validation.IsValid, Is.True, validation.FailureReason);
+                Assert.That(result, Is.TypeOf<JsonElement>());
+                Assert.That(((JsonElement)result!).ValueKind, Is.EqualTo(JsonValueKind.Array));
+                Assert.That(((JsonElement)result!).GetArrayLength(), Is.EqualTo(2));
             });
         }
 
@@ -92,13 +106,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("LOAD config FROM [configpath].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result, Is.InstanceOf<Dictionary<string, object>>());
             });
         }
@@ -114,13 +128,13 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new($"LOAD config FROM {configFile}.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine!.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine!.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>
             {
                 Assert.That(validation.IsValid, Is.True, $"Validation failed: {validation.FailureReason}");
-                Assert.That(sentence, Is.Not.Null);
+                Assert.That(sentence, Is.Null);
                 Assert.That(result, Is.InstanceOf<Dictionary<string, object>>());
             });
         }
@@ -134,10 +148,10 @@ namespace FluNET.Tests
 
             engine!.RegisterVariable("configname", "config");
             engine.RegisterVariable("filepath", configFile);
-            ProcessedPrompt prompt = new("LOAD [configname] FROM [filepath].");
+            ProcessedPrompt prompt = new("LOAD CONFIG [configname] FROM [filepath].");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = engine.Run(prompt);
 
             // Assert
             Assert.Multiple(() =>

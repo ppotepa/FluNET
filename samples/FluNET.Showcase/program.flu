@@ -1,0 +1,137 @@
+# FluNET Showcase — local end-to-end application
+# Run from this directory:
+# flu run program.flu -vv --store .state/values.db --queue .state/messages.db --blob .state/blobs
+
+IMPORT "modules/workspace.flu"
+
+RUN prepare-workspace
+LOAD "./fixtures/users.csv" AS users
+LOAD "./fixtures/posts.csv" AS posts
+
+NOW AS started
+SYSTEM INFO AS system
+METRICS AS metrics
+SAY "FluNET showcase started at {started}."
+SAY "Runtime: {system.framework}; process: {metrics.processId}."
+
+# Typed variables and conversational assignment.
+SET application TO "FluNET Showcase"
+SET runNumber TO 0
+SET queue TO "showcase.events"
+
+# Runtime control flow.
+WHILE runNumber < 3 MAX 5:
+    INCREMENT [runNumber]
+    CONTINUE WHEN runNumber == 2
+    SAY "Warm-up pass {runNumber}."
+
+EXPECT "{runNumber}" TO EQUAL "3"
+
+IF users:
+    SAY "User input is available."
+ELSE:
+    SAY "No users were loaded."
+
+UNLESS posts:
+    SAY "Post input is empty."
+
+# Typed collection pipelines.
+FILTER users WHERE active == true AS activeUsers
+SORT activeUsers BY score DESC AS rankedUsers
+TAKE 3 AS topUsers
+COUNT [users] AS userCount
+COUNT [activeUsers] AS activeCount
+COUNT [topUsers] AS topCount
+FILTER users WHERE active == true AS averageInput | AVG score AS averageScore
+FILTER users WHERE active == true AS minimumInput | MIN score AS minimumScore
+FILTER users WHERE active == true AS maximumInput | MAX score AS maximumScore
+
+FILTER posts WHERE published == true AS publishedPosts
+SORT publishedPosts BY score DESC AS rankedPosts
+DISTINCT BY userId AS uniqueAuthors
+COUNT [posts] AS postCount
+COUNT [publishedPosts] AS publishedCount
+COUNT [uniqueAuthors] AS authorCount
+
+SAY "Loaded {userCount} users and {postCount} posts."
+SAY "Active users: {activeCount}; top users: {topCount}."
+SAY "Scores: min={minimumScore}, avg={averageScore}, max={maximumScore}."
+SAY "Published posts: {publishedCount}; authors: {authorCount}."
+
+# JSON, CSV and per-item reports.
+SAVE JSON [topUsers] TO "./output/reports/top-users.json"
+SAVE CSV [topUsers] TO "./output/reports/top-users.csv"
+SAVE JSON [rankedPosts] TO "./output/reports/ranked-posts.json"
+SAVE CSV [rankedPosts] TO "./output/reports/ranked-posts.csv"
+
+FOR EACH user IN topUsers PARALLEL 3
+    SAY "Writing card for {user.name}."
+    SAVE [user.email] TO "./output/cards/user-{user.id}.txt"
+    PUBLISH "user-card:{user.id}" TO "showcase.cards"
+
+# Text toolkit.
+TRIM "  portable automation  " AS cleanTitle
+UPPER [cleanTitle] AS upperTitle
+REPLACE "AUTOMATION" WITH "WORKFLOWS" IN [upperTitle] AS friendlyTitle
+SPLIT [friendlyTitle] BY " " AS titleWords
+COMBINE [titleWords] WITH "-" AS titleSlug
+EXPECT [titleSlug] TO CONTAIN "WORKFLOWS"
+SAY "Generated slug: {titleSlug}."
+
+# Filesystem inventory, search, hashing and metadata index.
+FIND "./fixtures" WHERE extension == '.json' AS jsonInputs
+SEARCH "platform" IN "./fixtures" RECURSIVE AS platformMentions
+INDEX FILES fixtureIndex FROM "./fixtures" RECURSIVE
+COUNT [jsonInputs] AS jsonInputCount
+COUNT [platformMentions] AS mentionCount
+COUNT [fixtureIndex] AS indexedCount
+THEN
+HASH "./output/reports/top-users.json" AS usersReportHash
+THEN
+STAT "./output/reports/top-users.json" AS usersReportInfo
+SAY "Indexed {indexedCount} fixture files; JSON={jsonInputCount}; matches={mentionCount}."
+SAY "Report size={usersReportInfo.length}; sha256={usersReportHash}."
+
+# Copy, archive, inspect and restore.
+COPY "./output/reports/top-users.json" TO "./output/archive/top-users-copy.json" AS reportCopy
+PACK "./output/reports" TO "./output/archive/reports.zip" AS reportsArchive
+LIST ARCHIVE "./output/archive/reports.zip" WHERE isDirectory == false ORDER BY length DESC AS archiveEntries
+UNPACK "./output/archive/reports.zip" TO "./output/restored" AS restoredReports
+COUNT [archiveEntries] AS archiveEntryCount
+SAY "Archive contains {archiveEntryCount} files."
+
+# Temporary artifacts.
+TEMP FILE .txt AS scratch
+SAVE "temporary showcase value" TO [scratch]
+THEN
+HASH [scratch] AS scratchHash
+SAY "Temporary hash: {scratchHash}."
+CLEANUP [scratch]
+
+# Durable key/value state, blob storage and messaging.
+SET summary TO "{application}: users={activeCount}, posts={publishedCount}, hash={usersReportHash}"
+STORE "showcase:last-run" = [started] AS storedStarted
+STORE "showcase:summary" = [summary] AS storedSummary
+THEN
+READ "showcase:summary" AS loadedSummary
+LIST STORE "showcase:" AS storedValues
+
+SAVE [summary] TO blob:showcase/latest.txt
+THEN
+GET blob:showcase/latest.txt AS blobSummary
+LIST BLOB "showcase/" AS blobObjects
+
+PUBLISH [summary] TO [queue] AS publishedSummary
+RECEIVE [queue] AS receivedSummary
+EXPECT [loadedSummary] TO EQUAL [blobSummary]
+SAY "Durable summary: {loadedSummary}."
+
+# Portable paths and final report.
+PATH TEMP AS tempPath
+PATH HOME AS homePath
+PATH CACHE AS cachePath
+NOW AS finished
+SET completion TO "{application} completed at {finished}; temp={tempPath}; home={homePath}; cache={cachePath}"
+SAVE [completion] TO "./output/completion.txt"
+NOTIFY "FluNET showcase completed"
+SAY [completion]

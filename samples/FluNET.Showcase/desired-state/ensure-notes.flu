@@ -1,0 +1,3 @@
+ENSURE ./output/desired-state/notes.txt CONTAINS ./fixtures/notes.txt
+KEEP 3 VERSIONS
+NOTIFY ON FAILURE

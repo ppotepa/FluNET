@@ -4,7 +4,7 @@ using FluNET.Syntax.Validation;
 
 namespace FluNET.Execution.Steps;
 
-/// <summary>Runs frame/slot validation without constructing legacy words or sentences.</summary>
+/// <summary>Runs frame and slot validation for the typed bound program.</summary>
 public sealed class SemanticValidationStep(SemanticProgramValidator validator) : IExecutionStep
 {
     public ValueTask<ExecutionResult> ExecuteAsync(

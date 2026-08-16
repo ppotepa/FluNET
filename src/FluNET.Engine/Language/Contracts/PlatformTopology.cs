@@ -7,8 +7,7 @@ public enum PlatformModuleKind
     Data,
     Automation,
     Reconciliation,
-    Provider,
-    Compatibility
+    Provider
 }
 
 public sealed record PlatformModuleBoundary(
@@ -37,9 +36,7 @@ public static class FluNetPlatformTopology
         new("flunet.reconciliation", PlatformModuleKind.Reconciliation, "FluNET.Engine", ["flunet.core", "flunet.surface", "flunet.data", "flunet.automation"],
             "desired/observed state, SYNC, diff, compensation, saga and history orchestration"),
         new("flunet.providers", PlatformModuleKind.Provider, "FluNET.Engine", ["flunet.core"],
-            "file/HTTP/environment/secret/SQL acquisition, decoding, authentication and observation boundaries"),
-        new("flunet.compatibility", PlatformModuleKind.Compatibility, "FluNET.Engine", ["flunet.core"],
-            "legacy sentence/word/token-tree bridges; preferred modules must not depend on this layer")
+            "file/HTTP/environment/secret/SQL acquisition, decoding, authentication and observation boundaries")
     ];
 
     public static PlatformModuleBoundary Get(string id) => Modules.Single(module =>

@@ -1,0 +1,32 @@
+# Local CSV ETL, collection operators, aggregates, JSON/CSV and FOR EACH.
+
+MKDIR "./output" AS output
+MKDIR "./output/etl" AS etl
+LOAD "./fixtures/users.csv" AS users
+LOAD "./fixtures/posts.csv" AS posts
+
+FILTER users WHERE active == true AS activeUsers
+SORT activeUsers BY score DESC AS rankedUsers
+TAKE 3 AS leaders
+SELECT id, name, team, score AS leaderboard
+
+FILTER posts WHERE published == true AS publishedPosts
+DISTINCT BY userId AS publishingAuthors
+
+COUNT [users] AS userCount
+COUNT [activeUsers] AS activeCount
+COUNT [publishedPosts] AS publishedCount
+FILTER users WHERE active == true AS averageInput | AVG score AS averageScore
+FILTER users WHERE active == true AS minimumInput | MIN score AS minimumScore
+FILTER users WHERE active == true AS maximumInput | MAX score AS maximumScore
+
+SAVE JSON [leaderboard] TO "./output/etl/leaderboard.json"
+SAVE CSV [leaderboard] TO "./output/etl/leaderboard.csv"
+SAVE JSON [publishingAuthors] TO "./output/etl/publishing-authors.json"
+
+FOR EACH user IN leaders PARALLEL 3
+    SAY "Leader {user.name} scored {user.score}."
+    SAVE [user.email] TO "./output/etl/user-{user.id}.txt"
+
+SAY "Users={userCount}; active={activeCount}; published={publishedCount}."
+SAY "Score range={minimumScore}..{maximumScore}; average={averageScore}."

@@ -1,9 +1,6 @@
 using FluNET.Prompt;
 using FluNET.Context;
-using FluNET.Syntax.Verbs;
-using FluNET.Words;
 using FluNET.Syntax.Validation;
-using FluNET.Sentences;
 using FluNET.Variables;
 
 namespace FluNET.Tests
@@ -166,23 +163,12 @@ namespace FluNET.Tests
             ProcessedPrompt prompt = new("GET text FROM file.txt.");
 
             // Act
-            (ValidationResult validation, ISentence? sentence, object? result) = _engine.Run(prompt);
+            (ValidationResult validation, object? sentence, object? result) = _engine.Run(prompt);
 
             // Assert - Should return three values
             Assert.That(validation, Is.Not.Null);
-            Assert.That(sentence, Is.Not.Null.Or.Null); // Sentence can be null if validation failed
+            Assert.That(sentence, Is.Null);
             // Result will be null since actual execution requires real verb implementations
-        }
-
-        [Test]
-        public void SentenceExecutor_Execute_WithNullSentence_ThrowsClearError()
-        {
-            // Arrange
-            SentenceExecutor executor = _context.GetService<SentenceExecutor>();
-
-            Assert.That(
-                () => executor.Execute(null!),
-                Throws.ArgumentException.With.Message.Contains("root verb"));
         }
 
         [Test]

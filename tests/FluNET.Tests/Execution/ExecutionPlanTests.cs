@@ -2,7 +2,6 @@ using FluNET.Context;
 using FluNET.Execution;
 using FluNET.Execution.Planning;
 using FluNET.Prompt;
-using FluNET.Sentences;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Tests.Execution;
@@ -56,16 +55,18 @@ public sealed class ExecutionPlanTests
     }
 
     [Test]
-    public async Task StandardPipeline_DoesNotResolveTheLegacySentenceExecutor()
+    public async Task StandardPipeline_ResolvesSentenceExecutor()
     {
-        using FluNETContext context = FluNETContext.Create(services =>
-            services.AddTransient<SentenceExecutor>(_ =>
-                throw new InvalidOperationException("Legacy executor was resolved.")));
+        using FluNETContext context = FluNETContext.Create();
 
         ExecutionResult execution = await context.GetEngine().ExecuteAsync(
             new ProcessedPrompt("SAY typed."));
 
-        Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
+        Assert.Multiple(() =>
+        {
+            Assert.That(execution.IsSuccess, Is.True, execution.Error?.Message);
+            Assert.That(context.GetService<FluNET.Execution.Planning.SentenceExecutor>(), Is.Not.Null);
+        });
     }
 
     [Test]
@@ -87,3 +88,4 @@ public sealed class ExecutionPlanTests
         });
     }
 }
+

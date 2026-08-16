@@ -23,7 +23,7 @@ public interface IExpression<out TValue>
     TValue Evaluate(IExpressionEvaluationContext context);
 }
 
-/// <summary>Compatibility name retained for extensions built against the PoC API.</summary>
+/// <summary>Typed expression interface used by command value trees.</summary>
 public interface IValueExpression<out TValue> : IExpression<TValue>
 {
 }

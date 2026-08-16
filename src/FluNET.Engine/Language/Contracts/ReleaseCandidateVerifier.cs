@@ -37,11 +37,6 @@ public static class ReleaseCandidateVerifier
                 if (!modules.Contains(dependency)) issues.Add(new("RC005", $"Module '{module.Id}' depends on unknown module '{dependency}'."));
 
         if (HasTopologyCycle()) issues.Add(new("RC006", "Platform module dependency graph contains a cycle."));
-        PlatformModuleBoundary compatibility = FluNetPlatformTopology.Get("flunet.compatibility");
-        foreach (PlatformModuleBoundary module in FluNetPlatformTopology.Modules.Where(module => module.Kind != PlatformModuleKind.Compatibility))
-            if (module.DependsOn.Contains(compatibility.Id, StringComparer.OrdinalIgnoreCase))
-                issues.Add(new("RC007", $"Preferred module '{module.Id}' depends on compatibility layer."));
-
         string[] requiredSeparators = [",", ";", "newline", "|", "AND", "THEN"];
         foreach (string separator in requiredSeparators)
             if (!languageContract.Separators.Any(item => item.Token == separator))

@@ -3,7 +3,7 @@ using FluNET.Execution.Planning;
 
 namespace FluNET.Execution.Steps;
 
-public sealed class PlanExecutionStep(ExecutionPlanExecutor executor) : IExecutionStep
+public sealed class PlanExecutionStep(SentenceExecutor executor) : IExecutionStep
 {
     public async ValueTask<ExecutionResult> ExecuteAsync(
         ExecutionContext context,
@@ -15,8 +15,7 @@ public sealed class PlanExecutionStep(ExecutionPlanExecutor executor) : IExecuti
             return ExecutionResult.Failed(
                 ExecutionFailureKind.Internal,
                 "FLN202",
-                "No execution plan is available.",
-                sentence: context.Sentence);
+                "No execution plan is available.");
         }
 
         try
@@ -65,7 +64,6 @@ public sealed class PlanExecutionStep(ExecutionPlanExecutor executor) : IExecuti
             code,
             message,
             exception,
-            context.Sentence,
             context.Plan,
             context.StepResults,
             context.Workflow);

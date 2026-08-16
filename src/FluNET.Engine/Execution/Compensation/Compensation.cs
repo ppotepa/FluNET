@@ -49,9 +49,9 @@ public sealed class CompensatableSurfaceCompiler(SurfaceCompiler compiler)
             if (entry.CommandIndex < 0 || entry.CommandIndex >= compilation.Plan!.Steps.Count)
                 continue;
             ExecutionPlanStep step = compilation.Plan.Steps[entry.CommandIndex];
-            if (step.Command.Frame.Id != new FluNET.Language.FrameId("core.save.text"))
+            if (step.Command.Frame.Id.Value is not ("core.save.text" or "core.save.json"))
             {
-                diagnostics.Add(new("FLN360", $"Frame '{step.Command.Frame.Id}' has no built-in compensation contract. Built-in COMPENSATE currently supports local SAVE only.", entry.SourceSpan));
+                diagnostics.Add(new("FLN360", $"Frame '{step.Command.Frame.Id}' has no built-in compensation contract. Built-in COMPENSATE currently supports local SAVE and SAVE JSON only.", entry.SourceSpan));
                 continue;
             }
             if (!TryLiteralSaveTarget(step, out string? target))
@@ -126,6 +126,13 @@ public sealed class CompensatableSurfaceCompiler(SurfaceCompiler compiler)
         SurfaceValueSyntax[] values = [.. command.Values.Take(command.Values.Count - 1), last with { Text = stripped }];
         SurfaceCommandSyntax rewritten = command with { Values = values };
         marked.Add(rewritten.Span);
+        if (command.NormalizedName is not "SAVE")
+        {
+            diagnostics.Add(new(
+                "FLN360",
+                $"Frame for '{command.Name}' has no built-in compensation contract. Built-in COMPENSATE currently supports local SAVE only.",
+                command.Span));
+        }
         return rewritten;
     }
 
@@ -171,7 +178,11 @@ public sealed class CompensatableSurfaceCompiler(SurfaceCompiler compiler)
         string text = value.Text.Trim();
         if (text.Length >= 2 && text[0] == '{' && text[^1] == '}') text = text[1..^1];
         if (text.Contains('{') || text.Contains('[')) return false;
-        if (Uri.TryCreate(text, UriKind.Absolute, out _)) return false;
+        // On Windows an absolute local path (for example `C:\\data\\out.txt`)
+        // is parsed as a URI with scheme `c`; only actual remote targets are
+        // excluded from the built-in local-file compensation contract.
+        if (Uri.TryCreate(text, UriKind.Absolute, out Uri? uri) &&
+            uri.Scheme is "http" or "https" or "ftp") return false;
         target = text;
         return !string.IsNullOrWhiteSpace(target);
     }
@@ -199,7 +210,7 @@ public sealed record CompensationExecutionResult(
 }
 
 public sealed class CompensationCoordinator(
-    ExecutionPlanExecutor executor,
+        SentenceExecutor executor,
     IFluNetFileSystem files)
 {
     private sealed record Snapshot(bool Existed, string? Content);

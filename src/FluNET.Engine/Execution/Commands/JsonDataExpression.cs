@@ -46,6 +46,7 @@ public sealed class JsonDataExpression
         if (value.Equals("null", StringComparison.OrdinalIgnoreCase)) return null;
         if (value.Length >= 2 && ((value[0] == '"' && value[^1] == '"') || (value[0] == '\'' && value[^1] == '\''))) return value[1..^1];
         if (bool.TryParse(value, out bool boolean)) return boolean;
+        if (DataUnits.TryParse(value, out decimal sized)) return sized;
         if (decimal.TryParse(value, NumberStyles.Number, CultureInfo.InvariantCulture, out decimal number)) return number;
         return IsIdentifier(value) ? Property(row, value) : value;
     }
@@ -75,6 +76,10 @@ public sealed class JsonDataExpression
             "OR" => ToBoolean(left) || ToBoolean(right),
             "==" => Equal(left, right),
             "!=" => !Equal(left, right),
+            "CONTAINS" => Text(left).Contains(Text(right), StringComparison.OrdinalIgnoreCase),
+            "MATCHES" => GlobMatch(Text(left), Text(right)),
+            "STARTS WITH" => Text(left).StartsWith(Text(right), StringComparison.OrdinalIgnoreCase),
+            "ENDS WITH" => Text(left).EndsWith(Text(right), StringComparison.OrdinalIgnoreCase),
             "<" => CompareValues(left, right) < 0,
             "<=" => CompareValues(left, right) <= 0,
             ">" => CompareValues(left, right) > 0,
@@ -99,6 +104,44 @@ public sealed class JsonDataExpression
         if (left is null || right is null) return left is null && right is null;
         if (TryDecimal(left, out decimal a) && TryDecimal(right, out decimal b)) return a == b;
         return Equals(left, right) || string.Equals(left.ToString(), right.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string Text(object? value) => value?.ToString() ?? string.Empty;
+
+    private static bool GlobMatch(string value, string pattern)
+    {
+        int valueIndex = 0;
+        int patternIndex = 0;
+        int wildcard = -1;
+        int wildcardValue = -1;
+
+        while (valueIndex < value.Length)
+        {
+            if (patternIndex < pattern.Length &&
+                (pattern[patternIndex] == '?' ||
+                 char.ToUpperInvariant(pattern[patternIndex]) == char.ToUpperInvariant(value[valueIndex])))
+            {
+                valueIndex++;
+                patternIndex++;
+            }
+            else if (patternIndex < pattern.Length && pattern[patternIndex] == '*')
+            {
+                wildcard = patternIndex++;
+                wildcardValue = valueIndex;
+            }
+            else if (wildcard >= 0)
+            {
+                patternIndex = wildcard + 1;
+                valueIndex = ++wildcardValue;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
+        while (patternIndex < pattern.Length && pattern[patternIndex] == '*') patternIndex++;
+        return patternIndex == pattern.Length;
     }
 
     private static bool ToBoolean(object? value)

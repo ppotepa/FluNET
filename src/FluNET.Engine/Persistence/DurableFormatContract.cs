@@ -9,7 +9,7 @@ public sealed record DurableFormatContract(
     string Scope);
 
 /// <summary>
-/// Candidate compatibility contract for built-in durable formats. A version change is required
+/// Candidate contract for built-in durable formats. A version change is required
 /// before an incompatible reader/writer change may ship after 1.0.
 /// </summary>
 public sealed record DurableFormatContractManifest(

@@ -15,7 +15,7 @@ public sealed record SecureHostOptions(
     int MaxRedirects = 5);
 
 /// <summary>
-/// Production-oriented policy. Unlike the compatibility policy it resolves existing symlink
+/// Production-oriented policy. Unlike the permissive default it resolves existing symlink
 /// segments before root checks and requires an explicit host allow-list.
 /// </summary>
 public sealed class SecureExecutionPolicy : IExecutionPolicy
@@ -157,10 +157,16 @@ public sealed class SecureHttpTransport : IHttpTransport, IAuthenticatedHttpTran
         (await GetAsync(uri, cancellationToken).ConfigureAwait(false)).Content;
 
     public Task<HttpResourceResponse> GetAsync(Uri uri, CancellationToken cancellationToken = default) =>
-        SendGetAsync(uri, null, cancellationToken);
+        SendGetAsync(uri, null, ensureSuccess: true, cancellationToken: cancellationToken);
+
+    public Task<HttpResourceResponse> GetResponseAsync(Uri uri, CancellationToken cancellationToken = default) =>
+        SendGetAsync(uri, null, ensureSuccess: false, cancellationToken: cancellationToken);
 
     public Task<HttpResourceResponse> GetAsync(Uri uri, SecretValue credential, CancellationToken cancellationToken = default) =>
-        SendGetAsync(uri, credential ?? throw new ArgumentNullException(nameof(credential)), cancellationToken);
+        SendGetAsync(uri, credential ?? throw new ArgumentNullException(nameof(credential)), ensureSuccess: true, cancellationToken: cancellationToken);
+
+    public Task<HttpResourceResponse> GetResponseAsync(Uri uri, SecretValue credential, CancellationToken cancellationToken = default) =>
+        SendGetAsync(uri, credential ?? throw new ArgumentNullException(nameof(credential)), ensureSuccess: false, cancellationToken: cancellationToken);
 
     public async Task<string> PostJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default)
     {
@@ -175,7 +181,60 @@ public sealed class SecureHttpTransport : IHttpTransport, IAuthenticatedHttpTran
         return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task<HttpResourceResponse> SendGetAsync(Uri initial, SecretValue? credential, CancellationToken cancellationToken)
+    public Task<string> PutJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default) =>
+        SendMutationAsync(HttpMethod.Put, uri, json, cancellationToken);
+
+    public Task<string> PatchJsonAsync(Uri uri, string json, CancellationToken cancellationToken = default) =>
+        SendMutationAsync(new HttpMethod("PATCH"), uri, json, cancellationToken);
+
+    public Task<string> DeleteAsync(Uri uri, CancellationToken cancellationToken = default) =>
+        SendMutationAsync(HttpMethod.Delete, uri, null, cancellationToken);
+
+    public Task<string> PostJsonAsync(Uri uri, string json, SecretValue credential, CancellationToken cancellationToken = default) =>
+        SendAuthenticatedMutationAsync(HttpMethod.Post, uri, json, credential, cancellationToken);
+
+    public Task<string> PutJsonAsync(Uri uri, string json, SecretValue credential, CancellationToken cancellationToken = default) =>
+        SendAuthenticatedMutationAsync(HttpMethod.Put, uri, json, credential, cancellationToken);
+
+    public Task<string> PatchJsonAsync(Uri uri, string json, SecretValue credential, CancellationToken cancellationToken = default) =>
+        SendAuthenticatedMutationAsync(new HttpMethod("PATCH"), uri, json, credential, cancellationToken);
+
+    public Task<string> DeleteAsync(Uri uri, SecretValue credential, CancellationToken cancellationToken = default) =>
+        SendAuthenticatedMutationAsync(HttpMethod.Delete, uri, null, credential, cancellationToken);
+
+    private async Task<string> SendMutationAsync(HttpMethod method, Uri uri, string? json, CancellationToken cancellationToken)
+    {
+        await policy.EnsureNetworkEndpointAsync(uri, cancellationToken).ConfigureAwait(false);
+        using HttpRequestMessage request = new(method, uri);
+        if (json is not null)
+            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        using HttpResponseMessage response = await invoker.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (IsRedirect(response.StatusCode))
+            throw new CapabilityDeniedException($"Secure HTTP does not follow {method} mutation redirects. Resolve the final endpoint explicitly.");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string> SendAuthenticatedMutationAsync(
+        HttpMethod method,
+        Uri uri,
+        string? json,
+        SecretValue credential,
+        CancellationToken cancellationToken)
+    {
+        await policy.EnsureNetworkEndpointAsync(uri, cancellationToken).ConfigureAwait(false);
+        using HttpRequestMessage request = new(method, uri);
+        authentication.Apply(request, credential);
+        if (json is not null)
+            request.Content = new StringContent(json, Encoding.UTF8, "application/json");
+        using HttpResponseMessage response = await invoker.SendAsync(request, cancellationToken).ConfigureAwait(false);
+        if (IsRedirect(response.StatusCode))
+            throw new CapabilityDeniedException($"Secure HTTP does not follow authenticated {method} mutation redirects.");
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<HttpResourceResponse> SendGetAsync(Uri initial, SecretValue? credential, bool ensureSuccess, CancellationToken cancellationToken)
     {
         Uri current = initial;
         for (int redirect = 0; ; redirect++)
@@ -199,7 +258,7 @@ public sealed class SecureHttpTransport : IHttpTransport, IAuthenticatedHttpTran
             Dictionary<string, string[]> headers = new(StringComparer.OrdinalIgnoreCase);
             foreach (KeyValuePair<string, IEnumerable<string>> header in response.Headers) headers[header.Key] = header.Value.ToArray();
             foreach (KeyValuePair<string, IEnumerable<string>> header in response.Content.Headers) headers[header.Key] = header.Value.ToArray();
-            response.EnsureSuccessStatusCode();
+            if (ensureSuccess) response.EnsureSuccessStatusCode();
             MediaTypeHeaderValue? type = response.Content.Headers.ContentType;
             return new(content, (int)response.StatusCode, type?.MediaType, type?.CharSet, headers);
         }

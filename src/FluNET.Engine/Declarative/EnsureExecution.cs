@@ -137,7 +137,7 @@ public sealed record EnsureRunResult(
 }
 
 public sealed class EnsureRunner(
-    ExecutionPlanExecutor executor,
+    SentenceExecutor executor,
     IFluNetFileSystem files,
     IEnsureVersionStore versions,
     IDesiredStateNotifier notifier)
