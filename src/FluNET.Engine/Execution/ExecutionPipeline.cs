@@ -62,11 +62,16 @@ public sealed class ExecutionPipeline
                 context.Sentence));
         }
 
+<<<<<<< HEAD
         if (context.Plan is null && context.Sentence is null)
+=======
+        if (context.Sentence is null)
+>>>>>>> origin/agent/stabilize-poc-foundation
         {
             return ValueTask.FromResult(ExecutionResult.Failed(
                 ExecutionFailureKind.Internal,
                 "FLN202",
+<<<<<<< HEAD
                 "The pipeline completed without producing an execution plan or compatibility sentence."));
         }
 
@@ -76,5 +81,11 @@ public sealed class ExecutionPipeline
             context.Plan,
             context.StepResults,
             context.Workflow));
+=======
+                "The pipeline completed without producing a sentence."));
+        }
+
+        return ValueTask.FromResult(ExecutionResult.Success(context.Sentence, context.Result));
+>>>>>>> origin/agent/stabilize-poc-foundation
     }
 }

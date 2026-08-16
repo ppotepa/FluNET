@@ -1,0 +1,7 @@
+[
+  { "id": 1, "name": "Ada", "email": "ada@example.test", "team": "platform", "active": true, "score": 98 },
+  { "id": 2, "name": "Grace", "email": "grace@example.test", "team": "compiler", "active": true, "score": 94 },
+  { "id": 3, "name": "Margaret", "email": "margaret@example.test", "team": "platform", "active": true, "score": 91 },
+  { "id": 4, "name": "Linus", "email": "linus@example.test", "team": "runtime", "active": false, "score": 87 },
+  { "id": 5, "name": "Barbara", "email": "barbara@example.test", "team": "data", "active": true, "score": 89 }
+]

@@ -66,6 +66,7 @@ internal sealed class RecordingTextOutput : ITextOutput
         return ValueTask.CompletedTask;
     }
 }
+<<<<<<< HEAD
 
 internal sealed class RecordingEmailTransport : IEmailTransport
 {
@@ -81,3 +82,5 @@ internal sealed class RecordingEmailTransport : IEmailTransport
         return ValueTask.FromResult($"accepted:{recipient}");
     }
 }
+=======
+>>>>>>> origin/agent/stabilize-poc-foundation

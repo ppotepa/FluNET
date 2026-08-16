@@ -1,0 +1,4 @@
+id,name,email,team,active,score
+1,Ada,ada@example.test,platform,true,98
+2,Grace,grace@example.test,compiler,true,94
+3,Margaret,margaret@example.test,platform,true,91

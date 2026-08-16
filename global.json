@@ -1,7 +1,12 @@
 {
   "sdk": {
+<<<<<<< HEAD
     "version": "9.0.100",
     "rollForward": "latestFeature",
     "allowPrerelease": false
+=======
+    "version": "8.0.100",
+    "rollForward": "latestFeature"
+>>>>>>> origin/agent/stabilize-poc-foundation
   }
 }

@@ -5,8 +5,13 @@
 
   <ItemGroup>
     <!-- Microsoft.Extensions packages -->
+<<<<<<< HEAD
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="9.0.0" />
     <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
+=======
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection" Version="8.0.1" />
+    <PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="8.0.2" />
+>>>>>>> origin/agent/stabilize-poc-foundation
     
     <!-- Testing packages -->
     <PackageVersion Include="coverlet.collector" Version="6.0.4" />

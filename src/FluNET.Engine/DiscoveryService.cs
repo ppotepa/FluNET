@@ -1,7 +1,10 @@
 using FluNET.Keywords;
 using FluNET.Syntax.Core;
 using FluNET.Syntax.Registry;
+<<<<<<< HEAD
 using FluNET.Language;
+=======
+>>>>>>> origin/agent/stabilize-poc-foundation
 
 namespace FluNET;
 
@@ -27,8 +30,11 @@ public sealed class DiscoveryService
 
     public IReadOnlyList<Type> Nouns => _registry.Nouns;
 
+<<<<<<< HEAD
     public LanguageSnapshot Language => _registry.Snapshot;
 
+=======
+>>>>>>> origin/agent/stabilize-poc-foundation
     internal LanguageRegistry Registry => _registry;
 
     public Type? GetVerbBaseTypeByWord(IWord word) =>

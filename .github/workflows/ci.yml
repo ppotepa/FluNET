@@ -9,7 +9,11 @@ permissions:
   contents: read
 
 jobs:
+<<<<<<< HEAD
   release-gate:
+=======
+  build-and-test:
+>>>>>>> origin/agent/stabilize-poc-foundation
     strategy:
       fail-fast: false
       matrix:
@@ -20,6 +24,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
+<<<<<<< HEAD
           dotnet-version: 9.0.x
 
       - name: Verify release gate (Unix)
@@ -31,3 +36,12 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: ./scripts/verify-release.ps1
+=======
+          dotnet-version: 8.0.x
+      - name: Restore
+        run: dotnet restore FluNET.sln
+      - name: Build
+        run: dotnet build FluNET.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test FluNET.sln --configuration Release --no-build --logger "console;verbosity=normal"
+>>>>>>> origin/agent/stabilize-poc-foundation

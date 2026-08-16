@@ -1,6 +1,9 @@
 using FluNET.Context;
 using FluNET.Prompt;
+<<<<<<< HEAD
 using FluNET.Tokens.Tree;
+=======
+>>>>>>> origin/agent/stabilize-poc-foundation
 
 namespace FluNET.Tests;
 
@@ -75,6 +78,7 @@ public sealed class SyntaxTests
     }
 
     [Test]
+<<<<<<< HEAD
     public void SyntaxTree_ExposesStableSourceSpans()
     {
         ProcessedPrompt prompt = new("SAY one THEN SAY two.");
@@ -126,6 +130,8 @@ public sealed class SyntaxTests
     }
 
     [Test]
+=======
+>>>>>>> origin/agent/stabilize-poc-foundation
     public void SyntaxTree_RepresentsVerbAndClauses()
     {
         CommandSyntax command = new ProcessedPrompt(

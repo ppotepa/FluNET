@@ -1,0 +1,7 @@
+[
+  { "id": 101, "userId": 1, "title": "Portable automation", "published": true, "score": 99 },
+  { "id": 102, "userId": 2, "title": "Typed workflows", "published": true, "score": 96 },
+  { "id": 103, "userId": 3, "title": "Provider boundaries", "published": true, "score": 92 },
+  { "id": 104, "userId": 4, "title": "Durable state", "published": false, "score": 88 },
+  { "id": 105, "userId": 1, "title": "Human readable scripting", "published": true, "score": 95 }
+]

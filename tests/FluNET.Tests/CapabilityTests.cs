@@ -10,6 +10,7 @@ namespace FluNET.Tests;
 public sealed class CapabilityTests
 {
     [Test]
+<<<<<<< HEAD
     public async Task SendUsesTheInjectedEmailBoundary()
     {
         RecordingEmailTransport email = new();
@@ -28,6 +29,8 @@ public sealed class CapabilityTests
     }
 
     [Test]
+=======
+>>>>>>> origin/agent/stabilize-poc-foundation
     public async Task ChainedCommandCapabilityFailureKeepsItsErrorKind()
     {
         string allowedRoot = Path.Combine(Path.GetTempPath(), $"FluNET_Allowed_{Guid.NewGuid():N}");

@@ -14,8 +14,12 @@ public sealed class TokenizationStep(TokenTreeFactory tokenTreeFactory) : IExecu
         {
             cancellationToken.ThrowIfCancellationRequested();
             context.CancellationToken = cancellationToken;
+<<<<<<< HEAD
             context.CommandTrees = tokenTreeFactory.ProcessCommands(context.Prompt);
             context.TokenTree = context.CommandTrees.FirstOrDefault();
+=======
+            context.TokenTree = tokenTreeFactory.Process(context.Prompt);
+>>>>>>> origin/agent/stabilize-poc-foundation
             return next(context, cancellationToken);
         }
         catch (PromptSyntaxException exception)

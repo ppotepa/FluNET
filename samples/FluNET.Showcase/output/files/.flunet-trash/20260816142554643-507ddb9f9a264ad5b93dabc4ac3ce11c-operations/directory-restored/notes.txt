@@ -1,0 +1,3 @@
+FluNET is a portable scripting runtime.
+The platform team uses typed workflows and capability providers.
+This fixture is searched by the filesystem showcase.
