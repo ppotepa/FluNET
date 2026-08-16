@@ -1,29 +1,27 @@
+using FluNET.Diagnostics;
 using FluNET.Language;
 
 namespace FluNET.Syntax.Ast;
 
 /// <summary>
-/// Stable immutable syntax model between parsing and binding. Runtime objects are deliberately absent.
+/// Stable immutable syntax model between parsing and binding.
 /// </summary>
-public abstract record SyntaxNode;
+public abstract record SyntaxNode
+{
+    public TextSpan? Span { get; init; }
+}
 
 public sealed record ScriptNode(IReadOnlyList<PipelineNode> Pipelines) : SyntaxNode;
-
 public sealed record PipelineNode(IReadOnlyList<SentenceNode> Sentences) : SyntaxNode;
 
-public sealed record SentenceNode(
-    string Verb,
-    IReadOnlyList<ClauseNode> Clauses) : SyntaxNode
+public sealed record SentenceNode(string Verb, IReadOnlyList<ClauseNode> Clauses) : SyntaxNode
 {
     public string? Qualifier { get; init; }
 }
 
-public sealed record ClauseNode(
-    ClauseKind Kind,
-    ExpressionNode Value) : SyntaxNode;
+public sealed record ClauseNode(ClauseKind Kind, ExpressionNode Value) : SyntaxNode;
 
 public abstract record ExpressionNode : SyntaxNode;
-
 public sealed record LiteralExpression(string Value) : ExpressionNode;
 public sealed record VariableExpression(string Name) : ExpressionNode;
 public sealed record ReferenceExpression(string Reference) : ExpressionNode;
