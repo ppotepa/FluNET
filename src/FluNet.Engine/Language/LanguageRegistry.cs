@@ -1,186 +1,70 @@
 using FluNET.Keywords;
+using FluNET.Language.Metadata;
 using FluNET.Syntax.Core;
-using FluNET.Syntax.Nouns;
 using System.Reflection;
 
 namespace FluNET.Language;
 
-public sealed record WordDescriptor(
-    Type WordType,
-    string Text,
-    IReadOnlyList<string> Synonyms,
-    Func<IWord?> Factory);
-
-public sealed record VerbDescriptor(
-    Type VerbType,
-    string Text,
-    IReadOnlyList<string> Synonyms,
-    SentencePattern Pattern,
-    Func<IVerb?> Factory);
-
-public sealed record QualifierDescriptor(string Text, Type? ValueType = null);
-
-/// <summary>
-/// The single language catalog for FluNET Classic. Reflection is confined to
-/// registration time; token lookup itself is dictionary based and does not scan assemblies.
-/// </summary>
 public sealed class LanguageRegistry
 {
     private readonly Dictionary<string, WordDescriptor> _words = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, VerbDescriptor> _verbs = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<VerbDescriptor>> _verbs = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, QualifierDescriptor> _qualifiers = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<ModuleDescriptor> _modules = [];
     private readonly HashSet<Assembly> _assemblies = [];
+    private readonly LanguageCompiler _compiler = new();
 
-    public LanguageRegistry()
-    {
-        RegisterStandardQualifiers();
-        RegisterAssemblies(AppDomain.CurrentDomain.GetAssemblies());
-    }
-
+    public LanguageRegistry() { RegisterStandardQualifiers(); RegisterAssemblies(AppDomain.CurrentDomain.GetAssemblies()); }
     public IReadOnlyCollection<WordDescriptor> Words => _words.Values.DistinctBy(x => x.WordType).ToArray();
-    public IReadOnlyCollection<VerbDescriptor> Verbs => _verbs.Values.DistinctBy(x => x.VerbType).ToArray();
+    public IReadOnlyCollection<VerbDescriptor> Verbs => _verbs.Values.SelectMany(x => x).DistinctBy(x => x.VerbType).ToArray();
     public IReadOnlyCollection<QualifierDescriptor> Qualifiers => _qualifiers.Values.ToArray();
+    public IReadOnlyList<ModuleDescriptor> Modules => _modules;
+    public LanguageSnapshot Snapshot => new(Words, Verbs, Qualifiers, Modules);
+    public LanguageBuildResult Build() { LanguageSnapshot snapshot = Snapshot; return new(snapshot, LanguageValidator.Validate(snapshot)); }
+
+    public void RegisterModule(IFluNetModule module) { ArgumentNullException.ThrowIfNull(module); if (_modules.All(x => x.ModuleType != module.GetType())) _modules.Add(new(module.Name, module.Version, module.GetType(), module.Dependencies.ToArray())); module.Configure(this); RegisterAssemblies([module.GetType().Assembly]); }
 
     public void RegisterAssemblies(IEnumerable<Assembly> assemblies)
     {
         foreach (Assembly assembly in assemblies)
         {
-            if (!_assemblies.Add(assembly))
-                continue;
-
-            Type[] types;
-            try
+            if (!_assemblies.Add(assembly)) continue;
+            Type[] types; try { types = assembly.GetTypes(); } catch (ReflectionTypeLoadException ex) { types = ex.Types.Where(x => x != null).Cast<Type>().ToArray(); }
+            foreach (Type type in types)
             {
-                types = assembly.GetTypes();
+                QualifierAttribute? qualifier = type.GetCustomAttribute<QualifierAttribute>(true);
+                if (qualifier != null) RegisterQualifier(qualifier.Text, qualifier.ValueType);
+                if (typeof(IWord).IsAssignableFrom(type) && !type.IsAbstract && !type.IsInterface) RegisterWord(type);
             }
-            catch (ReflectionTypeLoadException ex)
-            {
-                types = ex.Types.Where(x => x != null).Cast<Type>().ToArray();
-            }
-
-            foreach (Type type in types.Where(x => typeof(IWord).IsAssignableFrom(x) && !x.IsAbstract && !x.IsInterface))
-                RegisterWord(type);
         }
     }
 
-    public void Refresh()
-    {
-        _words.Clear();
-        _verbs.Clear();
-        _assemblies.Clear();
-        RegisterAssemblies(AppDomain.CurrentDomain.GetAssemblies());
-    }
-
-    public void RegisterQualifier(string text, Type? valueType = null)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(text);
-        _qualifiers[text] = new QualifierDescriptor(text.ToUpperInvariant(), valueType);
-    }
-
+    public void Refresh() { _words.Clear(); _verbs.Clear(); _assemblies.Clear(); RegisterAssemblies(AppDomain.CurrentDomain.GetAssemblies()); }
+    public void RegisterQualifier(string text, Type? valueType = null) { ArgumentException.ThrowIfNullOrWhiteSpace(text); _qualifiers[text] = new(text.ToUpperInvariant(), valueType); }
     public bool IsQualifier(string text) => _qualifiers.ContainsKey(text);
+    public bool TryCreateWord(string text, out IWord? word) { if (_words.TryGetValue(text, out WordDescriptor? d)) { word = d.Factory(); return word != null; } word = null; return false; }
+    public bool TryGetVerb(string text, out VerbDescriptor? descriptor) { descriptor = GetVerbOverloads(text).FirstOrDefault(); return descriptor != null; }
+    public IReadOnlyList<VerbDescriptor> GetVerbOverloads(string text) => _verbs.TryGetValue(text, out List<VerbDescriptor>? overloads) ? overloads.DistinctBy(x => x.VerbType).ToArray() : [];
 
-    public bool TryCreateWord(string text, out IWord? word)
-    {
-        if (_words.TryGetValue(text, out WordDescriptor? descriptor))
-        {
-            word = descriptor.Factory();
-            return word != null;
-        }
-
-        word = null;
-        return false;
-    }
-
-    public bool TryGetVerb(string text, out VerbDescriptor? descriptor) =>
-        _verbs.TryGetValue(text, out descriptor);
-
-    public Type? GetVerbBaseType(string text)
-    {
-        if (!_verbs.TryGetValue(text, out VerbDescriptor? descriptor))
-            return null;
-
-        Type? baseType = descriptor.VerbType.BaseType;
-        while (baseType != null && !baseType.IsAbstract && baseType != typeof(object))
-            baseType = baseType.BaseType;
-
-        if (baseType == null || baseType == typeof(object))
-            return null;
-
-        return baseType.IsGenericType ? baseType.GetGenericTypeDefinition() : baseType;
-    }
+    public Type? GetVerbBaseType(string text) { VerbDescriptor? d = GetVerbOverloads(text).FirstOrDefault(); if (d == null) return null; Type? b = d.VerbType.BaseType; while (b != null && !b.IsAbstract && b != typeof(object)) b = b.BaseType; if (b == null || b == typeof(object)) return null; return b.IsGenericType ? b.GetGenericTypeDefinition() : b; }
 
     private void RegisterWord(Type type)
     {
-        Func<IWord?> factory = () => CreatePrototype(type) as IWord;
-        IWord? prototype = factory();
-        if (prototype is not IKeyword keyword)
+        Func<IWord?> factory = () => CreatePrototype(type) as IWord; IWord? prototype = factory();
+        if (typeof(IVerb).IsAssignableFrom(type))
+        {
+            VerbIdentity? identity = _compiler.DescribeVerbIdentity(type, prototype as IVerb);
+            if (identity != null)
+            {
+                VerbDescriptor descriptor = _compiler.DescribeVerb(type, identity.Text, identity.Synonyms, () => factory() as IVerb); RegisterOverload(identity.Text, descriptor); foreach (string s in identity.Synonyms) RegisterOverload(s, descriptor);
+                if (prototype is IKeyword) { var word = new WordDescriptor(type, identity.Text, identity.Synonyms, factory); _words.TryAdd(identity.Text, word); foreach (string s in identity.Synonyms) _words.TryAdd(s, word); }
+            }
             return;
-
-        string[] synonyms = prototype is IVerb verb ? verb.Synonyms : [];
-        var word = new WordDescriptor(type, keyword.Text, synonyms, factory);
-        _words[keyword.Text] = word;
-        foreach (string synonym in synonyms)
-            _words[synonym] = word;
-
-        if (prototype is IVerb)
-        {
-            SentencePattern pattern = BuildPattern(type, keyword.Text);
-            var verbDescriptor = new VerbDescriptor(type, keyword.Text, synonyms, pattern, () => factory() as IVerb);
-            _verbs[keyword.Text] = verbDescriptor;
-            foreach (string synonym in synonyms)
-                _verbs[synonym] = verbDescriptor;
         }
+        if (prototype is IKeyword keyword) _words.TryAdd(keyword.Text, new(type, keyword.Text, [], factory));
     }
 
-    private static SentencePattern BuildPattern(Type verbType, string text)
-    {
-        List<ClauseDescriptor> clauses = [];
-        foreach (Type contract in verbType.GetInterfaces().Where(x => x.IsGenericType))
-        {
-            Type definition = contract.GetGenericTypeDefinition();
-            Type valueType = contract.GetGenericArguments()[0];
-
-            if (definition == typeof(IWhat<>)) clauses.Add(new(ClauseKind.What, valueType));
-            else if (definition == typeof(IFrom<>)) clauses.Add(new(ClauseKind.From, valueType));
-            else if (definition == typeof(ITo<>)) clauses.Add(new(ClauseKind.To, valueType));
-            else if (definition == typeof(IUsing<>)) clauses.Add(new(ClauseKind.Using, valueType));
-            else if (definition == typeof(IWith<>)) clauses.Add(new(ClauseKind.With, valueType));
-            else if (definition == typeof(IThen<>)) clauses.Add(new(ClauseKind.Then, valueType, false));
-        }
-
-        return new SentencePattern(text.ToUpperInvariant(), clauses);
-    }
-
-    private static object? CreatePrototype(Type type)
-    {
-        try
-        {
-            ConstructorInfo? parameterless = type.GetConstructor(Type.EmptyTypes);
-            if (parameterless != null)
-                return parameterless.Invoke(null);
-
-            ConstructorInfo? constructor = type.GetConstructors()
-                .OrderBy(x => x.GetParameters().Length)
-                .FirstOrDefault();
-
-            if (constructor == null)
-                return null;
-
-            object?[] arguments = constructor.GetParameters()
-                .Select(p => p.ParameterType.IsValueType ? Activator.CreateInstance(p.ParameterType) : null)
-                .ToArray();
-
-            return constructor.Invoke(arguments);
-        }
-        catch
-        {
-            return null;
-        }
-    }
-
-    private void RegisterStandardQualifiers()
-    {
-        foreach (string qualifier in new[] { "TEXT", "JSON", "XML", "BINARY", "CSV", "HTML", "YAML", "IMAGE", "VIDEO", "AUDIO" })
-            RegisterQualifier(qualifier);
-    }
+    private void RegisterOverload(string k, VerbDescriptor d) { if (!_verbs.TryGetValue(k, out List<VerbDescriptor>? o)) _verbs[k] = o = []; if (o.All(x => x.VerbType != d.VerbType)) o.Add(d); }
+    private static object? CreatePrototype(Type t) { try { ConstructorInfo? p = t.GetConstructor(Type.EmptyTypes); if (p != null) return p.Invoke(null); ConstructorInfo? c = t.GetConstructors().OrderBy(x => x.GetParameters().Length).FirstOrDefault(); if (c == null) return null; object?[] a = c.GetParameters().Select(x => x.ParameterType.IsValueType ? Activator.CreateInstance(x.ParameterType) : null).ToArray(); return c.Invoke(a); } catch { return null; } }
+    private void RegisterStandardQualifiers() { RegisterQualifier("TEXT", typeof(string)); RegisterQualifier("JSON"); RegisterQualifier("XML"); RegisterQualifier("BINARY", typeof(byte[])); foreach (string q in new[] { "CSV", "HTML", "YAML", "IMAGE", "VIDEO", "AUDIO" }) RegisterQualifier(q); }
 }

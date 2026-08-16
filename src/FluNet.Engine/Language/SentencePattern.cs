@@ -1,8 +1,9 @@
+using FluNET.Syntax.Core;
+
 namespace FluNET.Language;
 
 /// <summary>
-/// Semantic roles that make up a FluNET sentence. They intentionally mirror
-/// the English-like surface syntax and are independent from the parser/runtime.
+/// Semantic roles that make up a FluNET sentence.
 /// </summary>
 public enum ClauseKind
 {
@@ -14,14 +15,26 @@ public enum ClauseKind
     Then
 }
 
+public enum RoleCardinality
+{
+    One,
+    ZeroOrOne,
+    OneOrMore,
+    ZeroOrMore
+}
+
 public sealed record ClauseDescriptor(
     ClauseKind Kind,
     Type ValueType,
-    bool Required = true);
+    bool Required = true,
+    string? Name = null,
+    RoleDirection Direction = RoleDirection.Input,
+    RoleCardinality Cardinality = RoleCardinality.One,
+    Type? ElementType = null);
 
 /// <summary>
-/// Declarative grammar of a single verb sentence, e.g. GET WHAT&lt;string&gt; FROM&lt;FileInfo&gt;.
-/// The same model can be consumed by parsing, validation, tooling and documentation.
+/// Declarative grammar of a single verb sentence. Patterns are compiled from
+/// interfaces, CLR types, constructor signatures and optional attribute overrides.
 /// </summary>
 public sealed record SentencePattern(
     string Verb,
@@ -31,4 +44,7 @@ public sealed record SentencePattern(
 
     public ClauseDescriptor? Find(ClauseKind kind) =>
         Clauses.FirstOrDefault(x => x.Kind == kind);
+
+    public IReadOnlyList<ClauseDescriptor> FindAll(ClauseKind kind) =>
+        Clauses.Where(x => x.Kind == kind).ToArray();
 }
