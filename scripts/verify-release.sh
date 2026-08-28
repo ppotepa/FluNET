@@ -4,14 +4,19 @@ set -euo pipefail
 ARTIFACTS="${TMPDIR:-/tmp}/flunet-release-$RANDOM-$RANDOM"
 PACKAGES="$ARTIFACTS/packages"
 TOOL_HOME="$ARTIFACTS/tool-home"
+TEST_RESULTS="$ARTIFACTS/test-results"
 NUGET_CONFIG="$ARTIFACTS/NuGet.Config"
-mkdir -p "$PACKAGES" "$TOOL_HOME"
+mkdir -p "$PACKAGES" "$TOOL_HOME" "$TEST_RESULTS"
 trap 'rm -rf "$ARTIFACTS"' EXIT
 
 dotnet restore FluNET.sln
 dotnet format FluNET.sln whitespace --verify-no-changes --no-restore
 dotnet build FluNET.sln --configuration Release --no-restore
-dotnet test FluNET.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory "$ARTIFACTS/test-results"
+dotnet test FluNET.sln --configuration Release --no-build \
+  --settings coverlet.runsettings \
+  --collect:"XPlat Code Coverage" \
+  --results-directory "$TEST_RESULTS"
+bash ./scripts/verify-coverage.sh "$TEST_RESULTS"
 
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- version
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- contract

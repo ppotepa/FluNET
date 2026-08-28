@@ -3,13 +3,18 @@ $PSNativeCommandUseErrorActionPreference = $true
 $Artifacts = Join-Path ([System.IO.Path]::GetTempPath()) ("flunet-release-" + [Guid]::NewGuid().ToString('N'))
 $Packages = Join-Path $Artifacts 'packages'
 $ToolHome = Join-Path $Artifacts 'tool-home'
+$TestResults = Join-Path $Artifacts 'test-results'
 $NuGetConfig = Join-Path $Artifacts 'NuGet.Config'
-New-Item -ItemType Directory -Force -Path $Packages, $ToolHome | Out-Null
+New-Item -ItemType Directory -Force -Path $Packages, $ToolHome, $TestResults | Out-Null
 try {
     dotnet restore FluNET.sln
     dotnet format FluNET.sln whitespace --verify-no-changes --no-restore
     dotnet build FluNET.sln --configuration Release --no-restore
-    dotnet test FluNET.sln --configuration Release --no-build '--collect:XPlat Code Coverage' --results-directory (Join-Path $Artifacts 'test-results')
+    dotnet test FluNET.sln --configuration Release --no-build `
+        --settings coverlet.runsettings `
+        '--collect:XPlat Code Coverage' `
+        --results-directory $TestResults
+    ./scripts/verify-coverage.ps1 -ResultsDirectory $TestResults
 
     dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- version
     dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- contract
