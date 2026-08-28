@@ -1,1 +1,68 @@
-using FluNET.Compilation;using FluNET.Prompt;using System.Security.Cryptography;using System.Text;namespace FluNET.Automation;public abstract record TriggerDefinition;public sealed record IntervalTriggerDefinition(TimeSpan Interval):TriggerDefinition,IScheduledTrigger{public DateTimeOffset NextAfter(DateTimeOffset instant)=>instant.Add(Interval);}public sealed record WatchTriggerDefinition(string Resource,string?Event):TriggerDefinition;public sealed record WorkflowTemplate(SurfaceCompilationResult Compilation){public bool IsValid=>Compilation.IsValid&&Compilation.Plan is not null;}public sealed record AutomationDefinition(string Id,TriggerDefinition Trigger,WorkflowTemplate Template,SourceSpan Span);public sealed record AutomationDiagnostic(string Code,string Message,SourceSpan Span);public sealed record AutomationCompilationResult(IReadOnlyList<AutomationDefinition>Automations,IReadOnlyList<AutomationDiagnostic>Diagnostics){public bool IsValid=>Diagnostics.Count==0&&Automations.All(item=>item.Template.IsValid);}internal static class AutomationId{public static string Create(string source,int index){string canonical=$"{index}|{source.Trim()}";string hash=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical))).ToLowerInvariant()[..12];return $"automation-{hash}";}}public sealed class AutomationCatalog{private readonly Dictionary<string,AutomationDefinition>d=new(StringComparer.OrdinalIgnoreCase);public void Register(AutomationDefinition definition){if(!d.TryAdd(definition.Id,definition))throw new InvalidOperationException($"Automation '{definition.Id}' is already registered.");}public bool TryGet(string id,out AutomationDefinition?definition)=>d.TryGetValue(id,out definition);public IReadOnlyList<AutomationDefinition>Snapshot()=>d.Values.OrderBy(x=>x.Id,StringComparer.Ordinal).ToArray();}
+using FluNET.Compilation;
+using FluNET.Prompt;
+using System.Security.Cryptography;
+using System.Text;
+
+namespace FluNET.Automation;
+
+public abstract record TriggerDefinition;
+
+public sealed record IntervalTriggerDefinition(TimeSpan Interval)
+    : TriggerDefinition, IScheduledTrigger
+{
+    public DateTimeOffset NextAfter(DateTimeOffset instant) => instant.Add(Interval);
+}
+
+public sealed record WatchTriggerDefinition(string Resource, string? Event)
+    : TriggerDefinition;
+
+public sealed record WorkflowTemplate(SurfaceCompilationResult Compilation)
+{
+    public bool IsValid => Compilation.IsValid && Compilation.Plan is not null;
+}
+
+public sealed record AutomationDefinition(
+    string Id,
+    TriggerDefinition Trigger,
+    WorkflowTemplate Template,
+    SourceSpan Span);
+
+public sealed record AutomationDiagnostic(
+    string Code,
+    string Message,
+    SourceSpan Span);
+
+public sealed record AutomationCompilationResult(
+    IReadOnlyList<AutomationDefinition> Automations,
+    IReadOnlyList<AutomationDiagnostic> Diagnostics)
+{
+    public bool IsValid => Diagnostics.Count == 0 && Automations.All(item => item.Template.IsValid);
+}
+
+internal static class AutomationId
+{
+    public static string Create(string source, int index)
+    {
+        string canonical = $"{index}|{source.Trim()}";
+        string hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical)))
+            .ToLowerInvariant()[..12];
+        return $"automation-{hash}";
+    }
+}
+
+public sealed class AutomationCatalog
+{
+    private readonly Dictionary<string, AutomationDefinition> _definitions = new(StringComparer.OrdinalIgnoreCase);
+
+    public void Register(AutomationDefinition definition)
+    {
+        if (!_definitions.TryAdd(definition.Id, definition))
+            throw new InvalidOperationException($"Automation '{definition.Id}' is already registered.");
+    }
+
+    public bool TryGet(string id, out AutomationDefinition? definition) =>
+        _definitions.TryGetValue(id, out definition);
+
+    public IReadOnlyList<AutomationDefinition> Snapshot() =>
+        _definitions.Values.OrderBy(item => item.Id, StringComparer.Ordinal).ToArray();
+}

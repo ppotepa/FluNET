@@ -15,11 +15,11 @@ namespace FluNET
     public class Engine
     {
         private readonly ExecutionPipelineFactory _pipelineFactory;
-        private readonly IVariableResolver variableResolver;
-        private readonly SemanticCommandBinder semanticBinder;
-        private readonly SemanticProgramValidator semanticValidator;
-        private readonly ExecutionPlanner executionPlanner;
-        private readonly LanguageSnapshot language;
+        private readonly IVariableResolver _variableResolver;
+        private readonly SemanticCommandBinder _semanticBinder;
+        private readonly SemanticProgramValidator _semanticValidator;
+        private readonly ExecutionPlanner _executionPlanner;
+        private readonly LanguageSnapshot _language;
 
         /// <summary>Creates the typed FluNET compiler and executor.</summary>
         [ActivatorUtilitiesConstructor]
@@ -30,12 +30,12 @@ namespace FluNET
             ExecutionPlanner executionPlanner,
             LanguageSnapshot language)
         {
-            this.variableResolver = variableResolver ?? throw new ArgumentNullException(nameof(variableResolver));
+            _variableResolver = variableResolver ?? throw new ArgumentNullException(nameof(variableResolver));
             _pipelineFactory = pipelineFactory ?? throw new ArgumentNullException(nameof(pipelineFactory));
-            this.semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
-            this.executionPlanner = executionPlanner ?? throw new ArgumentNullException(nameof(executionPlanner));
-            this.language = language ?? throw new ArgumentNullException(nameof(language));
-            semanticValidator = new SemanticProgramValidator(this.language);
+            _semanticBinder = semanticBinder ?? throw new ArgumentNullException(nameof(semanticBinder));
+            _executionPlanner = executionPlanner ?? throw new ArgumentNullException(nameof(executionPlanner));
+            _language = language ?? throw new ArgumentNullException(nameof(language));
+            _semanticValidator = new SemanticProgramValidator(_language);
         }
 
         /// <summary>
@@ -44,7 +44,7 @@ namespace FluNET
         /// </summary>
         public void RegisterVariable<T>(string name, T value)
         {
-            variableResolver.Register(name, value);
+            _variableResolver.Register(name, value);
         }
 
         /// <summary>
@@ -54,7 +54,7 @@ namespace FluNET
         public CompilationResult Analyze(ProcessedPrompt prompt)
         {
             ArgumentNullException.ThrowIfNull(prompt);
-            prompt = prompt.WithGrammar(language.Grammar);
+            prompt = prompt.WithGrammar(_language.Grammar);
 
             FluNetProgram program = new(prompt);
             DiagnosticBag diagnostics = new();
@@ -93,7 +93,7 @@ namespace FluNET
             BoundProgram boundProgram;
             try
             {
-                IReadOnlyList<BoundCommand> boundCommands = semanticBinder.BindProgram(prompt.Syntax);
+                IReadOnlyList<BoundCommand> boundCommands = _semanticBinder.BindProgram(prompt.Syntax);
                 boundProgram = BoundProgram.FromCommands(program, boundCommands);
             }
             catch (SemanticBindingException exception)
@@ -112,7 +112,7 @@ namespace FluNET
                     CompilationPhase.Bind);
             }
 
-            DiagnosticBag semanticDiagnostics = semanticValidator.Validate(boundProgram);
+            DiagnosticBag semanticDiagnostics = _semanticValidator.Validate(boundProgram);
             diagnostics.AddRange(semanticDiagnostics);
             if (semanticDiagnostics.HasErrors)
             {
@@ -134,7 +134,7 @@ namespace FluNET
                 {
                     return PlanningFailure(program, boundProgram, diagnostics, prompt, parallelConflict);
                 }
-                ExecutionPlan plan = executionPlanner.Create(boundProgram.Commands, prompt.Syntax);
+                ExecutionPlan plan = _executionPlanner.Create(boundProgram.Commands, prompt.Syntax);
                 return new CompilationResult(
                     program,
                     ValidationResult.Success(),
@@ -252,7 +252,7 @@ namespace FluNET
         {
             ArgumentNullException.ThrowIfNull(prompt);
             ArgumentNullException.ThrowIfNull(workflowOptions);
-            prompt = prompt.WithGrammar(language.Grammar);
+            prompt = prompt.WithGrammar(_language.Grammar);
             ExecutionPipeline pipeline = _pipelineFactory.CreateStandardPipeline();
             var context = new Execution.ExecutionContext(prompt, workflowOptions);
             return await pipeline.ExecuteAsync(context, cancellationToken).ConfigureAwait(false);
@@ -274,6 +274,5 @@ namespace FluNET
                     new SourceSpan(start, length));
             }
         }
-
     }
 }

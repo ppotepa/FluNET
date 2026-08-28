@@ -5,16 +5,16 @@ namespace FluNET.Context;
 
 public class FluNETContext : IDisposable
 {
-    private static readonly object DefaultContextGate = new();
+    private static readonly object _defaultContextGate = new();
     private static FluNETContext? _defaultContext;
-    private readonly ServiceProvider sp;
-    private readonly IServiceScope? scope;
+    private readonly ServiceProvider _serviceProvider;
+    private readonly IServiceScope? _scope;
 
     public static FluNETContext Default
     {
         get
         {
-            lock (DefaultContextGate)
+            lock (_defaultContextGate)
             {
                 return _defaultContext ??= Create();
             }
@@ -23,9 +23,9 @@ public class FluNETContext : IDisposable
 
     private FluNETContext(ServiceProvider serviceProvider, bool createScope = true)
     {
-        sp = serviceProvider;
+        _serviceProvider = serviceProvider;
         if (createScope)
-            scope = sp.CreateScope();
+            _scope = _serviceProvider.CreateScope();
     }
 
     public static FluNETContext Create(Action<IServiceCollection>? configure = null)
@@ -61,33 +61,33 @@ public class FluNETContext : IDisposable
     public Engine GetEngine() => GetService<Engine>();
 
     public T GetService<T>() where T : notnull =>
-        scope is not null
-            ? scope.ServiceProvider.GetRequiredService<T>()
-            : sp.GetRequiredService<T>();
+        _scope is not null
+            ? _scope.ServiceProvider.GetRequiredService<T>()
+            : _serviceProvider.GetRequiredService<T>();
 
     public object GetService(Type type) =>
-        scope is not null
-            ? scope.ServiceProvider.GetRequiredService(type)
-            : sp.GetRequiredService(type);
+        _scope is not null
+            ? _scope.ServiceProvider.GetRequiredService(type)
+            : _serviceProvider.GetRequiredService(type);
 
-    public IServiceProvider ServiceProvider => scope?.ServiceProvider ?? sp;
+    public IServiceProvider ServiceProvider => _scope?.ServiceProvider ?? _serviceProvider;
 
     public void Dispose()
     {
-        lock (DefaultContextGate)
+        lock (_defaultContextGate)
         {
             if (ReferenceEquals(this, _defaultContext))
                 _defaultContext = null;
         }
 
-        scope?.Dispose();
-        sp.Dispose();
+        _scope?.Dispose();
+        _serviceProvider.Dispose();
     }
 
     public static void ResetDefault()
     {
         FluNETContext? context;
-        lock (DefaultContextGate)
+        lock (_defaultContextGate)
         {
             context = _defaultContext;
             _defaultContext = null;
