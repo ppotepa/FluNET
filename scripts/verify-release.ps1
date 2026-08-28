@@ -7,6 +7,7 @@ $NuGetConfig = Join-Path $Artifacts 'NuGet.Config'
 New-Item -ItemType Directory -Force -Path $Packages, $ToolHome | Out-Null
 try {
     dotnet restore FluNET.sln
+    dotnet format FluNET.sln whitespace --verify-no-changes --no-restore
     dotnet build FluNET.sln --configuration Release --no-restore
     dotnet test FluNET.sln --configuration Release --no-build
 

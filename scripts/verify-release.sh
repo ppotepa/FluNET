@@ -9,6 +9,7 @@ mkdir -p "$PACKAGES" "$TOOL_HOME"
 trap 'rm -rf "$ARTIFACTS"' EXIT
 
 dotnet restore FluNET.sln
+dotnet format FluNET.sln whitespace --verify-no-changes --no-restore
 dotnet build FluNET.sln --configuration Release --no-restore
 dotnet test FluNET.sln --configuration Release --no-build
 
