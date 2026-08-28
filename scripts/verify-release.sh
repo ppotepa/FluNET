@@ -11,7 +11,7 @@ trap 'rm -rf "$ARTIFACTS"' EXIT
 dotnet restore FluNET.sln
 dotnet format FluNET.sln whitespace --verify-no-changes --no-restore
 dotnet build FluNET.sln --configuration Release --no-restore
-dotnet test FluNET.sln --configuration Release --no-build
+dotnet test FluNET.sln --configuration Release --no-build --collect:"XPlat Code Coverage" --results-directory "$ARTIFACTS/test-results"
 
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- version
 dotnet run --project src/FluNET.Tool/FluNET.Tool.csproj --configuration Release --no-build -- contract
