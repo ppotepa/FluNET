@@ -14,11 +14,21 @@ namespace FluNET.Context;
 
 public class FluNETContext : IDisposable
 {
+    private static readonly object DefaultContextGate = new();
     private static FluNETContext? _defaultContext;
     private readonly ServiceProvider sp;
     private readonly IServiceScope? scope;
 
-    public static FluNETContext Default => _defaultContext ??= Create();
+    public static FluNETContext Default
+    {
+        get
+        {
+            lock (DefaultContextGate)
+            {
+                return _defaultContext ??= Create();
+            }
+        }
+    }
 
     private FluNETContext(ServiceProvider serviceProvider, bool createScope = true)
     {
@@ -32,7 +42,7 @@ public class FluNETContext : IDisposable
         ServiceCollection services = new();
         ConfigureDefaultServices(services, StandardLanguage.CreateRuntime());
         configure?.Invoke(services);
-        return new FluNETContext(services.BuildServiceProvider());
+        return new FluNETContext(BuildServiceProvider(services));
     }
 
     public static FluNETContext CreateWithRuntime(
@@ -42,7 +52,7 @@ public class FluNETContext : IDisposable
         ServiceCollection services = new();
         ConfigureDefaultServices(services, runtime);
         configure?.Invoke(services);
-        return new FluNETContext(services.BuildServiceProvider());
+        return new FluNETContext(BuildServiceProvider(services));
     }
 
     public static void ConfigureDefaultServices(IServiceCollection services) =>
@@ -66,9 +76,9 @@ public class FluNETContext : IDisposable
             registry.Register(provider.GetRequiredService<FileOperationsCapabilityProvider>());
             registry.Register(provider.GetRequiredService<FileTrashCapabilityProvider>());
             registry.Register(provider.GetRequiredService<FileWatchCapabilityProvider>());
-        registry.Register(provider.GetRequiredService<KeyValueStorageCapabilityProvider>());
-        registry.Register(provider.GetRequiredService<BlobStorageCapabilityProvider>());
-        registry.Register(provider.GetRequiredService<TimeCapabilityProvider>());
+            registry.Register(provider.GetRequiredService<KeyValueStorageCapabilityProvider>());
+            registry.Register(provider.GetRequiredService<BlobStorageCapabilityProvider>());
+            registry.Register(provider.GetRequiredService<TimeCapabilityProvider>());
             registry.Register(provider.GetRequiredService<SqlQueryCapabilityProvider>());
             registry.Register(provider.GetRequiredService<ProcessExecutionCapabilityProvider>());
             registry.Register(provider.GetRequiredService<ArchiveCapabilityProvider>());
@@ -201,15 +211,32 @@ public class FluNETContext : IDisposable
 
     public void Dispose()
     {
+        lock (DefaultContextGate)
+        {
+            if (ReferenceEquals(this, _defaultContext))
+                _defaultContext = null;
+        }
+
         scope?.Dispose();
-        if (ReferenceEquals(this, _defaultContext))
-            _defaultContext = null;
         sp.Dispose();
     }
 
     public static void ResetDefault()
     {
-        _defaultContext?.Dispose();
-        _defaultContext = null;
+        FluNETContext? context;
+        lock (DefaultContextGate)
+        {
+            context = _defaultContext;
+            _defaultContext = null;
+        }
+
+        context?.Dispose();
     }
+
+    private static ServiceProvider BuildServiceProvider(IServiceCollection services) =>
+        services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = true
+        });
 }
