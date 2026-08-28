@@ -1,10 +1,17 @@
 using FluNET.Execution.Planning;
 using FluNET.Execution.Workflow;
 using System.Collections.Concurrent;
+using System.Text;
 
 namespace FluNET.Automation;
 
-public sealed record AutomationScheduleState(string AutomationId, DateTimeOffset? NextDue);
+public sealed record AutomationScheduleState(
+    string AutomationId,
+    DateTimeOffset? NextDue,
+    string? TriggerIdentity = null);
+
+public sealed record AutomationSchedulerOptions(
+    bool AllowConcurrentSignals = false);
 
 public interface IAutomationScheduleStore
 {
@@ -50,26 +57,55 @@ public sealed record AutomationRunResult(
     public bool IsSuccess => Error is null;
 }
 
-public sealed class AutomationScheduler(SentenceExecutor executor, IAutomationScheduleStore store)
+public sealed class AutomationScheduler
 {
+    private readonly SentenceExecutor executor;
+    private readonly IAutomationScheduleStore store;
+    private readonly AutomationSchedulerOptions options;
     private readonly ConcurrentDictionary<string, AutomationDefinition> automations = new(StringComparer.OrdinalIgnoreCase);
     private readonly SemaphoreSlim gate = new(1, 1);
+
+    public AutomationScheduler(
+        SentenceExecutor executor,
+        IAutomationScheduleStore store,
+        AutomationSchedulerOptions? options = null)
+    {
+        this.executor = executor ?? throw new ArgumentNullException(nameof(executor));
+        this.store = store ?? throw new ArgumentNullException(nameof(store));
+        this.options = options ?? new AutomationSchedulerOptions();
+    }
 
     public async ValueTask RegisterAsync(
         AutomationDefinition definition,
         DateTimeOffset now,
         CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(definition);
         if (!definition.Template.IsValid)
             throw new InvalidOperationException($"Automation '{definition.Id}' does not have a valid workflow template.");
 
-        automations[definition.Id] = definition;
-        if (definition.Trigger is IScheduledTrigger scheduled &&
-            await store.GetAsync(definition.Id, cancellationToken).ConfigureAwait(false) is null)
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            await store.SetAsync(
-                new AutomationScheduleState(definition.Id, scheduled.NextAfter(now)),
-                cancellationToken).ConfigureAwait(false);
+            automations[definition.Id] = definition;
+            if (definition.Trigger is not IScheduledTrigger scheduled)
+                return;
+
+            string triggerIdentity = ScheduleIdentity(scheduled);
+            AutomationScheduleState? state = await store.GetAsync(definition.Id, cancellationToken).ConfigureAwait(false);
+            if (state is null || !StringComparer.Ordinal.Equals(state.TriggerIdentity, triggerIdentity))
+            {
+                await store.SetAsync(
+                    new AutomationScheduleState(
+                        definition.Id,
+                        scheduled.NextAfter(now),
+                        triggerIdentity),
+                    cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            gate.Release();
         }
     }
 
@@ -101,7 +137,10 @@ public sealed class AutomationScheduler(SentenceExecutor executor, IAutomationSc
                 while (next <= now);
 
                 await store.SetAsync(
-                    new AutomationScheduleState(automation.Id, next),
+                    new AutomationScheduleState(
+                        automation.Id,
+                        next,
+                        state.TriggerIdentity ?? ScheduleIdentity(scheduled)),
                     cancellationToken).ConfigureAwait(false);
             }
 
@@ -127,18 +166,19 @@ public sealed class AutomationScheduler(SentenceExecutor executor, IAutomationSc
     {
         ArgumentNullException.ThrowIfNull(signal);
         ArgumentException.ThrowIfNullOrWhiteSpace(signal.Resource);
-        List<AutomationRunResult> runs = [];
-        foreach (AutomationDefinition automation in automations.Values.OrderBy(item => item.Id, StringComparer.Ordinal))
+
+        if (options.AllowConcurrentSignals)
+            return await PublishSignalCoreAsync(signal, cancellationToken).ConfigureAwait(false);
+
+        await gate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            if (automation.Trigger is not WatchTriggerDefinition watch ||
-                !watch.Resource.Equals(signal.Resource, StringComparison.OrdinalIgnoreCase) ||
-                !(watch.Event is null || watch.Event.Equals(signal.EventName, StringComparison.OrdinalIgnoreCase)))
-                continue;
-
-            runs.Add(await ExecuteAsync(automation, signal, cancellationToken).ConfigureAwait(false));
+            return await PublishSignalCoreAsync(signal, cancellationToken).ConfigureAwait(false);
         }
-
-        return runs;
+        finally
+        {
+            gate.Release();
+        }
     }
 
     public async ValueTask<IReadOnlyList<AutomationRunResult>> ReplaySignalsAsync(
@@ -158,6 +198,24 @@ public sealed class AutomationScheduler(SentenceExecutor executor, IAutomationSc
                 continue;
             runs.AddRange(await PublishSignalAsync(envelope.Signal, cancellationToken).ConfigureAwait(false));
         }
+        return runs;
+    }
+
+    private async ValueTask<IReadOnlyList<AutomationRunResult>> PublishSignalCoreAsync(
+        AutomationSignal signal,
+        CancellationToken cancellationToken)
+    {
+        List<AutomationRunResult> runs = [];
+        foreach (AutomationDefinition automation in automations.Values.OrderBy(item => item.Id, StringComparer.Ordinal))
+        {
+            if (automation.Trigger is not WatchTriggerDefinition watch ||
+                !watch.Resource.Equals(signal.Resource, StringComparison.OrdinalIgnoreCase) ||
+                !(watch.Event is null || watch.Event.Equals(signal.EventName, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            runs.Add(await ExecuteAsync(automation, signal, cancellationToken).ConfigureAwait(false));
+        }
+
         return runs;
     }
 
@@ -195,6 +253,19 @@ public sealed class AutomationScheduler(SentenceExecutor executor, IAutomationSc
         {
             return new AutomationRunResult(automation, steps, null, exception, signal);
         }
+    }
+
+    private static string ScheduleIdentity(IScheduledTrigger trigger)
+    {
+        StringBuilder identity = new(trigger.GetType().FullName ?? trigger.GetType().Name);
+        DateTimeOffset cursor = new(2000, 1, 1, 0, 0, 0, TimeSpan.Zero);
+        for (int index = 0; index < 8; index++)
+        {
+            cursor = trigger.NextAfter(cursor);
+            identity.Append('|').Append(cursor.UtcDateTime.Ticks);
+        }
+
+        return identity.ToString();
     }
 
     private static object NormalizeEventValue(object? value) => value switch
