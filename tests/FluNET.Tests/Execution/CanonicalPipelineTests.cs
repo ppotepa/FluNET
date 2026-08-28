@@ -49,18 +49,18 @@ public sealed class CanonicalPipelineTests
     }
 
     [Test]
-    public void Run_ExecutesWithoutRepeatingEffect()
+    public async Task ExecuteAsync_ExecutesEffectExactlyOnce()
     {
         CapturingOutput output = new();
         using FluNETContext context = FluNETContext.Create(services =>
             services.AddSingleton<ITextOutput>(output));
 
-        var result = context.GetEngine().Run(new ProcessedPrompt("SAY compatible."));
+        ExecutionResult result = await context.GetEngine().ExecuteAsync(
+            new ProcessedPrompt("SAY compatible."));
 
         Assert.Multiple(() =>
         {
             Assert.That(result.ValidationResult.IsValid, Is.True);
-            Assert.That(result.SourceSentence, Is.Null);
             Assert.That(result.Result, Is.EqualTo("compatible"));
             Assert.That(output.Messages, Is.EqualTo(new[] { "compatible" }));
         });

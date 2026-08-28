@@ -8,7 +8,6 @@ using FluNET.Prompt;
 using FluNET.Syntax.Validation;
 using FluNET.Variables;
 using Microsoft.Extensions.DependencyInjection;
-using System.ComponentModel;
 
 namespace FluNET
 {
@@ -132,9 +131,8 @@ namespace FluNET
             {
                 string? parallelConflict = FindParallelWriteConflict(boundProgram, prompt.Syntax);
                 if (parallelConflict is not null)
-                {
                     return PlanningFailure(program, boundProgram, diagnostics, prompt, parallelConflict);
-                }
+
                 ExecutionPlan plan = _executionPlanner.Create(boundProgram.Commands, prompt.Syntax);
                 return new CompilationResult(
                     program,
@@ -214,27 +212,6 @@ namespace FluNET
                 .Where(token => token.Kind == PromptTokenKind.Variable)
                 .Select(token => token.Text[1..^1].ToLowerInvariant())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
-
-        /// <summary>
-        /// Synchronous compatibility entry point. New hosts should prefer <see cref="ExecuteAsync(ProcessedPrompt, CancellationToken)"/>.
-        /// </summary>
-        [Obsolete("Use ExecuteAsync(ProcessedPrompt, CancellationToken) instead. Synchronous execution is retained for pre-1.0 compatibility.")]
-        public ExecutionResult Execute(ProcessedPrompt prompt)
-        {
-            return ExecuteAsync(prompt).GetAwaiter().GetResult();
-        }
-
-        /// <summary>
-        /// Legacy tuple-shaped compatibility entry point. New hosts should consume <see cref="ExecutionResult"/>
-        /// from <see cref="ExecuteAsync(ProcessedPrompt, CancellationToken)"/>.
-        /// </summary>
-        [EditorBrowsable(EditorBrowsableState.Never)]
-        [Obsolete("Use ExecuteAsync instead. Run returns a legacy tuple whose SourceSentence value is always null.")]
-        public (ValidationResult ValidationResult, object? SourceSentence, object? Result) Run(ProcessedPrompt prompt)
-        {
-            ExecutionResult execution = ExecuteAsync(prompt).GetAwaiter().GetResult();
-            return (execution.ValidationResult, null, execution.Result);
-        }
 
         /// <summary>
         /// Asynchronously executes the Parse, Bind, Validate, Compile, TypeCheck,

@@ -1,5 +1,4 @@
 using FluNET.Context;
-using FluNET.Prompt;
 using System.Reflection;
 
 namespace FluNET.Tests.Contracts;
@@ -8,22 +7,32 @@ namespace FluNET.Tests.Contracts;
 public sealed class PublicApiStabilityTests
 {
     [Test]
-    public void CompatibilityEntryPointsAreExplicitlyMarkedObsolete()
+    public void PreviewCompatibilityEntryPointsAreAbsentFromPublicSurface()
     {
-        MethodInfo execute = typeof(Engine).GetMethod(nameof(Engine.Execute), [typeof(ProcessedPrompt)])!;
-        MethodInfo run = typeof(Engine).GetMethod(nameof(Engine.Run), [typeof(ProcessedPrompt)])!;
-        PropertyInfo defaultContext = typeof(FluNETContext).GetProperty(nameof(FluNETContext.Default))!;
+        MethodInfo? execute = typeof(Engine).GetMethod(
+            "Execute",
+            BindingFlags.Public | BindingFlags.Instance);
+        MethodInfo? run = typeof(Engine).GetMethod(
+            "Run",
+            BindingFlags.Public | BindingFlags.Instance);
+        PropertyInfo? defaultContext = typeof(FluNETContext).GetProperty(
+            "Default",
+            BindingFlags.Public | BindingFlags.Static);
+        MethodInfo? resetDefault = typeof(FluNETContext).GetMethod(
+            "ResetDefault",
+            BindingFlags.Public | BindingFlags.Static);
 
         Assert.Multiple(() =>
         {
-            Assert.That(execute.GetCustomAttribute<ObsoleteAttribute>(), Is.Not.Null);
-            Assert.That(run.GetCustomAttribute<ObsoleteAttribute>(), Is.Not.Null);
-            Assert.That(defaultContext.GetCustomAttribute<ObsoleteAttribute>(), Is.Not.Null);
+            Assert.That(execute, Is.Null);
+            Assert.That(run, Is.Null);
+            Assert.That(defaultContext, Is.Null);
+            Assert.That(resetDefault, Is.Null);
         });
     }
 
     [Test]
-    public void PreferredAsyncAndExplicitLifetimeApisRemainNonObsolete()
+    public void PreferredAsyncAndExplicitLifetimeApisDefineCandidateBoundary()
     {
         MethodInfo[] asyncMethods = typeof(Engine)
             .GetMethods(BindingFlags.Public | BindingFlags.Instance)
@@ -40,6 +49,7 @@ public sealed class PublicApiStabilityTests
             Assert.That(asyncMethods.All(method => method.GetCustomAttribute<ObsoleteAttribute>() is null), Is.True);
             Assert.That(contextFactories, Is.Not.Empty);
             Assert.That(contextFactories.All(method => method.GetCustomAttribute<ObsoleteAttribute>() is null), Is.True);
+            Assert.That(typeof(IAsyncDisposable).IsAssignableFrom(typeof(FluNETContext)), Is.True);
         });
     }
 }

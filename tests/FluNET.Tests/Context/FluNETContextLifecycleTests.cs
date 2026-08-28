@@ -6,22 +6,22 @@ namespace FluNET.Tests.Context;
 public sealed class FluNETContextLifecycleTests
 {
     [Test]
-    public async Task DefaultContextIsCreatedOnceAcrossConcurrentReaders()
+    public async Task ConcurrentCreationProducesIndependentOwnedContexts()
     {
-        FluNETContext.ResetDefault();
+        Task<FluNETContext>[] creators = Enumerable.Range(0, 16)
+            .Select(_ => Task.Run(FluNETContext.Create))
+            .ToArray();
+
+        FluNETContext[] contexts = await Task.WhenAll(creators);
         try
         {
-            Task<FluNETContext>[] readers = Enumerable.Range(0, 32)
-                .Select(_ => Task.Run(() => FluNETContext.Default))
-                .ToArray();
-
-            FluNETContext[] contexts = await Task.WhenAll(readers);
-
-            Assert.That(contexts.Distinct().Count(), Is.EqualTo(1));
+            Assert.That(contexts.Distinct().Count(), Is.EqualTo(contexts.Length));
+            Assert.That(contexts.All(context => context.GetEngine() is not null), Is.True);
         }
         finally
         {
-            FluNETContext.ResetDefault();
+            foreach (FluNETContext context in contexts)
+                context.Dispose();
         }
     }
 
@@ -33,5 +33,16 @@ public sealed class FluNETContextLifecycleTests
             using FluNETContext context = FluNETContext.Create();
             _ = context.GetEngine();
         });
+    }
+
+    [Test]
+    public async Task AsyncDisposalClosesTheOwnedServiceProvider()
+    {
+        FluNETContext context = FluNETContext.Create();
+        _ = context.GetEngine();
+
+        await context.DisposeAsync();
+
+        Assert.Throws<ObjectDisposedException>(() => context.GetEngine());
     }
 }

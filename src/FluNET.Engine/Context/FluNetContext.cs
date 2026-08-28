@@ -3,24 +3,11 @@ using Microsoft.Extensions.DependencyInjection;
 
 namespace FluNET.Context;
 
-public class FluNETContext : IDisposable
+public class FluNETContext : IDisposable, IAsyncDisposable
 {
-    private static readonly object _defaultContextGate = new();
-    private static FluNETContext? _defaultContext;
     private readonly ServiceProvider _serviceProvider;
     private readonly IServiceScope? _scope;
-
-    [Obsolete("Prefer FluNETContext.Create() or CreateWithRuntime() with explicit disposal. Default is retained for pre-1.0 compatibility.")]
-    public static FluNETContext Default
-    {
-        get
-        {
-            lock (_defaultContextGate)
-            {
-                return _defaultContext ??= Create();
-            }
-        }
-    }
+    private int _disposed;
 
     private FluNETContext(ServiceProvider serviceProvider, bool createScope = true)
     {
@@ -61,40 +48,50 @@ public class FluNETContext : IDisposable
 
     public Engine GetEngine() => GetService<Engine>();
 
-    public T GetService<T>() where T : notnull =>
-        _scope is not null
+    public T GetService<T>() where T : notnull
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        return _scope is not null
             ? _scope.ServiceProvider.GetRequiredService<T>()
             : _serviceProvider.GetRequiredService<T>();
+    }
 
-    public object GetService(Type type) =>
-        _scope is not null
+    public object GetService(Type type)
+    {
+        ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+        return _scope is not null
             ? _scope.ServiceProvider.GetRequiredService(type)
             : _serviceProvider.GetRequiredService(type);
+    }
 
-    public IServiceProvider ServiceProvider => _scope?.ServiceProvider ?? _serviceProvider;
+    public IServiceProvider ServiceProvider
+    {
+        get
+        {
+            ObjectDisposedException.ThrowIf(Volatile.Read(ref _disposed) != 0, this);
+            return _scope?.ServiceProvider ?? _serviceProvider;
+        }
+    }
 
     public void Dispose()
     {
-        lock (_defaultContextGate)
-        {
-            if (ReferenceEquals(this, _defaultContext))
-                _defaultContext = null;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
 
         _scope?.Dispose();
         _serviceProvider.Dispose();
     }
 
-    public static void ResetDefault()
+    public async ValueTask DisposeAsync()
     {
-        FluNETContext? context;
-        lock (_defaultContextGate)
-        {
-            context = _defaultContext;
-            _defaultContext = null;
-        }
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
 
-        context?.Dispose();
+        if (_scope is IAsyncDisposable asyncScope)
+            await asyncScope.DisposeAsync().ConfigureAwait(false);
+        else
+            _scope?.Dispose();
+        await _serviceProvider.DisposeAsync().ConfigureAwait(false);
     }
 
     private static ServiceProvider BuildServiceProvider(IServiceCollection services) =>
