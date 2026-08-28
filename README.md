@@ -2,7 +2,7 @@
 
 [![CI](https://github.com/ppotepa/FluNET/actions/workflows/ci.yml/badge.svg)](https://github.com/ppotepa/FluNET/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![.NET](https://img.shields.io/badge/.NET-9.0-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
 
 FluNET is an experimental .NET DSL/compiler/runtime for readable local automation and typed data workflows. It supports an explicit **canonical syntax** and a higher-level **compact syntax** that can infer obvious resource types, output names and data dependencies before lowering to the same typed execution engine.
 
@@ -17,7 +17,7 @@ The compiler can infer that the two reads are independent, schedule them togethe
 
 ## Quick start
 
-Requirement: .NET 8 SDK.
+Requirement: .NET 9 SDK.
 
 ```bash
 git clone https://github.com/ppotepa/FluNET.git
@@ -28,7 +28,7 @@ dotnet build FluNET.sln
 Canonical one-line command:
 
 ```bash
-dotnet run --project src/FluNET.Cli -- -- "SAY 'Hello from FluNET'."
+dotnet run --project src/FluNET.Cli -- exec "SAY 'Hello from FluNET'."
 ```
 
 Compact file `hello.fln`:
@@ -210,7 +210,7 @@ ENSURE is also an experimental embedding API. It compiles to the same ordinary G
 Canonical prompt mode:
 
 ```text
-flunet [options] -- "PROMPT"
+flunet exec "PROMPT"
 ```
 
 Compact file tools:
@@ -231,17 +231,20 @@ flu run program.flu
 ```
 
 For a local developer install, run `scripts/install-flu.ps1` on PowerShell or
-`scripts/install-flu.sh` on bash. These scripts pack the project and install
-the local `0.3.0-preview` package; the package is not published to NuGet.org.
-Alternatively, run it directly from this repository with
-`dotnet run --project src/FluNET.Flu -- run program.flu`.
+`scripts/install-flu.sh` on bash. These scripts pack the project, discover the
+version from the produced package, and install that exact local package; the
+package is not published to NuGet.org. Alternatively, run it directly from
+this repository with `dotnet run --project src/FluNET.Flu -- run program.flu`.
 
 The manual equivalent is:
 
 ```text
 dotnet pack src/FluNET.Flu/FluNET.Flu.csproj -c Release -o .artifacts/flu-packages
-dotnet tool install --global FluNET.Flu --add-source .artifacts/flu-packages --version 0.3.0-preview --ignore-failed-sources
+dotnet tool install --global FluNET.Flu --add-source .artifacts/flu-packages --version <VERSION> --ignore-failed-sources
 ```
+
+The current engine and tool package-version identities are defined centrally in
+`Directory.Build.props`; use the version from the generated package for manual installs.
 
 The `--global` flag matters: without it, `dotnet tool install` expects a tool
 manifest in the current directory or one of its parents.
@@ -265,9 +268,10 @@ dotnet run --project src/FluNET.Cli -- graph program.fln
 dotnet run --project src/FluNET.Cli -- run program.fln
 ```
 
-Canonical CLI file access defaults to the current directory. `--root PATH` can be repeated. If no `--host` is provided, the current canonical CLI leaves network access unrestricted; adding one or more `--host` values restricts network access to those hosts. `--store PATH` enables durable key-value storage for compact `STORE`/`READ`/`LIST STORE`/`DELETE STORE` commands: `.json` uses the atomic JSON backend, while `.db`/`.sqlite` uses SQLite. `--queue PATH` enables durable JSONL messaging for compact `PUBLISH`/`RECEIVE` when passed to `flunet run FILE`, and `--sqlite PATH` enables SQL access. `--config-prefix PREFIX` exposes environment-backed `GETCONFIG` values; `--config PATH` reads nested values from JSON; `--secret-prefix PREFIX` plus repeated `--allow-secret NAME` enables explicitly allow-listed environment secrets.
-
-The compact file-tool path currently uses the current directory as its file root and open network access; it does not expose the canonical runner's `--root`/`--host` parsing for those subcommands yet.
+`flunet exec` uses the default embedded FluNET context. Compact `run` accepts the
+currently implemented `--queue`, `--store`, and `--blob` persistence options.
+Filesystem/network restriction is configured through the embedding host APIs
+(such as `FluNetHost` or `AddSecureFluNetHost`), rather than undocumented CLI flags.
 
 ## Architecture in one diagram
 
@@ -356,6 +360,7 @@ Before changing the public language version or claiming a release from this sour
 
 ```bash
 dotnet restore FluNET.sln
+dotnet format FluNET.sln whitespace --verify-no-changes --no-restore
 dotnet build FluNET.sln --configuration Release --no-restore
 dotnet test FluNET.sln --configuration Release --no-build
 ```

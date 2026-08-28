@@ -10,7 +10,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>flu</ToolCommandName>
     <PackageId>FluNET.Flu</PackageId>
-    <PackageVersion>0.3.0-preview</PackageVersion>
+    <PackageVersion>$(FluNETToolVersion)</PackageVersion>
     <PackageReadmeFile>README.md</PackageReadmeFile>
   </PropertyGroup>
 

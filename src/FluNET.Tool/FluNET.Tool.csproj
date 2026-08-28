@@ -9,7 +9,7 @@
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>flunet</ToolCommandName>
     <PackageId>FluNET.Tool</PackageId>
-    <PackageVersion>0.3.0-preview</PackageVersion>
+    <PackageVersion>$(FluNETToolVersion)</PackageVersion>
     <Description>FluNET compiler, workflow and reconciliation command-line tool.</Description>
     <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
     <PackageReadmeFile>README.md</PackageReadmeFile>

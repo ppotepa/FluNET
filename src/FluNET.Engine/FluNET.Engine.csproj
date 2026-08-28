@@ -4,7 +4,7 @@
     <RootNamespace>FluNET</RootNamespace>
     <AssemblyName>FluNET.Engine</AssemblyName>
     <PackageId>FluNET.Engine</PackageId>
-    <Version>0.9.0</Version>
+    <Version>$(FluNETEngineVersion)</Version>
     <Authors>FluNET contributors</Authors>
     <Company>FluNET</Company>
     <Description>Cross-platform declarative automation engine with typed commands and provider-neutral capabilities.</Description>

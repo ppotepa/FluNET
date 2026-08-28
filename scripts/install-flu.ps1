@@ -5,7 +5,6 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $packageId = 'FluNET.Flu'
-$version = '0.3.0-preview'
 $packageDirectory = Join-Path ([IO.Path]::GetTempPath()) "flunet-flu-packages-$([Guid]::NewGuid().ToString('N'))"
 
 try {
@@ -15,6 +14,22 @@ try {
         --configuration Release `
         --output $packageDirectory
     if ($LASTEXITCODE -ne 0) { throw 'dotnet pack failed.' }
+
+    $package = Get-ChildItem -Path $packageDirectory -Filter 'FluNET.Flu.*.nupkg' |
+        Where-Object { $_.Name -notlike '*.symbols.nupkg' } |
+        Select-Object -First 1
+    if ($null -eq $package) {
+        throw 'FluNET.Flu package was not produced by dotnet pack.'
+    }
+
+    $prefix = 'FluNET.Flu.'
+    if (-not $package.BaseName.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw "Cannot determine FluNET.Flu package version from '$($package.Name)'."
+    }
+    $version = $package.BaseName.Substring($prefix.Length)
+    if ([string]::IsNullOrWhiteSpace($version)) {
+        throw "Cannot determine FluNET.Flu package version from '$($package.Name)'."
+    }
 
     $installArguments = @(
         'tool', 'install', $packageId,
