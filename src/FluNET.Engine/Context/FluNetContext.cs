@@ -10,6 +10,7 @@ public class FluNETContext : IDisposable
     private readonly ServiceProvider _serviceProvider;
     private readonly IServiceScope? _scope;
 
+    [Obsolete("Prefer FluNETContext.Create() or CreateWithRuntime() with explicit disposal. Default is retained for pre-1.0 compatibility.")]
     public static FluNETContext Default
     {
         get

@@ -17,6 +17,7 @@ FluNET has an explicit canonical surface and an inference-oriented compact surfa
 11. [Master roadmap](roadmap.md)
 12. [1.0 RC source readiness](1.0-rc-readiness.md)
 13. [1.0 verification gate](1.0-verification.md)
+14. [.NET API 1.0 candidate boundary](contracts/dotnet-api-1.0-candidate.md)
 
 ## Milestone ledgers
 

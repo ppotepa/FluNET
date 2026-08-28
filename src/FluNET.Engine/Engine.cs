@@ -8,6 +8,7 @@ using FluNET.Prompt;
 using FluNET.Syntax.Validation;
 using FluNET.Variables;
 using Microsoft.Extensions.DependencyInjection;
+using System.ComponentModel;
 
 namespace FluNET
 {
@@ -214,21 +215,24 @@ namespace FluNET
                 .Select(token => token.Text[1..^1].ToLowerInvariant())
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        /// <summary>Runs a prompt and returns structured validation or execution errors.</summary>
+        /// <summary>
+        /// Synchronous compatibility entry point. New hosts should prefer <see cref="ExecuteAsync(ProcessedPrompt, CancellationToken)"/>.
+        /// </summary>
+        [Obsolete("Use ExecuteAsync(ProcessedPrompt, CancellationToken) instead. Synchronous execution is retained for pre-1.0 compatibility.")]
         public ExecutionResult Execute(ProcessedPrompt prompt)
         {
             return ExecuteAsync(prompt).GetAwaiter().GetResult();
         }
 
         /// <summary>
-        /// Synchronous convenience entry point for hosts that do not need to
-        /// manage an async call. The middle value is reserved for the source
-        /// sentence projection and is always null; execution is represented by
-        /// the typed result in the third value.
+        /// Legacy tuple-shaped compatibility entry point. New hosts should consume <see cref="ExecutionResult"/>
+        /// from <see cref="ExecuteAsync(ProcessedPrompt, CancellationToken)"/>.
         /// </summary>
+        [EditorBrowsable(EditorBrowsableState.Never)]
+        [Obsolete("Use ExecuteAsync instead. Run returns a legacy tuple whose SourceSentence value is always null.")]
         public (ValidationResult ValidationResult, object? SourceSentence, object? Result) Run(ProcessedPrompt prompt)
         {
-            ExecutionResult execution = Execute(prompt);
+            ExecutionResult execution = ExecuteAsync(prompt).GetAwaiter().GetResult();
             return (execution.ValidationResult, null, execution.Result);
         }
 
