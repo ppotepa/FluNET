@@ -15,6 +15,15 @@ namespace FluNET.Variables
         T? Resolve<T>(string tokenValue);
 
         /// <summary>
+        /// Attempts to resolve a variable without conflating a missing value with <c>default(T)</c>.
+        /// </summary>
+        /// <typeparam name="T">Expected type of the variable.</typeparam>
+        /// <param name="tokenValue">Variable reference.</param>
+        /// <param name="value">Resolved value when the method returns <see langword="true"/>.</param>
+        /// <returns><see langword="true"/> when resolution and conversion succeeded.</returns>
+        bool TryResolve<T>(string tokenValue, out T? value);
+
+        /// <summary>
         /// Registers a variable with a value.
         /// </summary>
         /// <typeparam name="T">The type of the variable value</typeparam>

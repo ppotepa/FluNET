@@ -73,34 +73,52 @@ namespace FluNET.Variables
         public bool IsRegistered(string name) =>
             _store.TryGet(NormalizeName(name), out _);
 
-        public T? Resolve<T>(string tokenValue)
+        public T? Resolve<T>(string tokenValue) =>
+            TryResolve(tokenValue, out T? value) ? value : default;
+
+        public bool TryResolve<T>(string tokenValue, out T? value)
         {
+            value = default;
+
             if (IsSimpleVariable(tokenValue, out string? varName))
             {
                 if (!_store.TryGet(varName!, out RuntimeValue? runtime) || runtime is null)
                 {
-                    return default;
+                    return false;
                 }
-                return runtime.Value is T typedValue
-                    ? typedValue
-                    : IsNumericType(typeof(T)) && runtime.Value is IConvertible
-                        ? ConvertValue<T>(runtime.Value)
-                        : default;
+
+                if (runtime.Value is T typedValue)
+                {
+                    value = typedValue;
+                    return true;
+                }
+
+                if (IsNumericType(typeof(T)) && runtime.Value is IConvertible)
+                {
+                    return TryConvertValue(runtime.Value, out value);
+                }
+
+                return false;
             }
 
-            if (IsJsonObject(tokenValue, out string? jsonProps) && jsonProps != null)
+            if (IsJsonObject(tokenValue, out string? jsonProps) && jsonProps is not null)
             {
                 try
                 {
-                    return JsonSerializer.Deserialize<T>(jsonProps);
+                    value = JsonSerializer.Deserialize<T>(jsonProps);
+                    return true;
                 }
-                catch
+                catch (JsonException)
                 {
-                    return default;
+                    return false;
+                }
+                catch (NotSupportedException)
+                {
+                    return false;
                 }
             }
 
-            return default;
+            return false;
         }
 
         public static bool IsVariableReference(string tokenValue) =>
@@ -154,20 +172,28 @@ namespace FluNET.Variables
                 ? throw new ArgumentException("A variable name is required.", nameof(name))
                 : name.Trim().TrimStart('[').TrimEnd(']');
 
-        private static T? ConvertValue<T>(object value)
+        private static bool TryConvertValue<T>(object source, out T? value)
         {
             try
             {
-                return (T?)Convert.ChangeType(
-                    value,
+                value = (T?)Convert.ChangeType(
+                    source,
                     typeof(T),
                     System.Globalization.CultureInfo.InvariantCulture);
+                return true;
             }
-            catch (Exception exception) when (
-                exception is InvalidCastException or FormatException or OverflowException)
+            catch (InvalidCastException)
             {
-                return default;
             }
+            catch (FormatException)
+            {
+            }
+            catch (OverflowException)
+            {
+            }
+
+            value = default;
+            return false;
         }
 
         private static bool IsNumericType(Type type) =>
