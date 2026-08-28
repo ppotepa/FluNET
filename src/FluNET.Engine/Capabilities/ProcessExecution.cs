@@ -119,6 +119,7 @@ public sealed class PhysicalFluNetProcessRunner : IFluNetProcessRunner
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.FileName);
+        ValidateTimeout(request.Timeout);
 
         string? workingDirectory = request.WorkingDirectory;
         if (!string.IsNullOrWhiteSpace(workingDirectory))
@@ -141,15 +142,7 @@ public sealed class PhysicalFluNetProcessRunner : IFluNetProcessRunner
         };
         foreach (string argument in request.Arguments)
             process.StartInfo.ArgumentList.Add(argument);
-        if (request.Environment is not null)
-        {
-            foreach ((string name, string value) in request.Environment)
-            {
-                ValidateEnvironmentName(name);
-                environmentPolicy.EnsureVariableAccess(name);
-                process.StartInfo.Environment[name] = value;
-            }
-        }
+        ApplyEnvironment(process.StartInfo, request.Environment, environmentPolicy);
 
         if (!process.Start())
             throw new InvalidOperationException($"Could not start process '{request.FileName}'.");
@@ -164,8 +157,7 @@ public sealed class PhysicalFluNetProcessRunner : IFluNetProcessRunner
             if (completed != wait)
             {
                 timedOut = true;
-                try { process.Kill(entireProcessTree: true); }
-                catch (InvalidOperationException) { }
+                TryKill(process);
                 await wait.ConfigureAwait(false);
             }
         }
@@ -181,10 +173,44 @@ public sealed class PhysicalFluNetProcessRunner : IFluNetProcessRunner
             timedOut);
     }
 
-    private static void ValidateEnvironmentName(string name)
+    internal static void ApplyEnvironment(
+        ProcessStartInfo startInfo,
+        IReadOnlyDictionary<string, string>? environment,
+        IProcessEnvironmentPolicy environmentPolicy)
+    {
+        if (environment is null)
+            return;
+
+        foreach ((string name, string value) in environment)
+        {
+            ValidateEnvironmentName(name);
+            environmentPolicy.EnsureVariableAccess(name);
+            startInfo.Environment[name] = value;
+        }
+    }
+
+    internal static void ValidateEnvironmentName(string name)
     {
         if (string.IsNullOrWhiteSpace(name) || name.Contains('=') || name.Contains('\0'))
             throw new ArgumentException($"Invalid process environment variable name '{name}'.", nameof(name));
+    }
+
+    internal static void ValidateTimeout(TimeSpan? timeout)
+    {
+        if (timeout is { } value && value < TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(timeout), "Process timeout cannot be negative.");
+    }
+
+    internal static void TryKill(Process process)
+    {
+        try
+        {
+            if (!process.HasExited)
+                process.Kill(entireProcessTree: true);
+        }
+        catch (InvalidOperationException)
+        {
+        }
     }
 }
 
@@ -201,7 +227,8 @@ public sealed class PhysicalFluNetProcessSessionRegistry(
     {
         PhysicalFluNetProcessSession session = await PhysicalFluNetProcessSession.StartAsync(
             request, policy, environmentPolicy, cancellationToken).ConfigureAwait(false);
-        lock (gate) sessions.Add(session.Id, session);
+        lock (gate)
+            sessions.Add(session.Id, session);
         return await session.SnapshotAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -217,7 +244,8 @@ public sealed class PhysicalFluNetProcessSessionRegistry(
     {
         PhysicalFluNetProcessSession session = Find(sessionId);
         FluNetProcessResult result = await session.StopAsync(cancellationToken).ConfigureAwait(false);
-        lock (gate) sessions.Remove(sessionId);
+        lock (gate)
+            sessions.Remove(sessionId);
         await session.DisposeAsync().ConfigureAwait(false);
         return result;
     }
@@ -239,7 +267,8 @@ public sealed class PhysicalFluNetProcessSessionRegistry(
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionId);
         lock (gate)
         {
-            if (sessions.TryGetValue(sessionId, out PhysicalFluNetProcessSession? session)) return session;
+            if (sessions.TryGetValue(sessionId, out PhysicalFluNetProcessSession? session))
+                return session;
         }
         throw new KeyNotFoundException($"Process session '{sessionId}' was not found.");
     }
@@ -247,25 +276,33 @@ public sealed class PhysicalFluNetProcessSessionRegistry(
 
 internal sealed class PhysicalFluNetProcessSession : IFluNetProcessSession
 {
+    private const int BufferedLineCapacity = 1024;
+
     private readonly Process process;
-    private readonly Channel<string> output = Channel.CreateUnbounded<string>();
-    private readonly Channel<string> error = Channel.CreateUnbounded<string>();
+    private readonly Channel<string> output = CreateOutputChannel();
+    private readonly Channel<string> error = CreateOutputChannel();
+    private readonly CancellationTokenSource lifetime = new();
     private readonly Task outputPump;
     private readonly Task errorPump;
+    private readonly Task timeoutMonitor;
     private int disposed;
+    private int timedOut;
 
-    private PhysicalFluNetProcessSession(Process process)
+    private PhysicalFluNetProcessSession(Process process, TimeSpan? timeout)
     {
         this.process = process;
         Id = Guid.NewGuid().ToString("N");
         outputPump = PumpAsync(process.StandardOutput, output.Writer);
         errorPump = PumpAsync(process.StandardError, error.Writer);
+        timeoutMonitor = timeout is { } value
+            ? MonitorTimeoutAsync(value)
+            : Task.CompletedTask;
     }
 
     public string Id { get; }
     public bool IsRunning => !process.HasExited;
 
-    public static async Task<PhysicalFluNetProcessSession> StartAsync(
+    public static Task<PhysicalFluNetProcessSession> StartAsync(
         FluNetProcessRequest request,
         IExecutionPolicy policy,
         IProcessEnvironmentPolicy environmentPolicy,
@@ -273,12 +310,15 @@ internal sealed class PhysicalFluNetProcessSession : IFluNetProcessSession
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(request.FileName);
         cancellationToken.ThrowIfCancellationRequested();
+        PhysicalFluNetProcessRunner.ValidateTimeout(request.Timeout);
+
         string? workingDirectory = request.WorkingDirectory;
         if (!string.IsNullOrWhiteSpace(workingDirectory))
         {
             workingDirectory = Path.GetFullPath(workingDirectory);
             policy.EnsureFileAccess(workingDirectory);
-            if (!Directory.Exists(workingDirectory)) throw new DirectoryNotFoundException(workingDirectory);
+            if (!Directory.Exists(workingDirectory))
+                throw new DirectoryNotFoundException(workingDirectory);
         }
 
         ProcessStartInfo info = new()
@@ -291,15 +331,9 @@ internal sealed class PhysicalFluNetProcessSession : IFluNetProcessSession
             CreateNoWindow = true,
             WorkingDirectory = workingDirectory ?? string.Empty
         };
-        foreach (string argument in request.Arguments) info.ArgumentList.Add(argument);
-        if (request.Environment is not null)
-        {
-            foreach ((string name, string value) in request.Environment)
-            {
-                environmentPolicy.EnsureVariableAccess(name);
-                info.Environment[name] = value;
-            }
-        }
+        foreach (string argument in request.Arguments)
+            info.ArgumentList.Add(argument);
+        PhysicalFluNetProcessRunner.ApplyEnvironment(info, request.Environment, environmentPolicy);
 
         Process process = new() { StartInfo = info, EnableRaisingEvents = true };
         if (!process.Start())
@@ -307,8 +341,8 @@ internal sealed class PhysicalFluNetProcessSession : IFluNetProcessSession
             process.Dispose();
             throw new InvalidOperationException($"Could not start process '{request.FileName}'.");
         }
-        await Task.CompletedTask.ConfigureAwait(false);
-        return new PhysicalFluNetProcessSession(process);
+
+        return Task.FromResult(new PhysicalFluNetProcessSession(process, request.Timeout));
     }
 
     public async ValueTask<FluNetProcessSessionOutput> SendAsync(
@@ -317,10 +351,12 @@ internal sealed class PhysicalFluNetProcessSession : IFluNetProcessSession
     {
         ObjectDisposedException.ThrowIf(disposed != 0, this);
         cancellationToken.ThrowIfCancellationRequested();
-        if (!IsRunning) return await SnapshotAsync(cancellationToken).ConfigureAwait(false);
+        if (!IsRunning)
+            return await SnapshotAsync(cancellationToken).ConfigureAwait(false);
+
         await process.StandardInput.WriteLineAsync(input.AsMemory(), cancellationToken).ConfigureAwait(false);
         await process.StandardInput.FlushAsync(cancellationToken).ConfigureAwait(false);
-        await Task.Delay(TimeSpan.FromMilliseconds(20), cancellationToken).ConfigureAwait(false);
+        await Task.Yield();
         return await SnapshotAsync(cancellationToken).ConfigureAwait(false);
     }
 
@@ -335,25 +371,76 @@ internal sealed class PhysicalFluNetProcessSession : IFluNetProcessSession
         ObjectDisposedException.ThrowIf(disposed != 0, this);
         if (IsRunning)
         {
-            try { process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { }
+            PhysicalFluNetProcessRunner.TryKill(process);
             await process.WaitForExitAsync(cancellationToken).ConfigureAwait(false);
         }
+
+        lifetime.Cancel();
+        await ObserveMonitorAsync().ConfigureAwait(false);
         await Task.WhenAll(outputPump, errorPump).ConfigureAwait(false);
-        return new(process.ExitCode, Drain(output), Drain(error), false);
+        return new(process.ExitCode, Drain(output), Drain(error), Volatile.Read(ref timedOut) != 0);
     }
 
     public async ValueTask DisposeAsync()
     {
-        if (Interlocked.Exchange(ref disposed, 1) != 0) return;
-        if (IsRunning)
+        if (Interlocked.Exchange(ref disposed, 1) != 0)
+            return;
+
+        try
         {
-            try { process.Kill(entireProcessTree: true); }
-            catch (InvalidOperationException) { }
+            if (IsRunning)
+            {
+                PhysicalFluNetProcessRunner.TryKill(process);
+                await process.WaitForExitAsync().ConfigureAwait(false);
+            }
         }
-        process.Dispose();
-        await Task.CompletedTask.ConfigureAwait(false);
+        finally
+        {
+            lifetime.Cancel();
+            await ObserveMonitorAsync().ConfigureAwait(false);
+            await Task.WhenAll(outputPump, errorPump).ConfigureAwait(false);
+            process.Dispose();
+            lifetime.Dispose();
+        }
     }
+
+    private async Task MonitorTimeoutAsync(TimeSpan timeout)
+    {
+        try
+        {
+            await Task.Delay(timeout, lifetime.Token).ConfigureAwait(false);
+            if (lifetime.IsCancellationRequested || process.HasExited)
+                return;
+
+            Interlocked.Exchange(ref timedOut, 1);
+            PhysicalFluNetProcessRunner.TryKill(process);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+
+    private async Task ObserveMonitorAsync()
+    {
+        try
+        {
+            await timeoutMonitor.ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+        }
+    }
+
+    private static Channel<string> CreateOutputChannel() =>
+        Channel.CreateBounded<string>(new BoundedChannelOptions(BufferedLineCapacity)
+        {
+            SingleReader = true,
+            SingleWriter = true,
+            FullMode = BoundedChannelFullMode.DropOldest
+        });
 
     private static async Task PumpAsync(StreamReader reader, ChannelWriter<string> writer)
     {
@@ -362,13 +449,17 @@ internal sealed class PhysicalFluNetProcessSession : IFluNetProcessSession
             while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
                 await writer.WriteAsync(line).ConfigureAwait(false);
         }
-        finally { writer.TryComplete(); }
+        finally
+        {
+            writer.TryComplete();
+        }
     }
 
     private static string Drain(Channel<string> channel)
     {
         List<string> lines = [];
-        while (channel.Reader.TryRead(out string? line)) lines.Add(line);
+        while (channel.Reader.TryRead(out string? line))
+            lines.Add(line);
         return string.Join(Environment.NewLine, lines);
     }
 }
